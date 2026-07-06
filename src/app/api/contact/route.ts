@@ -10,6 +10,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to send message." }, { status: 500 });
   }
 
+  if (!sent) {
+    return NextResponse.json(
+      { error: "Email service not configured. Please call us directly." },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
     success: true,
     sent,

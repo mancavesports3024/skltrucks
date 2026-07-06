@@ -96,15 +96,23 @@ npm run sync-inventory
 
 This updates the static fallback file. Once Supabase is connected, the live site reads from the database instead.
 
-## Form Submissions
+## Form Submissions (Gmail)
 
-All forms (contact, financing, sell my truck) email **skltrucksllc@gmail.com**.
+All forms email **skltrucksllc@gmail.com** using Gmail + Nodemailer (same setup as Swim Worx).
 
-1. Sign up at [resend.com](https://resend.com) (free tier)
-2. Add `RESEND_API_KEY` to `.env.local` and Vercel environment variables
-3. `CONTACT_EMAIL_TO` defaults to `skltrucksllc@gmail.com` — no change needed
+### Setup in Vercel
 
-Until `RESEND_API_KEY` is set, forms still submit successfully but are only logged server-side.
+1. In Google Account for **skltrucksllc@gmail.com** → **Security** → enable **2-Step Verification**
+2. **App passwords** → create one named "SKL Trucks Website"
+3. Add to Vercel → **Settings** → **Environment Variables**:
+
+| Variable | Value |
+|----------|-------|
+| `EMAIL_USER` | `skltrucksllc@gmail.com` |
+| `EMAIL_PASSWORD` | your 16-character Gmail app password |
+| `RECIPIENT_EMAIL` | `skltrucksllc@gmail.com` |
+
+4. **Redeploy** after saving
 
 ## Tech Stack
 
