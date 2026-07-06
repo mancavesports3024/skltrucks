@@ -61,12 +61,14 @@ function staticAsProducts(): Product[] {
 
 export async function getAllProducts(): Promise<Product[]> {
   const db = await fetchPublicFromDb();
-  return db ?? staticAsProducts();
+  if (!db || db.length === 0) return staticAsProducts();
+  return db;
 }
 
 export async function getAllProductsAdmin(): Promise<Product[]> {
   const db = await fetchAdminFromDb();
-  return db ?? staticAsProducts();
+  if (!db || db.length === 0) return staticAsProducts();
+  return db;
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
