@@ -6,7 +6,7 @@ export const SITE = {
   address: "4000 W 7th St. Joplin, Mo. 64801",
   facebook: "https://www.facebook.com/profile.php?id=61557165207913",
   linkedin: "https://www.linkedin.com/company/skl-trucks-llc/",
-  logo: "https://skltrucks.com/wp-content/uploads/2024/05/Layer-1.png",
+  logo: "/logo.jpg",
   heroImage: "https://skltrucks.com/wp-content/uploads/2025/08/image-49.png",
   aboutImage: "https://skltrucks.com/wp-content/uploads/2024/06/SKL-Trucks-LLC.jpeg",
   whyChooseImage:
