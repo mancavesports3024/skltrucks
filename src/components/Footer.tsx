@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { NAV_LINKS, SITE } from "@/lib/constants";
 
@@ -62,8 +63,21 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-neutral-800 py-6 text-center text-sm text-neutral-500">
-        Copyright © {new Date().getFullYear()}. All Rights Reserved — {SITE.name}
+      <div className="border-t border-neutral-800 px-4 py-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-4">
+          <Link href="/">
+            <Image
+              src={SITE.logo}
+              alt={SITE.name}
+              width={240}
+              height={120}
+              className="h-20 w-auto"
+            />
+          </Link>
+          <p className="text-center text-sm text-neutral-500">
+            Copyright © {new Date().getFullYear()}. All Rights Reserved — {SITE.name}
+          </p>
+        </div>
       </div>
     </footer>
   );

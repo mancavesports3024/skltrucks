@@ -34,7 +34,7 @@ export default function Header() {
 
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
         <Link href="/" className="shrink-0">
-          <Image src={SITE.logo} alt={SITE.name} width={200} height={100} className="h-14 w-auto" priority />
+          <Image src={SITE.logo} alt={SITE.name} width={280} height={140} className="h-20 w-auto md:h-24" priority />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex">
