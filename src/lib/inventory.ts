@@ -1,23 +1,23 @@
 import { products as staticProducts } from "@/data/inventory";
 import { rowToProduct } from "@/lib/db/products";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import type { Product } from "@/types/product";
 
 export const revalidate = 30;
 
-async function fetchFromDb(includeUnpublished = false): Promise<Product[] | null> {
+async function fetchPublicFromDb(): Promise<Product[] | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const supabase = await createClient();
-    let query = supabase.from("products").select("*").order("created_at", { ascending: false });
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("published", true)
+      .order("created_at", { ascending: false });
 
-    if (!includeUnpublished) {
-      query = query.eq("published", true);
-    }
-
-    const { data, error } = await query;
     if (error) {
       console.error("[inventory] Supabase error:", error.message);
       return null;
@@ -30,6 +30,28 @@ async function fetchFromDb(includeUnpublished = false): Promise<Product[] | null
   }
 }
 
+async function fetchAdminFromDb(): Promise<Product[] | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[inventory] Supabase admin error:", error.message);
+      return null;
+    }
+
+    return (data ?? []).map(rowToProduct);
+  } catch (err) {
+    console.error("[inventory] admin fetch error:", err);
+    return null;
+  }
+}
+
 function staticAsProducts(): Product[] {
   return staticProducts.map((p) => ({
     ...p,
@@ -38,19 +60,19 @@ function staticAsProducts(): Product[] {
 }
 
 export async function getAllProducts(): Promise<Product[]> {
-  const db = await fetchFromDb();
+  const db = await fetchPublicFromDb();
   return db ?? staticAsProducts();
 }
 
 export async function getAllProductsAdmin(): Promise<Product[]> {
-  const db = await fetchFromDb(true);
+  const db = await fetchAdminFromDb();
   return db ?? staticAsProducts();
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
   if (isSupabaseConfigured()) {
     try {
-      const supabase = await createClient();
+      const supabase = createPublicClient();
       const { data, error } = await supabase
         .from("products")
         .select("*")
