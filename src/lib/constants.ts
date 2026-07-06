@@ -7,6 +7,8 @@ export const SITE = {
   facebook: "https://www.facebook.com/profile.php?id=61557165207913",
   linkedin: "https://www.linkedin.com/company/skl-trucks-llc/",
   logo: "/logo.png",
+  logoWidth: 1593,
+  logoHeight: 938,
   heroImage: "https://skltrucks.com/wp-content/uploads/2025/08/image-49.png",
   aboutImage: "https://skltrucks.com/wp-content/uploads/2024/06/SKL-Trucks-LLC.jpeg",
   whyChooseImage:

@@ -33,8 +33,15 @@ export default function Header() {
       </div>
 
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-        <Link href="/" className="shrink-0">
-          <Image src={SITE.logo} alt={SITE.name} width={280} height={140} className="h-20 w-auto md:h-24" priority />
+        <Link href="/" className="shrink-0 rounded-sm bg-neutral-900 px-3 py-2">
+          <Image
+            src={SITE.logo}
+            alt={SITE.name}
+            width={SITE.logoWidth}
+            height={SITE.logoHeight}
+            className="h-16 w-auto object-contain md:h-20"
+            priority
+          />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex">
