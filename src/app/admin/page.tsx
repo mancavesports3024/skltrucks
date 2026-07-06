@@ -1,35 +1,37 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getAllProductsAdmin } from "@/lib/inventory";
-import { formatPrice } from "@/lib/inventory";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { signOut } from "./actions";
+import AdminHeader from "@/components/admin/AdminHeader";
+import HomepageManagement from "@/components/admin/HomepageManagement";
 import DeleteButton from "@/components/admin/DeleteButton";
+import { getAllProductsAdmin, formatPrice } from "@/lib/inventory";
+import { getSiteContentAdmin } from "@/lib/site-content";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
-export default async function AdminDashboard() {
-  const products = await getAllProductsAdmin();
+interface AdminPageProps {
+  searchParams: Promise<{ tab?: string }>;
+}
+
+export default async function AdminDashboard({ searchParams }: AdminPageProps) {
+  const { tab } = await searchParams;
+  const activeTab = tab === "homepage" ? "homepage" : "inventory";
   const dbReady = isSupabaseConfigured();
+
+  if (activeTab === "homepage") {
+    const content = await getSiteContentAdmin();
+
+    return (
+      <div>
+        <AdminHeader activeTab="homepage" />
+        <HomepageManagement initialContent={content} dbReady={dbReady} />
+      </div>
+    );
+  }
+
+  const products = await getAllProductsAdmin();
 
   return (
     <div>
-      <header className="bg-neutral-900 text-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold">Inventory Admin</h1>
-            <p className="text-sm text-neutral-400">SKL Trucks LLC</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/" target="_blank" className="text-sm hover:text-[#fc0527]">
-              View Site
-            </Link>
-            <form action={signOut}>
-              <button type="submit" className="text-sm hover:text-[#fc0527]">
-                Sign Out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <AdminHeader activeTab="inventory" />
 
       <div className="mx-auto max-w-7xl px-4 py-8">
         {!dbReady && (
@@ -79,7 +81,9 @@ export default async function AdminDashboard() {
                   </td>
                   <td className="p-4 max-w-xs">
                     <p className="font-medium line-clamp-2">{product.name}</p>
-                    <p className="text-xs text-neutral-500">{product.year} {product.manufacturer}</p>
+                    <p className="text-xs text-neutral-500">
+                      {product.year} {product.manufacturer}
+                    </p>
                   </td>
                   <td className="p-4 font-semibold">{formatPrice(product.price)}</td>
                   <td className="p-4 font-mono text-xs">{product.vin}</td>
@@ -98,7 +102,7 @@ export default async function AdminDashboard() {
                     <div className="flex gap-3">
                       <Link
                         href={`/admin/products/${product.id}`}
-                        className="text-[#fc0527] hover:underline font-medium"
+                        className="font-medium text-[#fc0527] hover:underline"
                       >
                         Edit
                       </Link>

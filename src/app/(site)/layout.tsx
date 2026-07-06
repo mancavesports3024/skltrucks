@@ -1,12 +1,17 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { getSiteContent, revalidate } from "@/lib/site-content";
 
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export { revalidate };
+
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  const site = await getSiteContent();
+
   return (
     <>
-      <Header />
+      <Header contact={site.contact} social={site.social} />
       <main className="flex-1">{children}</main>
-      <Footer />
+      <Footer contact={site.contact} />
     </>
   );
 }

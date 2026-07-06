@@ -78,3 +78,47 @@ create policy "Authenticated update product images"
 create policy "Authenticated delete product images"
   on storage.objects for delete
   using (bucket_id = 'product-images' and auth.role() = 'authenticated');
+
+-- Site content (homepage, contact info, social links)
+create table if not exists public.site_content (
+  id text primary key default 'main',
+  content jsonb not null default '{}',
+  updated_at timestamptz default now()
+);
+
+drop trigger if exists site_content_updated_at on public.site_content;
+create trigger site_content_updated_at
+  before update on public.site_content
+  for each row execute function public.set_updated_at();
+
+alter table public.site_content enable row level security;
+
+create policy "Public read site content"
+  on public.site_content for select
+  using (true);
+
+create policy "Authenticated users manage site content"
+  on public.site_content for all
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+
+-- Storage bucket for site / homepage images
+insert into storage.buckets (id, name, public)
+values ('site-images', 'site-images', true)
+on conflict (id) do nothing;
+
+create policy "Public read site images"
+  on storage.objects for select
+  using (bucket_id = 'site-images');
+
+create policy "Authenticated upload site images"
+  on storage.objects for insert
+  with check (bucket_id = 'site-images' and auth.role() = 'authenticated');
+
+create policy "Authenticated update site images"
+  on storage.objects for update
+  using (bucket_id = 'site-images' and auth.role() = 'authenticated');
+
+create policy "Authenticated delete site images"
+  on storage.objects for delete
+  using (bucket_id = 'site-images' and auth.role() = 'authenticated');

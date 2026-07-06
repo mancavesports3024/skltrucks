@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { SITE } from "@/lib/constants";
+import { phoneToHref } from "@/lib/phone";
+import type { ContactContent } from "@/types/site-content";
 
 const QUICK_LINKS = [
   { label: "Home", href: "/" },
@@ -9,9 +11,14 @@ const QUICK_LINKS = [
   { label: "Services", href: "/services" },
 ];
 
-const MAP_EMBED = `https://maps.google.com/maps?q=${encodeURIComponent(SITE.address)}&hl=en&z=14&output=embed`;
+interface FooterProps {
+  contact: ContactContent;
+}
 
-export default function Footer() {
+export default function Footer({ contact }: FooterProps) {
+  const mapEmbed = `https://maps.google.com/maps?q=${encodeURIComponent(contact.address)}&hl=en&z=14&output=embed`;
+  const phoneHref = phoneToHref(contact.phone);
+
   return (
     <footer className="bg-neutral-900 text-white">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-2 lg:grid-cols-4">
@@ -47,15 +54,15 @@ export default function Footer() {
         <div>
           <h3 className="mb-4 text-sm font-bold uppercase tracking-wide">Contact Info</h3>
           <ul className="space-y-3 text-sm text-neutral-300">
-            <li>{SITE.address}</li>
+            <li>{contact.address}</li>
             <li>
-              <a href={SITE.phoneHref} className="hover:text-[#fc0527] transition-colors">
-                {SITE.phone}
+              <a href={phoneHref} className="hover:text-[#fc0527] transition-colors">
+                {contact.phone}
               </a>
             </li>
             <li>
-              <a href={`mailto:${SITE.email}`} className="hover:text-[#fc0527] transition-colors">
-                {SITE.email}
+              <a href={`mailto:${contact.email}`} className="hover:text-[#fc0527] transition-colors">
+                {contact.email}
               </a>
             </li>
           </ul>
@@ -66,7 +73,7 @@ export default function Footer() {
           <div className="overflow-hidden rounded-sm border border-neutral-700">
             <iframe
               title="SKL Trucks LLC location"
-              src={MAP_EMBED}
+              src={mapEmbed}
               width="100%"
               height="180"
               style={{ border: 0 }}

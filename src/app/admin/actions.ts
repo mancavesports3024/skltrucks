@@ -8,6 +8,7 @@ import {
   rowToProduct,
   slugify,
 } from "@/lib/db/products";
+import { parseSiteContentForm } from "@/lib/site-content";
 import { createClient } from "@/lib/supabase/server";
 import type { ProductInput } from "@/types/product";
 
@@ -162,4 +163,55 @@ export async function getAdminProduct(id: string) {
   const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
   if (error || !data) return null;
   return rowToProduct(data);
+}
+
+export async function uploadSiteImage(formData: FormData): Promise<{ url?: string; error?: string }> {
+  const supabase = await createClient();
+  const file = formData.get("file") as File;
+
+  if (!file || file.size === 0) {
+    return { error: "No file selected" };
+  }
+
+  const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    return { error: "Invalid file type. Use JPEG, PNG, GIF, or WebP." };
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    return { error: "File too large. Maximum size is 10MB." };
+  }
+
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `site/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage.from("site-images").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  const { data } = supabase.storage.from("site-images").getPublicUrl(path);
+  return { url: data.publicUrl };
+}
+
+export async function updateSiteContent(formData: FormData) {
+  const supabase = await createClient();
+  const content = parseSiteContentForm(formData);
+
+  const { error } = await supabase.from("site_content").upsert({
+    id: "main",
+    content,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/contact-us");
+  return { success: true };
 }
