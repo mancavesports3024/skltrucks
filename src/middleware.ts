@@ -12,12 +12,14 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
     }
-    return;
+    return NextResponse.next();
   }
 
   if (isAdminRoute) {
     return await updateSession(request);
   }
+
+  return NextResponse.next();
 }
 
 export const config = {

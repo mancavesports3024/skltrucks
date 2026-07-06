@@ -70,8 +70,16 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Push this folder to a GitHub repository
 2. Import the repo at [vercel.com](https://vercel.com)
-3. Add Supabase environment variables (see above)
-4. Deploy
+3. **Important — check these settings** (Settings → General → Build & Development):
+   - **Framework Preset:** Next.js
+   - **Root Directory:** leave blank
+   - **Build Command:** `npm run build`
+   - **Output Directory:** leave **blank** (do NOT set to `public` or `.next`)
+   - **Install Command:** `npm install`
+4. Add Supabase environment variables (see above)
+5. Deploy
+
+If you see a plain `404: NOT_FOUND` page, the Output Directory is almost always set wrong — clear it and redeploy.
 
 ### Connect Custom Domain
 
