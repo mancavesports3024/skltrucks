@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { signOut } from "@/app/admin/actions";
 
+export type AdminTab = "inventory" | "homepage" | "account";
+
 interface AdminHeaderProps {
-  activeTab: "inventory" | "homepage";
+  activeTab: AdminTab;
 }
 
 export default function AdminHeader({ activeTab }: AdminHeaderProps) {
-  const tabs = [
-    { id: "inventory" as const, label: "Inventory", href: "/admin" },
-    { id: "homepage" as const, label: "Homepage", href: "/admin?tab=homepage" },
+  const tabs: { id: AdminTab; label: string; href: string }[] = [
+    { id: "inventory", label: "Inventory", href: "/admin" },
+    { id: "homepage", label: "Homepage", href: "/admin?tab=homepage" },
+    { id: "account", label: "Account", href: "/admin?tab=account" },
   ];
 
   return (
@@ -20,14 +23,11 @@ export default function AdminHeader({ activeTab }: AdminHeaderProps) {
             <p className="text-sm text-neutral-400">Manage inventory and homepage</p>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/" target="_blank" className="min-h-11 flex items-center text-sm hover:text-[#fc0527]">
+            <Link href="/" target="_blank" className="flex min-h-11 items-center text-sm hover:text-[#fc0527]">
               View Site
             </Link>
             <form action={signOut}>
-              <button
-                type="submit"
-                className="min-h-11 text-sm hover:text-[#fc0527]"
-              >
+              <button type="submit" className="min-h-11 text-sm hover:text-[#fc0527]">
                 Sign Out
               </button>
             </form>

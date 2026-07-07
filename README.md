@@ -83,8 +83,14 @@ If you see a plain `404: NOT_FOUND` page, the Output Directory is almost always 
 
 ### Connect Custom Domain
 
+**Full step-by-step guide:** see **[DOMAIN-MIGRATION.md](./DOMAIN-MIGRATION.md)** (Squarespace DNS + Vercel setup, client email template, troubleshooting).
+
+Quick version:
+
 1. Vercel → **Domains** → add `skltrucks.com` and `www.skltrucks.com`
-2. Update DNS at your registrar with the records Vercel provides
+2. Client logs into [domains.squarespace.com](https://domains.squarespace.com) (Google account)
+3. Update DNS in Squarespace with the records Vercel provides
+4. Remove old WordPress / Web Design Harbour website records; keep MX/email records
 
 ## Legacy: Sync from WordPress
 

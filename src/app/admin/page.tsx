@@ -1,7 +1,10 @@
 import Link from "next/link";
-import AdminHeader from "@/components/admin/AdminHeader";
+import { redirect } from "next/navigation";
+import AdminHeader, { type AdminTab } from "@/components/admin/AdminHeader";
+import ChangePasswordForm from "@/components/admin/ChangePasswordForm";
 import HomepageManagement from "@/components/admin/HomepageManagement";
 import InventoryList from "@/components/admin/InventoryList";
+import { getAdminEmail } from "@/app/admin/actions";
 import { getAllProductsAdmin } from "@/lib/inventory";
 import { getSiteContentAdmin } from "@/lib/site-content";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -10,9 +13,15 @@ interface AdminPageProps {
   searchParams: Promise<{ tab?: string }>;
 }
 
+function getActiveTab(tab?: string): AdminTab {
+  if (tab === "homepage") return "homepage";
+  if (tab === "account") return "account";
+  return "inventory";
+}
+
 export default async function AdminDashboard({ searchParams }: AdminPageProps) {
   const { tab } = await searchParams;
-  const activeTab = tab === "homepage" ? "homepage" : "inventory";
+  const activeTab = getActiveTab(tab);
   const dbReady = isSupabaseConfigured();
 
   if (activeTab === "homepage") {
@@ -22,6 +31,20 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
       <div>
         <AdminHeader activeTab="homepage" />
         <HomepageManagement initialContent={content} dbReady={dbReady} />
+      </div>
+    );
+  }
+
+  if (activeTab === "account") {
+    const email = await getAdminEmail();
+    if (!email) redirect("/admin/login");
+
+    return (
+      <div>
+        <AdminHeader activeTab="account" />
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
+          <ChangePasswordForm email={email} />
+        </div>
       </div>
     );
   }

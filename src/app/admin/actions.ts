@@ -32,6 +32,62 @@ export async function signOut() {
   redirect("/admin/login");
 }
 
+export async function getAdminEmail(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.email ?? null;
+}
+
+export async function updatePassword(formData: FormData) {
+  const currentPassword = formData.get("currentPassword") as string;
+  const newPassword = formData.get("newPassword") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return { error: "All fields are required." };
+  }
+
+  if (newPassword.length < 8) {
+    return { error: "New password must be at least 8 characters." };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { error: "New passwords do not match." };
+  }
+
+  if (currentPassword === newPassword) {
+    return { error: "New password must be different from your current password." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    return { error: "You must be signed in to change your password." };
+  }
+
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+
+  if (verifyError) {
+    return { error: "Current password is incorrect." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
 function parseProductForm(formData: FormData): ProductInput {
   const type = formData.get("type") as string;
   const manufacturer = formData.get("manufacturer") as string;
