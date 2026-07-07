@@ -11,7 +11,7 @@ export default async function ContactPage() {
   return (
     <div className="py-12">
       <div className="mx-auto max-w-7xl px-4">
-        <h1 className="font-oswald mb-12 text-4xl font-bold uppercase">Contact Us</h1>
+        <h1 className="font-oswald mb-8 text-3xl font-bold uppercase sm:mb-12 sm:text-4xl">Contact Us</h1>
 
         <div className="mb-12 grid gap-8 md:grid-cols-3">
           {[

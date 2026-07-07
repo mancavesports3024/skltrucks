@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SITE } from "@/lib/constants";
 
 const inputClass =
-  "w-full border border-neutral-300 px-4 py-2.5 text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
+  "w-full min-h-11 border border-neutral-300 px-4 py-2.5 text-base sm:text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
 
 export default function ContactForm() {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -33,7 +33,7 @@ export default function ContactForm() {
       <button
         type="submit"
         disabled={status === "loading"}
-        className="bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:opacity-60 transition-colors"
+        className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white transition-colors hover:bg-[#d90422] disabled:opacity-60 sm:w-auto"
       >
         {status === "loading" ? "Sending..." : "Submit"}
       </button>

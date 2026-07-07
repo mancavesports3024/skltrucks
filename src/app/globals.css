@@ -21,6 +21,19 @@
 body {
   font-family: var(--font-roboto), system-ui, sans-serif;
   color: #1a1a1a;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent iOS zoom on input focus; improve touch targets */
+input,
+select,
+textarea,
+button {
+  font-size: max(16px, 1em);
+}
+
+.touch-target {
+  min-height: 2.75rem;
 }
 
 .font-oswald {

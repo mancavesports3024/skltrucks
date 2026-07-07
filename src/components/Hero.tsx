@@ -32,7 +32,7 @@ export default function Hero({ content, social }: HeroProps) {
         </h1>
         <Link
           href={content.buttonLink}
-          className="mt-8 inline-block rounded-sm border-2 border-[#fc0527] bg-[#fc0527] px-8 py-3 font-poppins text-base font-medium text-white transition-colors hover:bg-transparent hover:text-white"
+          className="mt-8 inline-block min-h-12 rounded-sm border-2 border-[#fc0527] bg-[#fc0527] px-8 py-3 font-poppins text-base font-medium text-white transition-colors hover:bg-transparent hover:text-white"
         >
           {content.buttonText}
         </Link>

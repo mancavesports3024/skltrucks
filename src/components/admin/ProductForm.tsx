@@ -7,7 +7,7 @@ import { INVENTORY_CATEGORIES, MANUFACTURERS } from "@/lib/constants";
 import type { Product } from "@/types/product";
 
 const inputClass =
-  "w-full border border-neutral-300 px-4 py-2.5 text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
+  "w-full min-h-11 border border-neutral-300 px-4 py-2.5 text-base sm:text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
 const labelClass = "block text-sm font-semibold mb-1";
 
 const DETAIL_FIELDS = [
@@ -169,7 +169,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       <section className="bg-white p-6 shadow">
         <h2 className="mb-4 text-lg font-bold">Photos</h2>
         {imageUrls.length > 0 && (
-          <div className="mb-4 grid grid-cols-4 gap-3">
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {imageUrls.map((url) => (
               <div key={url} className="relative aspect-square bg-neutral-100">
                 <Image src={url} alt="" fill className="object-cover" sizes="150px" />
@@ -213,14 +213,17 @@ export default function ProductForm({ product, isCopy = false, action }: Product
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <button
           type="submit"
-          className="bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422]"
+          className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] sm:w-auto"
         >
           {isCopy ? "Add Truck" : product ? "Save Changes" : "Add Truck"}
         </button>
-        <Link href="/admin" className="px-8 py-3 text-sm font-semibold uppercase border border-neutral-300 hover:bg-neutral-50">
+        <Link
+          href="/admin"
+          className="flex min-h-12 w-full items-center justify-center border border-neutral-300 px-8 py-3 text-sm font-semibold uppercase hover:bg-neutral-50 sm:w-auto"
+        >
           Cancel
         </Link>
       </div>

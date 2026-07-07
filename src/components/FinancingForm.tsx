@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SITE } from "@/lib/constants";
 
 const inputClass =
-  "w-full border border-neutral-300 px-4 py-2.5 text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
+  "w-full min-h-11 border border-neutral-300 px-4 py-2.5 text-base sm:text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
 const labelClass = "block text-sm font-semibold mb-1";
 
 function Field({ label, name, type = "text", required }: { label: string; name: string; type?: string; required?: boolean }) {
@@ -151,7 +151,7 @@ export default function FinancingForm() {
       <button
         type="submit"
         disabled={status === "loading"}
-        className="bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:opacity-60"
+        className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:opacity-60 sm:w-auto"
       >
         {status === "loading" ? "Submitting..." : "Submit Application"}
       </button>

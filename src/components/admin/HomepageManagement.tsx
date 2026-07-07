@@ -6,7 +6,7 @@ import { updateSiteContent, uploadSiteImage } from "@/app/admin/actions";
 import type { SiteContent } from "@/types/site-content";
 
 const inputClass =
-  "w-full border border-neutral-300 px-4 py-2.5 text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
+  "w-full min-h-11 border border-neutral-300 px-4 py-2.5 text-base sm:text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
 const labelClass = "mb-1 block text-sm font-semibold";
 const sectionClass = "bg-white p-6 shadow";
 
@@ -157,7 +157,7 @@ export default function HomepageManagement({ initialContent, dbReady }: Homepage
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
       {!dbReady && (
         <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
           <strong>Database not connected.</strong> Add Supabase environment variables and run the
@@ -449,7 +449,7 @@ export default function HomepageManagement({ initialContent, dbReady }: Homepage
         <button
           type="submit"
           disabled={!dbReady || saving}
-          className="bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {saving ? "Saving..." : "Save Homepage Content"}
         </button>

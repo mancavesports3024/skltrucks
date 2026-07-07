@@ -1,5 +1,5 @@
 import ProductGrid from "@/components/ProductGrid";
-import { INVENTORY_CATEGORIES, MANUFACTURERS } from "@/lib/constants";
+import ShopFilters from "@/components/shop/ShopFilters";
 import { filterProducts } from "@/lib/inventory";
 import Link from "next/link";
 
@@ -18,55 +18,23 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   });
 
   return (
-    <div className="py-12">
+    <div className="py-8 sm:py-12">
       <div className="mx-auto max-w-7xl px-4">
-        <h1 className="font-oswald mb-8 text-4xl font-bold uppercase">Inventory</h1>
+        <h1 className="font-oswald mb-6 text-3xl font-bold uppercase sm:mb-8 sm:text-4xl">
+          Inventory
+        </h1>
 
-        <div className="grid gap-8 lg:grid-cols-4">
-          <aside className="lg:col-span-1">
-            <div className="sticky top-32 space-y-6">
-              <div>
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Categories</h2>
-                <ul className="space-y-1 text-sm">
-                  <li>
-                    <Link href="/shop" className={`hover:text-[#fc0527] ${!params.category ? "font-bold text-[#fc0527]" : ""}`}>
-                      All Trucks
-                    </Link>
-                  </li>
-                  {INVENTORY_CATEGORIES.map((cat) => (
-                    <li key={cat.slug}>
-                      <Link
-                        href={`/shop?category=${cat.slug}`}
-                        className={`hover:text-[#fc0527] ${params.category === cat.slug ? "font-bold text-[#fc0527]" : ""}`}
-                      >
-                        {cat.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Manufacturers</h2>
-                <ul className="space-y-1 text-sm">
-                  {MANUFACTURERS.map((m) => (
-                    <li key={m.slug}>
-                      <Link
-                        href={`/shop?manufacturer=${m.slug}`}
-                        className={`hover:text-[#fc0527] ${params.manufacturer === m.slug ? "font-bold text-[#fc0527]" : ""}`}
-                      >
-                        {m.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </aside>
+        <div className="grid gap-6 lg:grid-cols-4 lg:gap-8">
+          <ShopFilters category={params.category} manufacturer={params.manufacturer} />
 
           <div className="lg:col-span-3">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-neutral-500">Showing {products.length} results</p>
-              <SortLinks current={params.sort} category={params.category} manufacturer={params.manufacturer} />
+              <SortLinks
+                current={params.sort}
+                category={params.category}
+                manufacturer={params.manufacturer}
+              />
             </div>
             <ProductGrid products={products} />
           </div>
@@ -95,23 +63,21 @@ function SortLinks({
     { value: "year-desc", label: "Year: newest first" },
   ];
 
+  const linkClass = (active: boolean) =>
+    `flex min-h-10 items-center rounded border px-3 py-2 text-xs sm:text-sm ${
+      active ? "border-[#fc0527] text-[#fc0527]" : "border-neutral-300"
+    }`;
+
   return (
     <div className="flex flex-wrap gap-2">
-      <Link
-        href={`/shop?${base.toString()}`}
-        className={`rounded border px-3 py-1 text-xs ${!current ? "border-[#fc0527] text-[#fc0527]" : "border-neutral-300"}`}
-      >
+      <Link href={`/shop?${base.toString()}`} className={linkClass(!current)}>
         Default
       </Link>
       {sorts.map((s) => {
         const q = new URLSearchParams(base);
         q.set("sort", s.value);
         return (
-          <Link
-            key={s.value}
-            href={`/shop?${q.toString()}`}
-            className={`rounded border px-3 py-1 text-xs ${current === s.value ? "border-[#fc0527] text-[#fc0527]" : "border-neutral-300"}`}
-          >
+          <Link key={s.value} href={`/shop?${q.toString()}`} className={linkClass(current === s.value)}>
             {s.label}
           </Link>
         );

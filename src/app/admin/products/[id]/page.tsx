@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import AdminPageHeader from "@/components/admin/AdminPageHeader";
 import ProductForm from "@/components/admin/ProductForm";
 import { getAdminProduct, updateProduct } from "@/app/admin/actions";
 
@@ -16,13 +16,8 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
 
   return (
     <div>
-      <header className="bg-neutral-900 text-white">
-        <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-4">
-          <Link href="/admin" className="text-sm hover:text-[#fc0527]">← Back</Link>
-          <h1 className="text-xl font-bold">Edit Truck</h1>
-        </div>
-      </header>
-      <div className="mx-auto max-w-4xl px-4 py-8">
+      <AdminPageHeader title="Edit Truck" />
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         <ProductForm product={product} action={boundUpdate} />
       </div>
     </div>
