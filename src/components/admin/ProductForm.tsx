@@ -44,10 +44,11 @@ const DETAIL_FIELDS = [
 
 interface ProductFormProps {
   product?: Product;
+  isCopy?: boolean;
   action: (formData: FormData) => Promise<{ error?: string } | void>;
 }
 
-export default function ProductForm({ product, action }: ProductFormProps) {
+export default function ProductForm({ product, isCopy = false, action }: ProductFormProps) {
   const [error, setError] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>(product?.images ?? []);
   const [details, setDetails] = useState<Record<string, string>>(product?.details ?? {});
@@ -65,6 +66,12 @@ export default function ProductForm({ product, action }: ProductFormProps) {
 
   return (
     <form action={handleSubmit} className="space-y-8">
+      {isCopy && (
+        <div className="border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          This listing was copied from an existing truck. Update the <strong>VIN</strong> and any
+          other details, then save as a new truck.
+        </div>
+      )}
       <section className="bg-white p-6 shadow">
         <h2 className="mb-4 text-lg font-bold">Basic Information</h2>
         <div className="grid gap-4 md:grid-cols-2">
@@ -110,8 +117,13 @@ export default function ProductForm({ product, action }: ProductFormProps) {
             <input name="model" defaultValue={product?.model} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>VIN</label>
-            <input name="vin" defaultValue={product?.vin} className={inputClass} />
+            <label className={labelClass}>VIN {isCopy && "*"}</label>
+            <input
+              name="vin"
+              defaultValue={product?.vin}
+              required={isCopy}
+              className={inputClass}
+            />
           </div>
           <div>
             <label className={labelClass}>Miles</label>
@@ -206,7 +218,7 @@ export default function ProductForm({ product, action }: ProductFormProps) {
           type="submit"
           className="bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422]"
         >
-          {product ? "Save Changes" : "Add Truck"}
+          {isCopy ? "Add Truck" : product ? "Save Changes" : "Add Truck"}
         </button>
         <Link href="/admin" className="px-8 py-3 text-sm font-semibold uppercase border border-neutral-300 hover:bg-neutral-50">
           Cancel

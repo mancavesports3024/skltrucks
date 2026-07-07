@@ -99,13 +99,21 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
                     </span>
                   </td>
                   <td className="p-4">
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
                       <Link
                         href={`/admin/products/${product.id}`}
                         className="font-medium text-[#fc0527] hover:underline"
                       >
                         Edit
                       </Link>
+                      {dbReady && (
+                        <Link
+                          href={`/admin/products/new?copyFrom=${product.id}`}
+                          className="font-medium text-neutral-700 hover:underline"
+                        >
+                          Copy
+                        </Link>
+                      )}
                       {dbReady && <DeleteButton id={product.id} />}
                     </div>
                   </td>
