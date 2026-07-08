@@ -1,3 +1,4 @@
+import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import type { Product, ProductInput } from "@/types/product";
 
 interface DbProduct {
@@ -9,6 +10,7 @@ interface DbProduct {
   images: string[] | null;
   categories: string[] | null;
   category_slugs: string[] | null;
+  cab_type: string | null;
   type: string | null;
   manufacturer: string | null;
   vin: string | null;
@@ -23,6 +25,8 @@ interface DbProduct {
 
 export function rowToProduct(row: DbProduct): Product {
   const images = row.images?.filter(Boolean) ?? [];
+  const cabType = row.cab_type || row.type || "";
+
   return {
     id: row.id,
     slug: row.slug,
@@ -32,7 +36,8 @@ export function rowToProduct(row: DbProduct): Product {
     images: images.length ? images : row.image ? [row.image] : [],
     categories: row.categories ?? [],
     categorySlugs: row.category_slugs ?? [],
-    type: row.type ?? "",
+    cabType,
+    type: cabType,
     manufacturer: row.manufacturer ?? "",
     vin: row.vin ?? "",
     year: row.year ?? "",
@@ -47,6 +52,8 @@ export function rowToProduct(row: DbProduct): Product {
 
 export function inputToRow(input: ProductInput, slug: string) {
   const images = input.images.length ? input.images : input.image ? [input.image] : [];
+  const cabType = input.cabType || input.type || "";
+
   return {
     slug,
     name: input.name,
@@ -55,7 +62,8 @@ export function inputToRow(input: ProductInput, slug: string) {
     images,
     categories: input.categories,
     category_slugs: input.categorySlugs,
-    type: input.type,
+    cab_type: cabType,
+    type: cabType,
     manufacturer: input.manufacturer,
     vin: input.vin,
     year: input.year,
@@ -76,28 +84,22 @@ export function slugify(text: string): string {
     .slice(0, 120);
 }
 
-export function buildCategoryFields(type: string, manufacturer: string) {
-  const typeLabels: Record<string, string> = {
-    "sleeper-trucks": "Sleeper Trucks",
-    "day-cabs": "Day Cabs",
-    "delivery-moving-straight-refrigerated-box-trucks":
-      "DELIVERY / MOVING / STRAIGHT / REFRIGERATED BOX TRUCKS",
-  };
-
+export function buildCategoryFields(cabType: string, manufacturer: string) {
   const categories: string[] = [];
   const categorySlugs: string[] = [];
 
-  if (type && typeLabels[type]) {
-    categories.push(typeLabels[type]);
-    categorySlugs.push(type);
+  const cabEntry = CAB_TYPES.find((c) => c.slug === cabType);
+  if (cabEntry) {
+    categories.push(cabEntry.label);
+    categorySlugs.push(cabEntry.slug);
   }
 
   if (manufacturer) {
-    const mfg =
-      manufacturer.charAt(0).toUpperCase() + manufacturer.slice(1).toLowerCase();
-    categories.push(mfg);
-    if (type) {
-      categorySlugs.push(`${manufacturer.toLowerCase()}-${type}`);
+    const mfgSlug = manufacturer.toLowerCase();
+    const mfgEntry = MANUFACTURERS.find((m) => m.slug === mfgSlug);
+    categories.push(mfgEntry?.label ?? manufacturer);
+    if (cabType) {
+      categorySlugs.push(`${mfgSlug}-${cabType}`);
     }
   }
 

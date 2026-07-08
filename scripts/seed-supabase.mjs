@@ -101,6 +101,11 @@ async function main() {
           ["sleeper-trucks", "day-cabs"].includes(c.slug) ||
           c.slug.includes("delivery-moving")
         )?.slug || "",
+      cab_type:
+        (p.categories || []).find((c) =>
+          ["sleeper-trucks", "day-cabs"].includes(c.slug) ||
+          c.slug.includes("delivery-moving")
+        )?.slug || "",
       manufacturer: summary.MANUFACTURER || "",
       vin: summary.VIN || "",
       year: summary.YEAR || "",

@@ -10,6 +10,7 @@ create table if not exists public.products (
   images text[] default '{}',
   categories text[] default '{}',
   category_slugs text[] default '{}',
+  cab_type text default '',
   type text default '',
   manufacturer text default '',
   vin text default '',
@@ -26,7 +27,7 @@ create table if not exists public.products (
 
 create index if not exists products_slug_idx on public.products (slug);
 create index if not exists products_published_idx on public.products (published);
-create index if not exists products_type_idx on public.products (type);
+create index if not exists products_cab_type_idx on public.products (cab_type);
 
 -- Auto-update updated_at
 create or replace function public.set_updated_at()
@@ -122,3 +123,8 @@ create policy "Authenticated update site images"
 create policy "Authenticated delete site images"
   on storage.objects for delete
   using (bucket_id = 'site-images' and auth.role() = 'authenticated');
+
+-- Migration for existing databases: add cab_type column
+-- alter table public.products add column if not exists cab_type text default '';
+-- update public.products set cab_type = type where cab_type = '' and type != '';
+-- create index if not exists products_cab_type_idx on public.products (cab_type);

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import DeleteButton from "@/components/admin/DeleteButton";
 import { formatPrice } from "@/lib/inventory";
+import { getCabTypeLabel } from "@/lib/product-labels";
 import type { Product } from "@/types/product";
 
 interface InventoryListProps {
@@ -39,7 +40,8 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
               <div className="min-w-0 flex-1">
                 <p className="font-medium leading-snug line-clamp-3">{product.name}</p>
                 <p className="mt-1 text-xs text-neutral-500">
-                  {product.year} {product.manufacturer}
+                  {product.year}{" "}
+                  {product.cabType ? getCabTypeLabel(product.cabType) : product.manufacturer}
                 </p>
                 <p className="mt-2 text-lg font-bold text-[#fc0527]">
                   {formatPrice(product.price)}
@@ -118,9 +120,10 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
                 </td>
                 <td className="max-w-xs p-4">
                   <p className="line-clamp-2 font-medium">{product.name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {product.year} {product.manufacturer}
-                  </p>
+                    <p className="text-xs text-neutral-500">
+                      {product.year}{" "}
+                      {product.cabType ? getCabTypeLabel(product.cabType) : product.manufacturer}
+                    </p>
                 </td>
                 <td className="p-4 font-semibold">{formatPrice(product.price)}</td>
                 <td className="p-4 font-mono text-xs">{product.vin}</td>

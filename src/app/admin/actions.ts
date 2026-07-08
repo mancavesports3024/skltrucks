@@ -89,9 +89,9 @@ export async function updatePassword(formData: FormData) {
 }
 
 function parseProductForm(formData: FormData): ProductInput {
-  const type = formData.get("type") as string;
+  const cabType = formData.get("cabType") as string;
   const manufacturer = formData.get("manufacturer") as string;
-  const { categories, categorySlugs } = buildCategoryFields(type, manufacturer);
+  const { categories, categorySlugs } = buildCategoryFields(cabType, manufacturer);
 
   const existingImages = formData.get("existingImages") as string;
   const images = existingImages ? existingImages.split("\n").filter(Boolean) : [];
@@ -112,7 +112,8 @@ function parseProductForm(formData: FormData): ProductInput {
     images,
     categories,
     categorySlugs,
-    type,
+    cabType,
+    type: cabType,
     manufacturer,
     vin: (formData.get("vin") as string) || "",
     year: (formData.get("year") as string) || "",

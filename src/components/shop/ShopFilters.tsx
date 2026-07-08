@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { INVENTORY_CATEGORIES, MANUFACTURERS } from "@/lib/constants";
+import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 
 interface ShopFiltersProps {
   category?: string;
@@ -38,7 +38,7 @@ export default function ShopFilters({ category, manufacturer }: ShopFiltersProps
       <aside className={`lg:col-span-1 ${open ? "block" : "hidden lg:block"}`}>
         <div className="space-y-6 lg:sticky lg:top-32">
           <div className="border border-neutral-200 bg-white p-4 lg:border-0 lg:bg-transparent lg:p-0">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Categories</h2>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Cab Type</h2>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link
@@ -49,7 +49,7 @@ export default function ShopFilters({ category, manufacturer }: ShopFiltersProps
                   All Trucks
                 </Link>
               </li>
-              {INVENTORY_CATEGORIES.map((cat) => (
+              {CAB_TYPES.map((cat) => (
                 <li key={cat.slug}>
                   <Link
                     href={`/shop?category=${cat.slug}`}

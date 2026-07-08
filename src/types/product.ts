@@ -7,6 +7,7 @@ export interface Product {
   images: string[];
   categories: string[];
   categorySlugs: string[];
+  cabType?: string;
   type: string;
   manufacturer: string;
   vin: string;
@@ -26,6 +27,7 @@ export interface ProductInput {
   images: string[];
   categories: string[];
   categorySlugs: string[];
+  cabType?: string;
   type: string;
   manufacturer: string;
   vin: string;

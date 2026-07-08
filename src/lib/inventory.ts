@@ -56,6 +56,8 @@ function staticAsProducts(): Product[] {
   return staticProducts.map((p) => ({
     ...p,
     id: String(p.id),
+    cabType: p.cabType ?? p.type ?? "",
+    type: p.cabType ?? p.type ?? "",
   }));
 }
 
@@ -115,6 +117,7 @@ export async function filterProducts(options: {
   if (options.category) {
     result = result.filter(
       (p) =>
+        p.cabType === options.category ||
         p.type === options.category ||
         p.categorySlugs.some((s) => s.includes(options.category!))
     );

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { INVENTORY_CATEGORIES, MANUFACTURERS } from "@/lib/constants";
+import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import type { Product } from "@/types/product";
 
 const inputClass =
@@ -141,10 +141,10 @@ export default function ProductForm({ product, isCopy = false, action }: Product
             </select>
           </div>
           <div>
-            <label className={labelClass}>Category</label>
-            <select name="type" defaultValue={product?.type} className={inputClass}>
+            <label className={labelClass}>Cab Type</label>
+            <select name="cabType" defaultValue={product?.cabType || product?.type} className={inputClass}>
               <option value="">Select...</option>
-              {INVENTORY_CATEGORIES.map((c) => (
+              {CAB_TYPES.map((c) => (
                 <option key={c.slug} value={c.slug}>
                   {c.label}
                 </option>

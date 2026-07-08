@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/types/product";
 import { formatPrice } from "@/lib/inventory";
+import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
 
 interface ProductCardProps {
   product: Product;
@@ -31,9 +32,10 @@ export default function ProductCard({ product }: ProductCardProps) {
         <p className="mb-3 text-lg font-bold text-[#fc0527]">{formatPrice(product.price)}</p>
         <dl className="space-y-1 text-xs text-neutral-600">
           {[
+            ["Cab Type", product.cabType ? getCabTypeLabel(product.cabType) : "—"],
             ["VIN", product.vin],
             ["YEAR", product.year],
-            ["Manufacturer", product.manufacturer],
+            ["Manufacturer", product.manufacturer ? getManufacturerLabel(product.manufacturer) : "—"],
             ["Model", product.model],
             ["MILES", product.miles],
           ].map(([label, value]) => (

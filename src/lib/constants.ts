@@ -17,21 +17,27 @@ export const SITE = {
   deliveryIcon: "https://skltrucks.com/wp-content/uploads/2024/06/delivery-1.png",
 };
 
-export const INVENTORY_CATEGORIES = [
-  { label: "Sleeper Trucks", slug: "sleeper-trucks" },
+export const CAB_TYPES = [
+  { label: "Day Cabs", slug: "day-cabs" },
   {
     label: "DELIVERY / MOVING / STRAIGHT / REFRIGERATED BOX TRUCKS",
     slug: "delivery-moving-straight-refrigerated-box-trucks",
   },
-  { label: "Day Cabs", slug: "day-cabs" },
+  { label: "Sleeper", slug: "sleeper-trucks" },
 ];
+
+/** @deprecated Use CAB_TYPES — kept for shop filters and nav */
+export const INVENTORY_CATEGORIES = CAB_TYPES;
 
 export const MANUFACTURERS = [
   { label: "Freightliner", slug: "freightliner" },
+  { label: "Hino", slug: "hino" },
   { label: "International", slug: "international" },
+  { label: "Isuzu", slug: "isuzu" },
   { label: "Kenworth", slug: "kenworth" },
-  { label: "Volvo", slug: "volvo" },
+  { label: "Mack", slug: "mack" },
   { label: "Peterbilt", slug: "peterbilt" },
+  { label: "Volvo", slug: "volvo" },
 ];
 
 export const NAV_LINKS = [
@@ -40,7 +46,7 @@ export const NAV_LINKS = [
     label: "INVENTORY",
     href: "/shop",
     children: [
-      { label: "Sleeper Trucks", href: "/shop?category=sleeper-trucks" },
+      { label: "Sleeper", href: "/shop?category=sleeper-trucks" },
       {
         label: "DELIVERY / MOVING / STRAIGHT / REFRIGERATED BOX TRUCKS",
         href: "/shop?category=delivery-moving-straight-refrigerated-box-trucks",
@@ -54,10 +60,13 @@ export const NAV_LINKS = [
     href: "/shop",
     children: [
       { label: "Freightliner", href: "/shop?manufacturer=freightliner" },
+      { label: "Hino", href: "/shop?manufacturer=hino" },
       { label: "International", href: "/shop?manufacturer=international" },
+      { label: "Isuzu", href: "/shop?manufacturer=isuzu" },
       { label: "Kenworth", href: "/shop?manufacturer=kenworth" },
-      { label: "Volvo", href: "/shop?manufacturer=volvo" },
+      { label: "Mack", href: "/shop?manufacturer=mack" },
       { label: "Peterbilt", href: "/shop?manufacturer=peterbilt" },
+      { label: "Volvo", href: "/shop?manufacturer=volvo" },
       { label: "Browse All", href: "/shop" },
     ],
   },

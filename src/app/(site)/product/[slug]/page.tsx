@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import ProductGrid from "@/components/ProductGrid";
 import { SITE } from "@/lib/constants";
 import { formatPrice, getAllProducts, getProductBySlug } from "@/lib/inventory";
+import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -44,9 +45,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     .slice(0, 4);
 
   const specs: [string, string][] = [
+    ["Cab Type", product.cabType ? getCabTypeLabel(product.cabType) : "—"],
     ["VIN", product.vin],
     ["YEAR", product.year],
-    ["Manufacturer", product.manufacturer],
+    ["Manufacturer", product.manufacturer ? getManufacturerLabel(product.manufacturer) : "—"],
     ["Model", product.model],
     ["MILES", product.miles],
     ["HOURS", product.hours || "—"],
