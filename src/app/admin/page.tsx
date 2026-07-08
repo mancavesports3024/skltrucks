@@ -65,13 +65,22 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
 
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-neutral-600">{products.length} trucks in inventory</p>
-          <Link
-            href="/admin/products/new"
-            className="flex min-h-12 items-center justify-center bg-[#fc0527] px-6 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] sm:inline-flex sm:py-2.5"
-          >
-            + Add Truck
-          </Link>
+          {dbReady && (
+            <Link
+              href="/admin/products/new"
+              className="flex min-h-12 items-center justify-center bg-[#fc0527] px-6 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] sm:inline-flex sm:py-2.5"
+            >
+              + Add Truck
+            </Link>
+          )}
         </div>
+
+        {dbReady && products.length === 0 && (
+          <div className="mb-6 border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            No trucks in the database yet. Click <strong>+ Add Truck</strong> to create one, or run{" "}
+            <code className="bg-blue-100 px-1">npm run seed</code> to import existing inventory.
+          </div>
+        )}
 
         <InventoryList products={products} dbReady={dbReady} />
       </div>

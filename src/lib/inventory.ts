@@ -68,9 +68,12 @@ export async function getAllProducts(): Promise<Product[]> {
 }
 
 export async function getAllProductsAdmin(): Promise<Product[]> {
+  if (!isSupabaseConfigured()) {
+    return staticAsProducts();
+  }
+
   const db = await fetchAdminFromDb();
-  if (!db || db.length === 0) return staticAsProducts();
-  return db;
+  return db ?? [];
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
@@ -97,10 +100,11 @@ export async function getProductById(id: string): Promise<Product | undefined> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createClient();
-      const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
+      const { data, error } = await supabase.from("products").select("*").eq("id", id).maybeSingle();
       if (!error && data) return rowToProduct(data);
+      return undefined;
     } catch {
-      // fall through
+      return undefined;
     }
   }
 

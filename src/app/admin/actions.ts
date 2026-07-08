@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import {
   buildCategoryFields,
   inputToRow,
-  rowToProduct,
   slugify,
 } from "@/lib/db/products";
 import { parseSiteContentForm } from "@/lib/site-content";
+import { getProductById } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
 import type { ProductInput } from "@/types/product";
 
@@ -216,10 +216,7 @@ export async function deleteProduct(id: string) {
 }
 
 export async function getAdminProduct(id: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
-  if (error || !data) return null;
-  return rowToProduct(data);
+  return (await getProductById(id)) ?? null;
 }
 
 export async function uploadSiteImage(formData: FormData): Promise<{ url?: string; error?: string }> {

@@ -63,12 +63,18 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
             </div>
 
             <div className="mt-4 grid grid-cols-3 gap-2">
-              <Link
-                href={`/admin/products/${product.id}`}
-                className="flex min-h-11 items-center justify-center bg-[#fc0527] px-3 py-2.5 text-center text-sm font-semibold text-white"
-              >
-                Edit
-              </Link>
+              {dbReady ? (
+                <Link
+                  href={`/admin/products/${product.id}`}
+                  className="flex min-h-11 items-center justify-center bg-[#fc0527] px-3 py-2.5 text-center text-sm font-semibold text-white"
+                >
+                  Edit
+                </Link>
+              ) : (
+                <span className="flex min-h-11 items-center justify-center bg-neutral-200 px-3 py-2.5 text-center text-sm text-neutral-500">
+                  Edit
+                </span>
+              )}
               {dbReady ? (
                 <Link
                   href={`/admin/products/new?copyFrom=${product.id}`}
@@ -140,12 +146,16 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
                 </td>
                 <td className="p-4">
                   <div className="flex flex-wrap gap-3">
-                    <Link
-                      href={`/admin/products/${product.id}`}
-                      className="font-medium text-[#fc0527] hover:underline"
-                    >
-                      Edit
-                    </Link>
+                    {dbReady ? (
+                      <Link
+                        href={`/admin/products/${product.id}`}
+                        className="font-medium text-[#fc0527] hover:underline"
+                      >
+                        Edit
+                      </Link>
+                    ) : (
+                      <span className="text-neutral-400">Edit</span>
+                    )}
                     {dbReady && (
                       <Link
                         href={`/admin/products/new?copyFrom=${product.id}`}
