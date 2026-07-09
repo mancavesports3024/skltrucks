@@ -122,7 +122,7 @@ export function mapVpicToDetails(result: VpicResult): Record<string, string> {
 export function mapVpicResult(result: VpicResult): DecodedVin | { error: string } {
   const errorCode = (result.ErrorCode ?? "").trim();
   if (errorCode && errorCode !== "0") {
-    return { error: result.ErrorText?.trim() || "Could not decode this VIN." };
+    return { error: result.ErrorText?.trim() || "Could not look up this VIN." };
   }
 
   const make = (result.Make ?? "").trim();

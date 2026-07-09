@@ -122,7 +122,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
 
       if (!res.ok) {
         setVinDecodeStatus("error");
-        setVinDecodeMessage(data.error ?? "Could not decode VIN.");
+        setVinDecodeMessage(data.error ?? "VIN lookup failed. Try again or enter details manually.");
         return;
       }
 
@@ -133,10 +133,10 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       const summary = [data.year, data.manufacturerLabel || data.make, data.model].filter(Boolean).join(" ");
       const filled =
         data.filledFields?.length > 0 ? ` Filled: ${data.filledFields.join(", ")}.` : "";
-      setVinDecodeMessage(summary ? `Found: ${summary}.${filled}` : `VIN decoded.${filled}`);
+      setVinDecodeMessage(summary ? `Found: ${summary}.${filled}` : `VIN lookup complete.${filled}`);
     } catch {
       setVinDecodeStatus("error");
-      setVinDecodeMessage("Could not reach the VIN decoder. Check your connection and try again.");
+      setVinDecodeMessage("Could not reach the VIN lookup service. Check your connection and try again.");
     }
   }
 
@@ -180,7 +180,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
                 disabled={vinDecodeStatus === "loading" || !vin.trim()}
                 className={buttonClass}
               >
-                {vinDecodeStatus === "loading" ? "Decoding..." : "Decode VIN"}
+                {vinDecodeStatus === "loading" ? "Looking up..." : "VIN Lookup"}
               </button>
             </div>
             {vinDecodeStatus === "success" && vinDecodeMessage && (
@@ -196,7 +196,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
             ))}
             <fieldset className="mt-3">
               <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
-                Apply decoded data
+                When applying lookup results
               </legend>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-6">
                 <label className="flex items-center gap-2 text-sm">
@@ -207,7 +207,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
                     checked={vinDecodeMode === "fill-empty"}
                     onChange={() => setVinDecodeMode("fill-empty")}
                   />
-                  Fill empty fields only
+                  Only fill empty fields
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -217,13 +217,13 @@ export default function ProductForm({ product, isCopy = false, action }: Product
                     checked={vinDecodeMode === "replace-all"}
                     onChange={() => setVinDecodeMode("replace-all")}
                   />
-                  Replace decoded fields
+                  Overwrite matched fields
                 </label>
               </div>
             </fieldset>
             <p className="mt-2 text-xs text-neutral-500">
-              Decode fills year, manufacturer, model, listing title, and specs like GVWR and fuel type.
-              Review everything before saving.
+              Enter the VIN and click VIN Lookup to auto-fill year, manufacturer, model, and specs from
+              NHTSA. Review everything before saving.
             </p>
           </div>
           <div className="md:col-span-2">

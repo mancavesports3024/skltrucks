@@ -8,7 +8,7 @@ export function validateVin(raw: string): { ok: true; vin: string } | { ok: fals
   const vin = normalizeVin(raw);
 
   if (!vin) {
-    return { ok: false, error: "Enter a VIN to decode." };
+    return { ok: false, error: "Enter a VIN to look up." };
   }
 
   if (vin.length !== 17) {

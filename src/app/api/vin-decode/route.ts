@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Sign in to decode VINs." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in to use VIN lookup." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       ...decoded,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to decode VIN.";
+    const message = err instanceof Error ? err.message : "VIN lookup failed.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
