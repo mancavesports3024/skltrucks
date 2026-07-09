@@ -5,6 +5,7 @@ import ProductGrid from "@/components/ProductGrid";
 import { SITE } from "@/lib/constants";
 import { formatPrice, getAllProducts, getProductBySlug } from "@/lib/inventory";
 import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
+import { getPublicDetails } from "@/lib/vin/decode";
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -43,6 +44,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const related = (await getAllProducts())
     .filter((p) => p.id !== product.id && p.type === product.type)
     .slice(0, 4);
+
+  const publicDetails = Object.entries(getPublicDetails(product.details));
 
   const specs: [string, string][] = [
     ["Cab Type", product.cabType ? getCabTypeLabel(product.cabType) : "—"],
@@ -126,12 +129,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
         </div>
 
-        {Object.keys(product.details).length > 0 && (
+        {publicDetails.length > 0 && (
           <section className="mt-12 sm:mt-16">
             <h2 className="mb-4 border-b pb-3 text-xl font-bold uppercase sm:mb-6 sm:text-2xl">
               Description
             </h2>
-            <SpecList items={Object.entries(product.details)} />
+            <SpecList items={publicDetails} />
           </section>
         )}
 

@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
+import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
+import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
 import type { Product } from "@/types/product";
 
 const inputClass =
@@ -12,16 +14,10 @@ const labelClass = "block text-sm font-semibold mb-1";
 const buttonClass =
   "min-h-11 shrink-0 border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold uppercase hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60";
 
-interface VinDecodeResponse {
+type VinDecodeResponse = DecodedVin & {
   vin: string;
-  year: string;
-  model: string;
-  manufacturer: string;
-  manufacturerLabel: string;
-  make: string;
-  warnings: string[];
   error?: string;
-}
+};
 
 const DETAIL_FIELDS = [
   "Engine Model",
@@ -66,16 +62,20 @@ export default function ProductForm({ product, isCopy = false, action }: Product
   const [imageUrls, setImageUrls] = useState<string[]>(product?.images ?? []);
   const [details, setDetails] = useState<Record<string, string>>(product?.details ?? {});
   const [vin, setVin] = useState(product?.vin ?? "");
+  const [name, setName] = useState(product?.name ?? "");
   const [year, setYear] = useState(product?.year ?? "");
   const [manufacturer, setManufacturer] = useState(product?.manufacturer?.toLowerCase() ?? "");
   const [model, setModel] = useState(product?.model ?? "");
+  const [vinDecodeMode, setVinDecodeMode] = useState<VinDecodeMode>("fill-empty");
   const [vinDecodeStatus, setVinDecodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [vinDecodeMessage, setVinDecodeMessage] = useState("");
   const [vinDecodeWarnings, setVinDecodeWarnings] = useState<string[]>([]);
+  const [lastSuggestedTitle, setLastSuggestedTitle] = useState("");
 
   async function handleSubmit(formData: FormData) {
     formData.set("existingImages", imageUrls.join("\n"));
     formData.set("details", JSON.stringify(details));
+    formData.set("name", name);
     formData.set("vin", vin);
     formData.set("year", year);
     formData.set("manufacturer", manufacturer);
@@ -86,9 +86,26 @@ export default function ProductForm({ product, isCopy = false, action }: Product
 
   function applyDecodedFields(decoded: VinDecodeResponse) {
     setVin(decoded.vin);
-    if (!year.trim() && decoded.year) setYear(decoded.year);
-    if (!model.trim() && decoded.model) setModel(decoded.model);
-    if (!manufacturer && decoded.manufacturer) setManufacturer(decoded.manufacturer);
+
+    if (shouldApplyField(year, decoded.year, vinDecodeMode) && decoded.year) {
+      setYear(decoded.year);
+    }
+    if (shouldApplyField(model, decoded.model, vinDecodeMode) && decoded.model) {
+      setModel(decoded.model);
+    }
+    if (shouldApplyField(manufacturer, decoded.manufacturer, vinDecodeMode) && decoded.manufacturer) {
+      setManufacturer(decoded.manufacturer);
+    }
+    if (shouldApplyField(name, decoded.suggestedTitle, vinDecodeMode) && decoded.suggestedTitle) {
+      setName(decoded.suggestedTitle);
+    }
+
+    setLastSuggestedTitle(decoded.suggestedTitle);
+    setDetails((current) => {
+      const merged = mergeDecodedDetails(current, decoded.details, vinDecodeMode);
+      merged._vinDecode = buildVinDecodeMeta(decoded.vin, decoded.raw);
+      return merged;
+    });
   }
 
   async function handleDecodeVin() {
@@ -114,7 +131,9 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       setVinDecodeStatus("success");
 
       const summary = [data.year, data.manufacturerLabel || data.make, data.model].filter(Boolean).join(" ");
-      setVinDecodeMessage(summary ? `Found: ${summary}` : "VIN decoded.");
+      const filled =
+        data.filledFields?.length > 0 ? ` Filled: ${data.filledFields.join(", ")}.` : "";
+      setVinDecodeMessage(summary ? `Found: ${summary}.${filled}` : `VIN decoded.${filled}`);
     } catch {
       setVinDecodeStatus("error");
       setVinDecodeMessage("Could not reach the VIN decoder. Check your connection and try again.");
@@ -136,52 +155,6 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       <section className="bg-white p-6 shadow">
         <h2 className="mb-4 text-lg font-bold">Basic Information</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className={labelClass}>Listing Title *</label>
-            <input
-              name="name"
-              required
-              defaultValue={product?.name}
-              placeholder="2021 International RH613 Day Cab – 6 month warranty..."
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Price ($) *</label>
-            <input
-              name="price"
-              type="number"
-              required
-              min={0}
-              step={50}
-              defaultValue={product?.price}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Year</label>
-            <input name="year" value={year} onChange={(e) => setYear(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Manufacturer</label>
-            <select
-              name="manufacturer"
-              value={manufacturer}
-              onChange={(e) => setManufacturer(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select...</option>
-              {MANUFACTURERS.map((m) => (
-                <option key={m.slug} value={m.slug}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Model</label>
-            <input name="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
-          </div>
           <div className="md:col-span-2">
             <label className={labelClass}>VIN {isCopy && "*"}</label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -221,9 +194,93 @@ export default function ProductForm({ product, isCopy = false, action }: Product
                 {warning}
               </p>
             ))}
-            <p className="mt-1 text-xs text-neutral-500">
-              Uses the free NHTSA database to fill year, manufacturer, and model. Review before saving.
+            <fieldset className="mt-3">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
+                Apply decoded data
+              </legend>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-6">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="vinDecodeMode"
+                    value="fill-empty"
+                    checked={vinDecodeMode === "fill-empty"}
+                    onChange={() => setVinDecodeMode("fill-empty")}
+                  />
+                  Fill empty fields only
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="vinDecodeMode"
+                    value="replace-all"
+                    checked={vinDecodeMode === "replace-all"}
+                    onChange={() => setVinDecodeMode("replace-all")}
+                  />
+                  Replace decoded fields
+                </label>
+              </div>
+            </fieldset>
+            <p className="mt-2 text-xs text-neutral-500">
+              Decode fills year, manufacturer, model, listing title, and specs like GVWR and fuel type.
+              Review everything before saving.
             </p>
+          </div>
+          <div className="md:col-span-2">
+            <label className={labelClass}>Listing Title *</label>
+            <input
+              name="name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="2021 International RH613 Day Cab – 6 month warranty..."
+              className={inputClass}
+            />
+            {lastSuggestedTitle && lastSuggestedTitle !== name && (
+              <button
+                type="button"
+                onClick={() => setName(lastSuggestedTitle)}
+                className="mt-2 text-sm font-medium text-[#fc0527] hover:underline"
+              >
+                Use suggested title: {lastSuggestedTitle}
+              </button>
+            )}
+          </div>
+          <div>
+            <label className={labelClass}>Price ($) *</label>
+            <input
+              name="price"
+              type="number"
+              required
+              min={0}
+              step={50}
+              defaultValue={product?.price}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Year</label>
+            <input name="year" value={year} onChange={(e) => setYear(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Manufacturer</label>
+            <select
+              name="manufacturer"
+              value={manufacturer}
+              onChange={(e) => setManufacturer(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select...</option>
+              {MANUFACTURERS.map((m) => (
+                <option key={m.slug} value={m.slug}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Model</label>
+            <input name="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Miles</label>
