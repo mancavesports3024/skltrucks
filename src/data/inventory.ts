@@ -35,7 +35,8 @@ export const products: Product[] = [
       "international-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
-    "manufacturer": "International",
+    "cabType": "delivery-moving-straight-refrigerated-box-trucks",
+    "manufacturer": "international",
     "vin": "1HTMMMML5HH177242",
     "year": "2017",
     "model": "4300",
@@ -108,7 +109,8 @@ export const products: Product[] = [
       "international-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
-    "manufacturer": "International",
+    "cabType": "delivery-moving-straight-refrigerated-box-trucks",
+    "manufacturer": "international",
     "vin": "1HTMMMMLXKH682538",
     "year": "2019",
     "model": "4300",
@@ -174,11 +176,10 @@ export const products: Product[] = [
     "categories": [
       "International"
     ],
-    "categorySlugs": [
-      "international"
-    ],
-    "type": "other",
-    "manufacturer": "International",
+    "categorySlugs": [],
+    "type": "",
+    "cabType": "",
+    "manufacturer": "international",
     "vin": "3HSDWTZRXLN845511",
     "year": "2021",
     "model": "RH613",
@@ -242,11 +243,10 @@ export const products: Product[] = [
     "categories": [
       "International"
     ],
-    "categorySlugs": [
-      "international"
-    ],
-    "type": "other",
-    "manufacturer": "International",
+    "categorySlugs": [],
+    "type": "",
+    "cabType": "",
+    "manufacturer": "international",
     "vin": "3HSDWTZR2LN845518",
     "year": "2021",
     "model": "RH613",
@@ -324,7 +324,8 @@ export const products: Product[] = [
       "freightliner-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
-    "manufacturer": "FREIGHTLINER",
+    "cabType": "delivery-moving-straight-refrigerated-box-trucks",
+    "manufacturer": "freightliner",
     "vin": "3ALACWDT8HDJD4440",
     "year": "2017",
     "model": "M2 106",
@@ -395,7 +396,8 @@ export const products: Product[] = [
       "freightliner-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
-    "manufacturer": "Freightliner",
+    "cabType": "delivery-moving-straight-refrigerated-box-trucks",
+    "manufacturer": "freightliner",
     "vin": "3ALACWFC0KDKW8156",
     "year": "2019",
     "model": "M2",
@@ -459,11 +461,10 @@ export const products: Product[] = [
     "categories": [
       "International"
     ],
-    "categorySlugs": [
-      "international"
-    ],
-    "type": "other",
-    "manufacturer": "International",
+    "categorySlugs": [],
+    "type": "",
+    "cabType": "",
+    "manufacturer": "international",
     "vin": "3HSDWTZR8LN860430",
     "year": "2021",
     "model": "RH613",
@@ -530,15 +531,16 @@ export const products: Product[] = [
       "https://skltrucks.com/wp-content/uploads/2026/01/IMG_5690.jpg"
     ],
     "categories": [
-      "International",
-      "Sleeper Trucks"
+      "Sleeper",
+      "International"
     ],
     "categorySlugs": [
-      "international-sleeper-trucks",
-      "sleeper-trucks"
+      "sleeper-trucks",
+      "international-sleeper-trucks"
     ],
     "type": "sleeper-trucks",
-    "manufacturer": "International",
+    "cabType": "sleeper-trucks",
+    "manufacturer": "international",
     "vin": "3HSDZAPR9MN298781",
     "year": "2021",
     "model": "LT625",
@@ -607,11 +609,10 @@ export const products: Product[] = [
     "categories": [
       "International"
     ],
-    "categorySlugs": [
-      "international"
-    ],
-    "type": "other",
-    "manufacturer": "International",
+    "categorySlugs": [],
+    "type": "",
+    "cabType": "",
+    "manufacturer": "international",
     "vin": "3HSDZTZR5LN165782",
     "year": "2020",
     "model": "LT625 Day Cab",

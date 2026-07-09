@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "sync-inventory": "node scripts/sync-inventory.mjs",
-    "seed": "node --env-file=.env.local scripts/seed-supabase.mjs"
+    "seed": "node --env-file=.env.local scripts/seed-supabase.mjs",
+    "pull-live": "node scripts/pull-live.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
