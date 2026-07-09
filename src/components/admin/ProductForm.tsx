@@ -9,6 +9,19 @@ import type { Product } from "@/types/product";
 const inputClass =
   "w-full min-h-11 border border-neutral-300 px-4 py-2.5 text-base sm:text-sm focus:border-[#fc0527] focus:outline-none focus:ring-1 focus:ring-[#fc0527]";
 const labelClass = "block text-sm font-semibold mb-1";
+const buttonClass =
+  "min-h-11 shrink-0 border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold uppercase hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60";
+
+interface VinDecodeResponse {
+  vin: string;
+  year: string;
+  model: string;
+  manufacturer: string;
+  manufacturerLabel: string;
+  make: string;
+  warnings: string[];
+  error?: string;
+}
 
 const DETAIL_FIELDS = [
   "Engine Model",
@@ -52,12 +65,60 @@ export default function ProductForm({ product, isCopy = false, action }: Product
   const [error, setError] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>(product?.images ?? []);
   const [details, setDetails] = useState<Record<string, string>>(product?.details ?? {});
+  const [vin, setVin] = useState(product?.vin ?? "");
+  const [year, setYear] = useState(product?.year ?? "");
+  const [manufacturer, setManufacturer] = useState(product?.manufacturer?.toLowerCase() ?? "");
+  const [model, setModel] = useState(product?.model ?? "");
+  const [vinDecodeStatus, setVinDecodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [vinDecodeMessage, setVinDecodeMessage] = useState("");
+  const [vinDecodeWarnings, setVinDecodeWarnings] = useState<string[]>([]);
 
   async function handleSubmit(formData: FormData) {
     formData.set("existingImages", imageUrls.join("\n"));
     formData.set("details", JSON.stringify(details));
+    formData.set("vin", vin);
+    formData.set("year", year);
+    formData.set("manufacturer", manufacturer);
+    formData.set("model", model);
     const result = await action(formData);
     if (result?.error) setError(result.error);
+  }
+
+  function applyDecodedFields(decoded: VinDecodeResponse) {
+    setVin(decoded.vin);
+    if (!year.trim() && decoded.year) setYear(decoded.year);
+    if (!model.trim() && decoded.model) setModel(decoded.model);
+    if (!manufacturer && decoded.manufacturer) setManufacturer(decoded.manufacturer);
+  }
+
+  async function handleDecodeVin() {
+    setVinDecodeStatus("loading");
+    setVinDecodeMessage("");
+    setVinDecodeWarnings([]);
+
+    const params = new URLSearchParams({ vin });
+    if (year.trim()) params.set("year", year.trim());
+
+    try {
+      const res = await fetch(`/api/vin-decode?${params}`);
+      const data = (await res.json()) as VinDecodeResponse;
+
+      if (!res.ok) {
+        setVinDecodeStatus("error");
+        setVinDecodeMessage(data.error ?? "Could not decode VIN.");
+        return;
+      }
+
+      applyDecodedFields(data);
+      setVinDecodeWarnings(data.warnings ?? []);
+      setVinDecodeStatus("success");
+
+      const summary = [data.year, data.manufacturerLabel || data.make, data.model].filter(Boolean).join(" ");
+      setVinDecodeMessage(summary ? `Found: ${summary}` : "VIN decoded.");
+    } catch {
+      setVinDecodeStatus("error");
+      setVinDecodeMessage("Could not reach the VIN decoder. Check your connection and try again.");
+    }
   }
 
   function removeImage(url: string) {
@@ -99,11 +160,16 @@ export default function ProductForm({ product, isCopy = false, action }: Product
           </div>
           <div>
             <label className={labelClass}>Year</label>
-            <input name="year" defaultValue={product?.year} className={inputClass} />
+            <input name="year" value={year} onChange={(e) => setYear(e.target.value)} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Manufacturer</label>
-            <select name="manufacturer" defaultValue={product?.manufacturer?.toLowerCase()} className={inputClass}>
+            <select
+              name="manufacturer"
+              value={manufacturer}
+              onChange={(e) => setManufacturer(e.target.value)}
+              className={inputClass}
+            >
               <option value="">Select...</option>
               {MANUFACTURERS.map((m) => (
                 <option key={m.slug} value={m.slug}>
@@ -114,16 +180,50 @@ export default function ProductForm({ product, isCopy = false, action }: Product
           </div>
           <div>
             <label className={labelClass}>Model</label>
-            <input name="model" defaultValue={product?.model} className={inputClass} />
+            <input name="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
           </div>
-          <div>
+          <div className="md:col-span-2">
             <label className={labelClass}>VIN {isCopy && "*"}</label>
-            <input
-              name="vin"
-              defaultValue={product?.vin}
-              required={isCopy}
-              className={inputClass}
-            />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                name="vin"
+                value={vin}
+                onChange={(e) => {
+                  setVin(e.target.value.toUpperCase());
+                  if (vinDecodeStatus !== "idle") {
+                    setVinDecodeStatus("idle");
+                    setVinDecodeMessage("");
+                    setVinDecodeWarnings([]);
+                  }
+                }}
+                required={isCopy}
+                placeholder="17-character VIN"
+                maxLength={17}
+                className={inputClass}
+              />
+              <button
+                type="button"
+                onClick={handleDecodeVin}
+                disabled={vinDecodeStatus === "loading" || !vin.trim()}
+                className={buttonClass}
+              >
+                {vinDecodeStatus === "loading" ? "Decoding..." : "Decode VIN"}
+              </button>
+            </div>
+            {vinDecodeStatus === "success" && vinDecodeMessage && (
+              <p className="mt-2 text-sm text-green-700">{vinDecodeMessage}</p>
+            )}
+            {vinDecodeStatus === "error" && vinDecodeMessage && (
+              <p className="mt-2 text-sm text-red-600">{vinDecodeMessage}</p>
+            )}
+            {vinDecodeWarnings.map((warning) => (
+              <p key={warning} className="mt-2 text-sm text-amber-700">
+                {warning}
+              </p>
+            ))}
+            <p className="mt-1 text-xs text-neutral-500">
+              Uses the free NHTSA database to fill year, manufacturer, and model. Review before saving.
+            </p>
           </div>
           <div>
             <label className={labelClass}>Miles</label>
