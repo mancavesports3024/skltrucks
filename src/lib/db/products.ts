@@ -1,4 +1,5 @@
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
+import { normalizeManufacturerSlug } from "@/lib/product-labels";
 import type { Product, ProductInput } from "@/types/product";
 
 interface DbProduct {
@@ -95,7 +96,7 @@ export function buildCategoryFields(cabType: string, manufacturer: string) {
   }
 
   if (manufacturer) {
-    const mfgSlug = manufacturer.toLowerCase();
+    const mfgSlug = normalizeManufacturerSlug(manufacturer);
     const mfgEntry = MANUFACTURERS.find((m) => m.slug === mfgSlug);
     categories.push(mfgEntry?.label ?? manufacturer);
     if (cabType) {

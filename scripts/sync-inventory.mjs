@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  buildCategoryFields,
+  getCabTypeFromCategories,
+  normalizeManufacturerSlug,
+} from "./lib/category-fields.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -74,12 +79,7 @@ function getCategorySlugs(categories) {
     slugs.find((s) => s === "day-cabs") ||
     slugs.find((s) => s.includes("delivery-moving")) ||
     "other";
-  const manufacturer = slugs.find((s) =>
-    ["freightliner", "international", "kenworth", "volvo", "peterbilt", "mack", "hino", "isuzu"].some(
-      (m) => s.startsWith(m)
-    )
-  );
-  return { type, manufacturer: manufacturer?.split("-")[0] || "" };
+  return { type };
 }
 
 async function main() {
@@ -95,7 +95,12 @@ async function main() {
   const products = raw.map((p) => {
     const summary = parseSummaryTable(p.short_description || "");
     const details = parseDetailTable(p.description || "");
-    const { type, manufacturer } = getCategorySlugs(p.categories || []);
+    const cabType = getCabTypeFromCategories(p.categories || []) || getCategorySlugs(p.categories || []).type;
+    const manufacturer = normalizeManufacturerSlug(summary.manufacturer || "");
+    const { categories, categorySlugs } = buildCategoryFields(
+      cabType === "other" ? "" : cabType,
+      manufacturer
+    );
     const uniqueImages = [...new Set((p.images || []).map((img) => img.src))];
 
     return {
@@ -105,10 +110,11 @@ async function main() {
       price: Number(p.prices?.price || 0) / 100,
       image: uniqueImages[0] || "",
       images: uniqueImages,
-      categories: (p.categories || []).map((c) => c.name),
-      categorySlugs: (p.categories || []).map((c) => c.slug),
-      type,
-      manufacturer: summary.manufacturer || manufacturer,
+      categories,
+      categorySlugs,
+      type: cabType === "other" ? "" : cabType,
+      cabType: cabType === "other" ? "" : cabType,
+      manufacturer,
       vin: summary.vin,
       year: summary.year,
       model: summary.model,

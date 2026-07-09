@@ -11,6 +11,11 @@ import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  buildCategoryFields,
+  getCabTypeFromCategories,
+  normalizeManufacturerSlug,
+} from "./lib/category-fields.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -88,25 +93,21 @@ async function main() {
     const images = [...new Set((p.images || []).map((i) => i.src))];
     const slug = p.slug;
 
+    const cabType = getCabTypeFromCategories(p.categories || []);
+    const manufacturer = normalizeManufacturerSlug(summary.MANUFACTURER || "");
+    const { categories, categorySlugs } = buildCategoryFields(cabType, manufacturer);
+
     const row = {
       slug,
       name: decodeHtml(p.name),
       price: Number(p.prices?.price || 0) / 100,
       image: images[0] || "",
       images,
-      categories: (p.categories || []).map((c) => c.name),
-      category_slugs: (p.categories || []).map((c) => c.slug),
-      type:
-        (p.categories || []).find((c) =>
-          ["sleeper-trucks", "day-cabs"].includes(c.slug) ||
-          c.slug.includes("delivery-moving")
-        )?.slug || "",
-      cab_type:
-        (p.categories || []).find((c) =>
-          ["sleeper-trucks", "day-cabs"].includes(c.slug) ||
-          c.slug.includes("delivery-moving")
-        )?.slug || "",
-      manufacturer: summary.MANUFACTURER || "",
+      categories,
+      category_slugs: categorySlugs,
+      type: cabType,
+      cab_type: cabType,
+      manufacturer,
       vin: summary.VIN || "",
       year: summary.YEAR || "",
       model: summary.MODEL || "",

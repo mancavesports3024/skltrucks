@@ -28,11 +28,11 @@ export const products: Product[] = [
     ],
     "categories": [
       "DELIVERY / MOVING / STRAIGHT / REFRIGERATED BOX TRUCKS",
-      "Freightliner"
+      "International"
     ],
     "categorySlugs": [
       "delivery-moving-straight-refrigerated-box-trucks",
-      "freightliner-delivery-moving-straight-refrigerated-box-trucks"
+      "international-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
     "manufacturer": "International",
@@ -388,11 +388,11 @@ export const products: Product[] = [
     ],
     "categories": [
       "DELIVERY / MOVING / STRAIGHT / REFRIGERATED BOX TRUCKS",
-      "International"
+      "Freightliner"
     ],
     "categorySlugs": [
       "delivery-moving-straight-refrigerated-box-trucks",
-      "international-delivery-moving-straight-refrigerated-box-trucks"
+      "freightliner-delivery-moving-straight-refrigerated-box-trucks"
     ],
     "type": "delivery-moving-straight-refrigerated-box-trucks",
     "manufacturer": "Freightliner",

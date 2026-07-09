@@ -1,5 +1,6 @@
 import { products as staticProducts } from "@/data/inventory";
 import { rowToProduct } from "@/lib/db/products";
+import { normalizeManufacturerSlug } from "@/lib/product-labels";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
@@ -128,11 +129,9 @@ export async function filterProducts(options: {
   }
 
   if (options.manufacturer) {
-    const m = options.manufacturer.toLowerCase();
+    const filterSlug = normalizeManufacturerSlug(options.manufacturer);
     result = result.filter(
-      (p) =>
-        p.manufacturer.toLowerCase().includes(m) ||
-        p.categorySlugs.some((s) => s.startsWith(m))
+      (p) => normalizeManufacturerSlug(p.manufacturer) === filterSlug
     );
   }
 
