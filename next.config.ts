@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import { buildWordPressRedirects } from "./src/lib/seo/redirects";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return buildWordPressRedirects();
+  },
   images: {
     remotePatterns: [
       {
