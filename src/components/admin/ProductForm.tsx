@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import AdminImage from "@/components/admin/AdminImage";
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
 import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
@@ -383,8 +383,8 @@ export default function ProductForm({ product, isCopy = false, action }: Product
         {imageUrls.length > 0 && (
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {imageUrls.map((url) => (
-              <div key={url} className="relative aspect-square bg-neutral-100">
-                <Image src={url} alt="" fill className="object-cover" sizes="150px" />
+              <div key={url} className="relative">
+                <AdminImage src={url} boxClassName="aspect-square w-full" />
                 <button
                   type="button"
                   onClick={() => removeImage(url)}

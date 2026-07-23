@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import AdminImage from "@/components/admin/AdminImage";
 import DeleteButton from "@/components/admin/DeleteButton";
 import { formatPrice } from "@/lib/inventory";
 import { getCabTypeLabel } from "@/lib/product-labels";
@@ -27,15 +27,7 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
           <article key={product.id} className="bg-white p-4 shadow">
             <div className="flex gap-4">
               {product.image && (
-                <div className="relative h-20 w-28 shrink-0">
-                  <Image
-                    src={product.image}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="112px"
-                  />
-                </div>
+                <AdminImage src={product.image} boxClassName="relative h-20 w-28 shrink-0" />
               )}
               <div className="min-w-0 flex-1">
                 <p className="font-medium leading-snug line-clamp-3">{product.name}</p>
@@ -113,15 +105,7 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
               <tr key={product.id} className="border-b hover:bg-neutral-50">
                 <td className="p-4">
                   {product.image && (
-                    <div className="relative h-14 w-20">
-                      <Image
-                        src={product.image}
-                        alt=""
-                        fill
-                        className="object-cover"
-                        sizes="80px"
-                      />
-                    </div>
+                    <AdminImage src={product.image} boxClassName="relative h-14 w-20" />
                   )}
                 </td>
                 <td className="max-w-xs p-4">
