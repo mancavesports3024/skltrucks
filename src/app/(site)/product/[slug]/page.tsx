@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import ProductGallery from "@/components/ProductGallery";
 import ProductGrid from "@/components/ProductGrid";
 import { SITE } from "@/lib/constants";
 import { formatPrice, getAllProducts, getProductBySlug } from "@/lib/inventory";
@@ -76,27 +76,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </nav>
 
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
-          <div>
-            <div className="relative mb-4 aspect-[4/3] bg-neutral-100">
-              <Image
-                src={product.image}
-                alt={product.name}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-              />
-            </div>
-            {product.images.length > 1 && (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {product.images.slice(0, 8).map((img, i) => (
-                  <div key={i} className="relative aspect-square bg-neutral-100">
-                    <Image src={img} alt="" fill className="object-cover" sizes="100px" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <ProductGallery
+            name={product.name}
+            images={product.images.length ? product.images : product.image ? [product.image] : []}
+          />
 
           <div>
             <h1 className="text-xl font-bold leading-snug sm:text-2xl md:text-3xl">{product.name}</h1>
