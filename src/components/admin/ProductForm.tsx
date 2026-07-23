@@ -6,7 +6,7 @@ import AdminImage from "@/components/admin/AdminImage";
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
 import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
-import { uploadProductImages, validateImageFiles } from "@/lib/supabase/upload";
+import { uploadProductImages } from "@/lib/supabase/upload";
 import type { Product } from "@/types/product";
 
 const inputClass =
@@ -73,8 +73,37 @@ export default function ProductForm({ product, isCopy = false, action }: Product
   const [vinDecodeWarnings, setVinDecodeWarnings] = useState<string[]>([]);
   const [lastSuggestedTitle, setLastSuggestedTitle] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handlePhotoSelect(files: FileList | null) {
+    if (!files?.length) return;
+
+    setError("");
+    setUploading(true);
+    const selected = Array.from(files);
+
+    try {
+      const upload = await uploadProductImages(selected, (p) => {
+        setUploadProgress(`Uploading photo ${p.current} of ${p.total}…`);
+      });
+
+      if (upload.urls.length > 0) {
+        setImageUrls((prev) => [...prev, ...upload.urls]);
+      }
+
+      if (upload.error) {
+        setError(upload.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Photo upload failed.");
+    } finally {
+      setUploading(false);
+      setUploadProgress("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   async function handleSubmit(formData: FormData) {
     setError("");
@@ -82,31 +111,33 @@ export default function ProductForm({ product, isCopy = false, action }: Product
     setUploadProgress("");
 
     try {
+      // Upload any files still selected in the input (if user didn't wait for auto-upload).
       const selected = fileInputRef.current?.files
         ? Array.from(fileInputRef.current.files)
         : [];
 
-      const validationError = validateImageFiles(selected);
-      if (validationError) {
-        setError(validationError);
-        return;
-      }
-
-      let uploadedUrls: string[] = [];
+      let allUrls = [...imageUrls];
       if (selected.length > 0) {
         setUploadProgress(`Uploading ${selected.length} photo(s)…`);
-        const upload = await uploadProductImages(selected);
-        if (upload.error) {
+        const upload = await uploadProductImages(selected, (p) => {
+          setUploadProgress(`Uploading photo ${p.current} of ${p.total}…`);
+        });
+        if (upload.urls.length > 0) {
+          allUrls = [...allUrls, ...upload.urls];
+          setImageUrls(allUrls);
+        }
+        if (upload.error && upload.urls.length === 0) {
           setError(upload.error);
           return;
         }
-        uploadedUrls = upload.urls;
-        setUploadProgress("Saving truck…");
+        if (upload.error) setError(upload.error);
       }
 
-      // Don't send raw files through the server action (Vercel ~4.5MB limit).
+      setUploadProgress("Saving truck…");
+
+      // Don't send raw files through the server action (Vercel body size limit).
       formData.delete("images");
-      formData.set("existingImages", [...imageUrls, ...uploadedUrls].join("\n"));
+      formData.set("existingImages", allUrls.join("\n"));
       formData.set("details", JSON.stringify(details));
       formData.set("name", name);
       formData.set("vin", vin);
@@ -130,7 +161,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       const message = err instanceof Error ? err.message : "Something went wrong while saving.";
       setError(
         message.includes("Failed to fetch") || message.includes("fetch")
-          ? "Save timed out or lost connection. Try fewer/smaller photos, then save again."
+          ? "Save timed out or lost connection. Photos that already uploaded are kept — click Save again."
           : message
       );
     } finally {
@@ -396,19 +427,27 @@ export default function ProductForm({ product, isCopy = false, action }: Product
             ))}
           </div>
         )}
-        <label className={labelClass}>Upload New Photos</label>
+        <label className={labelClass}>Upload Photos</label>
         <input
           ref={fileInputRef}
           name="images"
           type="file"
           accept="image/*"
           multiple
-          className="block w-full text-sm"
+          disabled={uploading || saving}
+          onChange={(e) => handlePhotoSelect(e.target.files)}
+          className="block w-full text-sm disabled:opacity-60"
         />
         <p className="mt-1 text-xs text-neutral-500">
-          You can select multiple images (max 25, 8 MB each). First image is the main photo.
-          Tip: if save fails, try fewer photos or smaller file sizes.
+          Select as many photos as you need (same as WordPress). They upload right away — you can
+          add more batches before saving. Large phone photos are resized automatically for a reliable
+          upload.
         </p>
+        {(uploading || uploadProgress) && (
+          <p className="mt-2 text-sm font-medium text-neutral-700">
+            {uploadProgress || "Uploading photos…"}
+          </p>
+        )}
       </section>
 
       <section className="bg-white p-6 shadow">
@@ -427,22 +466,26 @@ export default function ProductForm({ product, isCopy = false, action }: Product
         </div>
       </section>
 
-      {uploadProgress && <p className="text-sm text-neutral-600">{uploadProgress}</p>}
+      {uploadProgress && !uploading && (
+        <p className="text-sm text-neutral-600">{uploadProgress}</p>
+      )}
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || uploading}
           className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {saving
-            ? uploadProgress || "Saving…"
-            : isCopy
-              ? "Add Truck"
-              : product
-                ? "Save Changes"
-                : "Add Truck"}
+          {uploading
+            ? uploadProgress || "Uploading photos…"
+            : saving
+              ? uploadProgress || "Saving…"
+              : isCopy
+                ? "Add Truck"
+                : product
+                  ? "Save Changes"
+                  : "Add Truck"}
         </button>
         <Link
           href="/admin"
