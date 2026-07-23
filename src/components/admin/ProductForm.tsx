@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import AdminImage from "@/components/admin/AdminImage";
+import PhotoOrderGrid from "@/components/admin/PhotoOrderGrid";
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
 import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
@@ -230,26 +230,6 @@ export default function ProductForm({ product, isCopy = false, action }: Product
     setImageUrls((prev) => prev.filter((u) => u !== url));
   }
 
-  function setMainImage(url: string) {
-    setImageUrls((prev) => {
-      if (prev[0] === url) return prev;
-      return [url, ...prev.filter((u) => u !== url)];
-    });
-  }
-
-  function moveImage(url: string, direction: -1 | 1) {
-    setImageUrls((prev) => {
-      const index = prev.indexOf(url);
-      if (index < 0) return prev;
-      const next = index + direction;
-      if (next < 0 || next >= prev.length) return prev;
-      const copy = [...prev];
-      const [item] = copy.splice(index, 1);
-      copy.splice(next, 0, item);
-      return copy;
-    });
-  }
-
   return (
     <form action={handleSubmit} className="space-y-8">
       {isCopy && (
@@ -432,64 +412,11 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       <section className="bg-white p-6 shadow">
         <h2 className="mb-4 text-lg font-bold">Photos</h2>
         {imageUrls.length > 0 && (
-          <>
-            <p className="mb-3 text-sm text-neutral-600">
-              First photo is the <strong>main</strong> image on the website. Click{" "}
-              <strong>Set as main</strong> on any photo to change it.
-            </p>
-            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {imageUrls.map((url, index) => (
-                <div key={url} className="relative">
-                  <AdminImage
-                    src={url}
-                    boxClassName={`aspect-square w-full ${index === 0 ? "ring-2 ring-[#fc0527] ring-offset-2" : ""}`}
-                  />
-                  {index === 0 && (
-                    <span className="absolute left-1 top-1 bg-[#fc0527] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                      Main
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeImage(url)}
-                    className="absolute right-1 top-1 bg-red-600 px-2 py-0.5 text-xs text-white"
-                    aria-label="Remove photo"
-                  >
-                    ×
-                  </button>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {index !== 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setMainImage(url)}
-                        className="min-h-9 flex-1 bg-neutral-900 px-2 py-1.5 text-[11px] font-semibold uppercase text-white hover:bg-neutral-700"
-                      >
-                        Set as main
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => moveImage(url, -1)}
-                      disabled={index === 0}
-                      className="min-h-9 px-2 py-1.5 text-[11px] font-semibold uppercase text-neutral-700 disabled:opacity-30"
-                      aria-label="Move photo earlier"
-                    >
-                      ←
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveImage(url, 1)}
-                      disabled={index === imageUrls.length - 1}
-                      className="min-h-9 px-2 py-1.5 text-[11px] font-semibold uppercase text-neutral-700 disabled:opacity-30"
-                      aria-label="Move photo later"
-                    >
-                      →
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+          <PhotoOrderGrid
+            urls={imageUrls}
+            onChange={setImageUrls}
+            onRemove={removeImage}
+          />
         )}
         <label className={labelClass}>Upload Photos</label>
         <input
