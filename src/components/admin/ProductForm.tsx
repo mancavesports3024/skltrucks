@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
 import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
+import { uploadProductImages, validateImageFiles } from "@/lib/supabase/upload";
 import type { Product } from "@/types/product";
 
 const inputClass =
@@ -71,17 +72,71 @@ export default function ProductForm({ product, isCopy = false, action }: Product
   const [vinDecodeMessage, setVinDecodeMessage] = useState("");
   const [vinDecodeWarnings, setVinDecodeWarnings] = useState<string[]>([]);
   const [lastSuggestedTitle, setLastSuggestedTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(formData: FormData) {
-    formData.set("existingImages", imageUrls.join("\n"));
-    formData.set("details", JSON.stringify(details));
-    formData.set("name", name);
-    formData.set("vin", vin);
-    formData.set("year", year);
-    formData.set("manufacturer", manufacturer);
-    formData.set("model", model);
-    const result = await action(formData);
-    if (result?.error) setError(result.error);
+    setError("");
+    setSaving(true);
+    setUploadProgress("");
+
+    try {
+      const selected = fileInputRef.current?.files
+        ? Array.from(fileInputRef.current.files)
+        : [];
+
+      const validationError = validateImageFiles(selected);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+
+      let uploadedUrls: string[] = [];
+      if (selected.length > 0) {
+        setUploadProgress(`Uploading ${selected.length} photo(s)…`);
+        const upload = await uploadProductImages(selected);
+        if (upload.error) {
+          setError(upload.error);
+          return;
+        }
+        uploadedUrls = upload.urls;
+        setUploadProgress("Saving truck…");
+      }
+
+      // Don't send raw files through the server action (Vercel ~4.5MB limit).
+      formData.delete("images");
+      formData.set("existingImages", [...imageUrls, ...uploadedUrls].join("\n"));
+      formData.set("details", JSON.stringify(details));
+      formData.set("name", name);
+      formData.set("vin", vin);
+      formData.set("year", year);
+      formData.set("manufacturer", manufacturer);
+      formData.set("model", model);
+
+      const result = await action(formData);
+      if (result?.error) setError(result.error);
+    } catch (err) {
+      // Next.js redirect() throws; rethrow so navigation still works.
+      if (
+        err &&
+        typeof err === "object" &&
+        "digest" in err &&
+        typeof (err as { digest?: string }).digest === "string" &&
+        (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+      ) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : "Something went wrong while saving.";
+      setError(
+        message.includes("Failed to fetch") || message.includes("fetch")
+          ? "Save timed out or lost connection. Try fewer/smaller photos, then save again."
+          : message
+      );
+    } finally {
+      setSaving(false);
+      setUploadProgress("");
+    }
   }
 
   function applyDecodedFields(decoded: VinDecodeResponse) {
@@ -343,13 +398,17 @@ export default function ProductForm({ product, isCopy = false, action }: Product
         )}
         <label className={labelClass}>Upload New Photos</label>
         <input
+          ref={fileInputRef}
           name="images"
           type="file"
           accept="image/*"
           multiple
           className="block w-full text-sm"
         />
-        <p className="mt-1 text-xs text-neutral-500">You can select multiple images. First image is the main photo.</p>
+        <p className="mt-1 text-xs text-neutral-500">
+          You can select multiple images (max 25, 8 MB each). First image is the main photo.
+          Tip: if save fails, try fewer photos or smaller file sizes.
+        </p>
       </section>
 
       <section className="bg-white p-6 shadow">
@@ -368,14 +427,22 @@ export default function ProductForm({ product, isCopy = false, action }: Product
         </div>
       </section>
 
+      {uploadProgress && <p className="text-sm text-neutral-600">{uploadProgress}</p>}
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <button
           type="submit"
-          className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] sm:w-auto"
+          disabled={saving}
+          className="min-h-12 w-full bg-[#fc0527] px-8 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {isCopy ? "Add Truck" : product ? "Save Changes" : "Add Truck"}
+          {saving
+            ? uploadProgress || "Saving…"
+            : isCopy
+              ? "Add Truck"
+              : product
+                ? "Save Changes"
+                : "Add Truck"}
         </button>
         <Link
           href="/admin"

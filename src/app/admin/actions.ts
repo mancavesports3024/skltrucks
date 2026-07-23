@@ -132,7 +132,8 @@ export async function uploadImages(formData: FormData): Promise<string[]> {
   const urls: string[] = [];
 
   for (const file of files) {
-    if (!file || file.size === 0) continue;
+    if (!file || typeof file === "string" || file.size === 0) continue;
+    if (typeof File !== "undefined" && !(file instanceof File)) continue;
 
     const ext = file.name.split(".").pop() || "jpg";
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -144,7 +145,7 @@ export async function uploadImages(formData: FormData): Promise<string[]> {
 
     if (error) {
       console.error("Upload error:", error.message);
-      continue;
+      throw new Error(`Photo upload failed: ${error.message}`);
     }
 
     const { data } = supabase.storage.from("product-images").getPublicUrl(path);
