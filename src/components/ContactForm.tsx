@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FormSpamGuard from "@/components/FormSpamGuard";
 import { SITE } from "@/lib/constants";
 
 const inputClass =
@@ -23,7 +24,8 @@ export default function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="relative space-y-4">
+      <FormSpamGuard />
       <div className="grid gap-4 md:grid-cols-2">
         <input name="name" type="text" placeholder="Name *" required className={inputClass} />
         <input name="email" type="email" placeholder="Email *" required className={inputClass} />
@@ -43,7 +45,10 @@ export default function ContactForm() {
       {status === "error" && (
         <p className="text-red-600 text-sm">
           Something went wrong. Please call us at{" "}
-          <a href={SITE.phoneHref} className="underline">{SITE.phone}</a>.
+          <a href={SITE.phoneHref} className="underline">
+            {SITE.phone}
+          </a>
+          .
         </p>
       )}
     </form>

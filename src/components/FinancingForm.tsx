@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FormSpamGuard from "@/components/FormSpamGuard";
 import { SITE } from "@/lib/constants";
 
 const inputClass =
@@ -33,7 +34,8 @@ export default function FinancingForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="relative space-y-8">
+      <FormSpamGuard />
       <section>
         <h2 className="text-xl font-bold mb-4 border-b pb-2">Company Information</h2>
         <div className="grid gap-4 md:grid-cols-2">

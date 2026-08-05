@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FormSpamGuard from "@/components/FormSpamGuard";
 import { SITE } from "@/lib/constants";
 
 const inputClass =
@@ -26,7 +27,8 @@ export default function SellTruckForm() {
   const years = Array.from({ length: 103 }, (_, i) => 2026 - i);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="relative space-y-6">
+      <FormSpamGuard />
       <fieldset>
         <legend className={labelClass}>What are you looking to do?</legend>
         <div className="flex gap-6">
@@ -59,7 +61,7 @@ export default function SellTruckForm() {
       </div>
 
       <div>
-        <h3 className="text-lg font-bold mb-3">Equipment Location</h3>
+        <h3 className="mb-3 text-lg font-bold">Equipment Location</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <input name="city" placeholder="City" className={inputClass} />
           <input name="state" placeholder="State" className={inputClass} />
@@ -67,14 +69,16 @@ export default function SellTruckForm() {
       </div>
 
       <div>
-        <h3 className="text-lg font-bold mb-3">Equipment Info</h3>
+        <h3 className="mb-3 text-lg font-bold">Equipment Info</h3>
         <div className="grid gap-4 md:grid-cols-3">
           <input name="manufacturer" placeholder="Manufacturer" className={inputClass} />
           <input name="model" placeholder="Model" className={inputClass} />
           <select name="year" className={inputClass}>
             <option value="">Year</option>
             {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
+              <option key={y} value={y}>
+                {y}
+              </option>
             ))}
           </select>
         </div>
@@ -96,9 +100,13 @@ export default function SellTruckForm() {
       >
         {status === "loading" ? "Submitting..." : "Submit"}
       </button>
-      {status === "success" && <p className="text-green-600 text-sm">Thank you! We&apos;ll be in touch.</p>}
+      {status === "success" && (
+        <p className="text-sm text-green-600">Thank you! We&apos;ll be in touch.</p>
+      )}
       {status === "error" && (
-        <p className="text-red-600 text-sm">Error submitting. Call <a href={SITE.phoneHref}>{SITE.phone}</a>.</p>
+        <p className="text-sm text-red-600">
+          Error submitting. Call <a href={SITE.phoneHref}>{SITE.phone}</a>.
+        </p>
       )}
     </form>
   );
