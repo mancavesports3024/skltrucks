@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
     return buildWordPressRedirects();
   },
   images: {
+    // Vercel Image Optimization is returning 402 Payment Required on this
+    // project, which breaks every next/image. Serve originals instead.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
