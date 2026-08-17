@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sanitizeImageUrl } from "@/lib/image-urls";
 
 interface AdminImageProps {
   src: string;
@@ -22,15 +23,17 @@ export default function AdminImage({
 }: AdminImageProps) {
   const [failed, setFailed] = useState(false);
 
+  const cleanSrc = sanitizeImageUrl(src);
+
   return (
     <div className={`overflow-hidden bg-neutral-200 ${boxClassName}`}>
-      {failed || !src ? (
+      {failed || !cleanSrc ? (
         <div className="flex h-full w-full items-center justify-center text-[10px] font-medium uppercase tracking-wide text-neutral-500">
           No photo
         </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />
+        <img src={cleanSrc} alt={alt} className={className} onError={() => setFailed(true)} />
       )}
     </div>
   );

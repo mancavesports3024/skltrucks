@@ -1,4 +1,5 @@
 import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
+import { sanitizeImageUrl, sanitizeImageUrls } from "@/lib/image-urls";
 import { normalizeManufacturerSlug } from "@/lib/product-labels";
 import type { Product, ProductInput } from "@/types/product";
 
@@ -25,7 +26,8 @@ interface DbProduct {
 }
 
 export function rowToProduct(row: DbProduct): Product {
-  const images = row.images?.filter(Boolean) ?? [];
+  const images = sanitizeImageUrls(row.images ?? []);
+  const image = sanitizeImageUrl(row.image || images[0] || "");
   const cabType = row.cab_type || row.type || "";
 
   return {
@@ -33,8 +35,8 @@ export function rowToProduct(row: DbProduct): Product {
     slug: row.slug,
     name: row.name,
     price: Number(row.price),
-    image: row.image || images[0] || "",
-    images: images.length ? images : row.image ? [row.image] : [],
+    image,
+    images: images.length ? images : image ? [image] : [],
     categories: row.categories ?? [],
     categorySlugs: row.category_slugs ?? [],
     cabType,
@@ -52,14 +54,16 @@ export function rowToProduct(row: DbProduct): Product {
 }
 
 export function inputToRow(input: ProductInput, slug: string) {
-  const images = input.images.length ? input.images : input.image ? [input.image] : [];
+  const images = sanitizeImageUrls(
+    input.images.length ? input.images : input.image ? [input.image] : []
+  );
   const cabType = input.cabType || input.type || "";
 
   return {
     slug,
     name: input.name,
     price: input.price,
-    image: input.image || images[0] || "",
+    image: sanitizeImageUrl(input.image || images[0] || ""),
     images,
     categories: input.categories,
     category_slugs: input.categorySlugs,

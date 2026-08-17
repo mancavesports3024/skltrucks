@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/types/product";
 import { formatPrice } from "@/lib/inventory";
+import { sanitizeImageUrl } from "@/lib/image-urls";
 import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
 
 interface ProductCardProps {
@@ -9,12 +10,14 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const image = sanitizeImageUrl(product.image);
+
   return (
     <article className="group overflow-hidden bg-white shadow-sm transition-shadow hover:shadow-md">
       <Link href={`/product/${product.slug}`} className="block overflow-hidden">
         <div className="relative aspect-[4/3] bg-neutral-100">
           <Image
-            src={product.image}
+            src={image}
             alt={product.name}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
