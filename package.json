@@ -10,7 +10,8 @@
     "sync-inventory": "node scripts/sync-inventory.mjs",
     "seed": "node --env-file=.env.local scripts/seed-supabase.mjs",
     "pull-live": "node scripts/pull-live.mjs",
-    "reset-inventory": "node scripts/reset-inventory.mjs"
+    "reset-inventory": "node scripts/reset-inventory.mjs",
+    "fix-image-urls": "node --env-file=.env.local scripts/fix-image-urls.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

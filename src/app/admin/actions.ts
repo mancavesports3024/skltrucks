@@ -7,6 +7,7 @@ import {
   inputToRow,
   slugify,
 } from "@/lib/db/products";
+import { sanitizeImageUrls } from "@/lib/image-urls";
 import { parseSiteContentForm } from "@/lib/site-content";
 import { getProductById } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
@@ -94,7 +95,9 @@ function parseProductForm(formData: FormData): ProductInput {
   const { categories, categorySlugs } = buildCategoryFields(cabType, manufacturer);
 
   const existingImages = formData.get("existingImages") as string;
-  const images = existingImages ? existingImages.split("\n").filter(Boolean) : [];
+  const images = sanitizeImageUrls(
+    existingImages ? existingImages.split(/\r?\n/) : []
+  );
   const image = images[0] || "";
 
   const detailsRaw = formData.get("details") as string;

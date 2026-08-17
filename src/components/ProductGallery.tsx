@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { sanitizeImageUrls } from "@/lib/image-urls";
 
 interface ProductGalleryProps {
   name: string;
@@ -9,7 +10,7 @@ interface ProductGalleryProps {
 }
 
 export default function ProductGallery({ name, images }: ProductGalleryProps) {
-  const photos = images.filter(Boolean);
+  const photos = sanitizeImageUrls(images);
   const [active, setActive] = useState(0);
   const main = photos[active] || photos[0] || "";
 

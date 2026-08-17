@@ -7,6 +7,7 @@ import { CAB_TYPES, MANUFACTURERS } from "@/lib/constants";
 import { mergeDecodedDetails, shouldApplyField, type VinDecodeMode } from "@/lib/vin/apply";
 import { buildVinDecodeMeta, type DecodedVin } from "@/lib/vin/decode";
 import { uploadProductImages } from "@/lib/supabase/upload";
+import { sanitizeImageUrls } from "@/lib/image-urls";
 import type { Product } from "@/types/product";
 
 const inputClass =
@@ -60,7 +61,7 @@ interface ProductFormProps {
 
 export default function ProductForm({ product, isCopy = false, action }: ProductFormProps) {
   const [error, setError] = useState("");
-  const [imageUrls, setImageUrls] = useState<string[]>(product?.images ?? []);
+  const [imageUrls, setImageUrls] = useState<string[]>(() => sanitizeImageUrls(product?.images ?? []));
   const [details, setDetails] = useState<Record<string, string>>(product?.details ?? {});
   const [vin, setVin] = useState(product?.vin ?? "");
   const [name, setName] = useState(product?.name ?? "");
@@ -90,7 +91,7 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       });
 
       if (upload.urls.length > 0) {
-        setImageUrls((prev) => [...prev, ...upload.urls]);
+        setImageUrls((prev) => sanitizeImageUrls([...prev, ...upload.urls]));
       }
 
       if (upload.error) {
@@ -116,14 +117,14 @@ export default function ProductForm({ product, isCopy = false, action }: Product
         ? Array.from(fileInputRef.current.files)
         : [];
 
-      let allUrls = [...imageUrls];
+      let allUrls = sanitizeImageUrls([...imageUrls]);
       if (selected.length > 0) {
         setUploadProgress(`Uploading ${selected.length} photo(s)…`);
         const upload = await uploadProductImages(selected, (p) => {
           setUploadProgress(`Uploading photo ${p.current} of ${p.total}…`);
         });
         if (upload.urls.length > 0) {
-          allUrls = [...allUrls, ...upload.urls];
+          allUrls = sanitizeImageUrls([...allUrls, ...upload.urls]);
           setImageUrls(allUrls);
         }
         if (upload.error && upload.urls.length === 0) {
