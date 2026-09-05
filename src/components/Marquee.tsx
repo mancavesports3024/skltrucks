@@ -9,7 +9,7 @@ export default function Marquee() {
       <div className="flex animate-marquee whitespace-nowrap">
         {[...items, ...items].map((_, i) => (
           <span key={i} className="mx-8 inline-flex items-center gap-3 text-lg font-bold uppercase tracking-wider text-neutral-800">
-            <Image src={SITE.deliveryIcon} alt="" width={32} height={32} className="h-8 w-8" />
+            <Image src={SITE.deliveryIcon} alt="" width={32} height={32} className="h-8 w-8 object-contain" />
             {SITE.name}
           </span>
         ))}

@@ -14,7 +14,7 @@ export const SITE = {
   whyChooseImage:
     "https://skltrucks.com/wp-content/uploads/2024/06/hddddddddss-removebg-preview.png",
   ctaImage: "https://skltrucks.com/wp-content/uploads/2024/05/6e0eb62c39ad8edfd56696e4ad2d702e.png",
-  deliveryIcon: "https://skltrucks.com/wp-content/uploads/2024/06/delivery-1.png",
+  deliveryIcon: "/logo.png",
 };
 
 export const CAB_TYPES = [
