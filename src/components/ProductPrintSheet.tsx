@@ -10,6 +10,8 @@ interface ProductPrintSheetProps {
   phone?: string;
   email?: string;
   address?: string;
+  /** Show on screen (admin print preview). Default is print-only. */
+  forceVisible?: boolean;
 }
 
 export default function ProductPrintSheet({
@@ -18,6 +20,7 @@ export default function ProductPrintSheet({
   phone = SITE.phone,
   email = SITE.email,
   address = SITE.address,
+  forceVisible = false,
 }: ProductPrintSheetProps) {
   const mainImage = sanitizeImageUrl(
     product.image || (product.images.length ? product.images[0] : "")
@@ -36,7 +39,7 @@ export default function ProductPrintSheet({
   ];
 
   return (
-    <div className="product-print-sheet hidden print:block">
+    <div className={forceVisible ? "product-print-sheet block" : "product-print-sheet hidden print:block"}>
       <header className="print-sheet-header">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={SITE.logo} alt={SITE.name} className="print-sheet-logo" />

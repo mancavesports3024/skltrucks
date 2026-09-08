@@ -54,7 +54,7 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
               </span>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {dbReady ? (
                 <Link
                   href={`/admin/products/${product.id}`}
@@ -66,6 +66,16 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
                 <span className="flex min-h-11 items-center justify-center bg-neutral-200 px-3 py-2.5 text-center text-sm text-neutral-500">
                   Edit
                 </span>
+              )}
+              {dbReady ? (
+                <Link
+                  href={`/admin/products/${product.id}/print`}
+                  className="flex min-h-11 items-center justify-center border border-neutral-800 px-3 py-2.5 text-center text-sm font-semibold text-neutral-800"
+                >
+                  Print
+                </Link>
+              ) : (
+                <span />
               )}
               {dbReady ? (
                 <Link
@@ -110,10 +120,10 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
                 </td>
                 <td className="max-w-xs p-4">
                   <p className="line-clamp-2 font-medium">{product.name}</p>
-                    <p className="text-xs text-neutral-500">
-                      {product.year}{" "}
-                      {product.cabType ? getCabTypeLabel(product.cabType) : product.manufacturer}
-                    </p>
+                  <p className="text-xs text-neutral-500">
+                    {product.year}{" "}
+                    {product.cabType ? getCabTypeLabel(product.cabType) : product.manufacturer}
+                  </p>
                 </td>
                 <td className="p-4 font-semibold">{formatPrice(product.price)}</td>
                 <td className="p-4 font-mono text-xs">{product.vin}</td>
@@ -139,6 +149,14 @@ export default function InventoryList({ products, dbReady }: InventoryListProps)
                       </Link>
                     ) : (
                       <span className="text-neutral-400">Edit</span>
+                    )}
+                    {dbReady && (
+                      <Link
+                        href={`/admin/products/${product.id}/print`}
+                        className="font-medium text-neutral-800 hover:underline"
+                      >
+                        Print
+                      </Link>
                     )}
                     {dbReady && (
                       <Link
