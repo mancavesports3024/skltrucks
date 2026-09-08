@@ -20,7 +20,7 @@ export default function Footer({ contact }: FooterProps) {
   const phoneHref = phoneToHref(contact.phone);
 
   return (
-    <footer className="bg-neutral-900 text-white">
+    <footer className="bg-neutral-900 text-white print:hidden">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <Link href="/" className="mb-5 inline-block">

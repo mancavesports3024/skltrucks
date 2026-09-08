@@ -23,7 +23,7 @@ export default function Header({ contact, social }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm">
+    <header className="sticky top-0 z-50 bg-white shadow-sm print:hidden">
       <div className="bg-neutral-900 text-white text-sm">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-4 sm:gap-6">
