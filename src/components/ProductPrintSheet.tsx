@@ -42,7 +42,6 @@ export default function ProductPrintSheet({
   product,
   details,
   phone = SITE.phone,
-  email = SITE.email,
   address = SITE.address,
   forceVisible = false,
 }: ProductPrintSheetProps) {
