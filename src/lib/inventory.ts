@@ -59,6 +59,7 @@ function staticAsProducts(): Product[] {
     id: String(p.id),
     cabType: p.cabType ?? p.type ?? "",
     type: p.cabType ?? p.type ?? "",
+    comments: p.comments ?? "",
   }));
 }
 

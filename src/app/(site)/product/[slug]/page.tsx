@@ -95,6 +95,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
               {product.categories.join(", ")}
             </p>
 
+            {product.comments?.trim() && (
+              <div className="mt-6 border-t border-neutral-100 pt-6">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-800">
+                  Comments
+                </h2>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-neutral-700">
+                  {product.comments.trim()}
+                </p>
+              </div>
+            )}
+
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a
                 href={SITE.phoneHref}
