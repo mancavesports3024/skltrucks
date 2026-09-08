@@ -105,6 +105,12 @@ button {
   justify-content: flex-start;
 }
 
+.print-sheet-logo-wrap {
+  background: #111;
+  display: inline-flex;
+  padding: 0.2rem 0.35rem;
+}
+
 .print-sheet-header-center {
   text-align: center;
 }
@@ -114,7 +120,8 @@ button {
 }
 
 .print-sheet-logo {
-  height: 110px;
+  display: block;
+  height: 130px;
   object-fit: contain;
   width: auto;
 }
