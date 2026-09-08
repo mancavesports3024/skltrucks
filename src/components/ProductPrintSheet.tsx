@@ -67,8 +67,10 @@ export default function ProductPrintSheet({
     <div className={forceVisible ? "product-print-sheet block" : "product-print-sheet hidden print:block"}>
       <header className="print-sheet-header">
         <div className="print-sheet-header-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={SITE.logo} alt={SITE.name} className="print-sheet-logo" />
+          <div className="print-sheet-logo-wrap">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={SITE.logo} alt={SITE.name} className="print-sheet-logo" />
+          </div>
         </div>
         <div className="print-sheet-header-center">
           <p className="print-sheet-company">{SITE.name}</p>
