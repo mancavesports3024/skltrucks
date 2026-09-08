@@ -19,6 +19,7 @@ create table if not exists public.products (
   miles text default '',
   hours text default '',
   condition text default '',
+  comments text default '',
   details jsonb default '{}',
   published boolean default true,
   created_at timestamptz default now(),
@@ -128,3 +129,6 @@ create policy "Authenticated delete site images"
 -- alter table public.products add column if not exists cab_type text default '';
 -- update public.products set cab_type = type where cab_type = '' and type != '';
 -- create index if not exists products_cab_type_idx on public.products (cab_type);
+
+-- Migration for existing databases: add comments column
+-- alter table public.products add column if not exists comments text default '';

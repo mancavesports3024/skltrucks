@@ -21,6 +21,7 @@ interface DbProduct {
   miles: string | null;
   hours: string | null;
   condition: string | null;
+  comments: string | null;
   details: Record<string, string> | null;
   published: boolean;
 }
@@ -48,6 +49,7 @@ export function rowToProduct(row: DbProduct): Product {
     miles: row.miles ?? "",
     hours: row.hours ?? "",
     condition: row.condition ?? "",
+    comments: row.comments ?? "",
     details: row.details ?? {},
     published: row.published,
   };
@@ -76,6 +78,7 @@ export function inputToRow(input: ProductInput, slug: string) {
     miles: input.miles,
     hours: input.hours,
     condition: input.condition,
+    comments: input.comments?.trim() || "",
     details: input.details,
     published: input.published,
   };

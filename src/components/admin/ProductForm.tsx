@@ -443,6 +443,25 @@ export default function ProductForm({ product, isCopy = false, action }: Product
       </section>
 
       <section className="bg-white p-6 shadow">
+        <h2 className="mb-4 text-lg font-bold">Comments</h2>
+        <label className={labelClass} htmlFor="comments">
+          Notes for buyers
+        </label>
+        <textarea
+          id="comments"
+          name="comments"
+          rows={4}
+          defaultValue={product?.comments ?? ""}
+          placeholder="Example: New steer tires, recently replaced clutch, fresh brakes…"
+          className={inputClass}
+        />
+        <p className="mt-1 text-xs text-neutral-500">
+          Shown on the truck&apos;s product page. Use this for extras like new tires, recent parts, or
+          other details buyers should know.
+        </p>
+      </section>
+
+      <section className="bg-white p-6 shadow">
         <h2 className="mb-4 text-lg font-bold">Detailed Specifications</h2>
         <div className="grid gap-3 md:grid-cols-2">
           {DETAIL_FIELDS.map((field) => (

@@ -114,6 +114,7 @@ async function main() {
       miles: summary.MILES || "",
       hours: summary.HOURS || "",
       condition: summary.CONDITION || "",
+      comments: "",
       details,
       published: true,
     };

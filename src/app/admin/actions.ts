@@ -124,6 +124,7 @@ function parseProductForm(formData: FormData): ProductInput {
     miles: (formData.get("miles") as string) || "",
     hours: (formData.get("hours") as string) || "",
     condition: (formData.get("condition") as string) || "",
+    comments: ((formData.get("comments") as string) || "").trim(),
     details,
     published: formData.get("published") === "on",
   };

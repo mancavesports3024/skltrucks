@@ -121,6 +121,7 @@ async function main() {
       miles: summary.miles,
       hours: summary.hours,
       condition: summary.condition,
+      comments: "",
       details,
     };
   });

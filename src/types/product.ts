@@ -16,6 +16,8 @@ export interface Product {
   miles: string;
   hours: string;
   condition: string;
+  /** Seller notes shown on the product page (e.g. new tires, recent parts). */
+  comments?: string;
   details: Record<string, string>;
   published?: boolean;
 }
@@ -36,6 +38,7 @@ export interface ProductInput {
   miles: string;
   hours: string;
   condition: string;
+  comments?: string;
   details: Record<string, string>;
   published: boolean;
 }
