@@ -4,6 +4,30 @@ import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
 import { sanitizeImageUrl } from "@/lib/image-urls";
 import type { Product } from "@/types/product";
 
+/** Split "4000 W 7th St. Joplin, Mo. 64801" into street + city lines. */
+function splitAddressLines(address?: string): string[] {
+  const value = (address ?? "").trim();
+  if (!value) return [];
+
+  const streetMatch = value.match(/^(.+?\.)\s+(.+)$/);
+  if (streetMatch) {
+    return [streetMatch[1], streetMatch[2]];
+  }
+
+  const comma = value.indexOf(",");
+  if (comma > 0) {
+    const before = value.slice(0, comma).trim();
+    const after = value.slice(comma + 1).trim();
+    const lastSpace = before.lastIndexOf(" ");
+    if (lastSpace > 0) {
+      return [`${before.slice(0, lastSpace)}`, `${before.slice(lastSpace + 1)}, ${after}`];
+    }
+    return [before, after];
+  }
+
+  return [value];
+}
+
 interface ProductPrintSheetProps {
   product: Product;
   details: [string, string][];
@@ -38,6 +62,8 @@ export default function ProductPrintSheet({
     ["Price", formatPrice(product.price)],
   ];
 
+  const addressLines = splitAddressLines(address);
+
   return (
     <div className={forceVisible ? "product-print-sheet block" : "product-print-sheet hidden print:block"}>
       <header className="print-sheet-header">
@@ -48,10 +74,13 @@ export default function ProductPrintSheet({
         <div className="print-sheet-header-center">
           <p className="print-sheet-company">{SITE.name}</p>
           <p className="print-sheet-phone">{phone}</p>
-          {email ? <p className="print-sheet-meta">{email}</p> : null}
         </div>
         <div className="print-sheet-header-right">
-          {address ? <p className="print-sheet-address">{address}</p> : null}
+          {addressLines.map((line) => (
+            <p key={line} className="print-sheet-address">
+              {line}
+            </p>
+          ))}
         </div>
       </header>
 
