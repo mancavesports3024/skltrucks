@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { buildWordPressRedirects } from "./src/lib/seo/redirects";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
   async redirects() {
     return buildWordPressRedirects();
   },

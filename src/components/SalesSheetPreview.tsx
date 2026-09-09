@@ -17,6 +17,8 @@ const FALLBACK_PX_PER_IN = 96;
 type PreviewMode = "fit" | "100";
 
 interface SalesSheetPreviewProps {
+  productId: string;
+  downloadFileName: string;
   backHref: string;
   editHref: string;
   children: ReactNode;
@@ -43,6 +45,8 @@ async function waitForSheetAssets(root: HTMLElement) {
 }
 
 export default function SalesSheetPreview({
+  productId,
+  downloadFileName,
   backHref,
   editHref,
   children,
@@ -53,6 +57,8 @@ export default function SalesSheetPreview({
   const [scale, setScale] = useState(1);
   const [ready, setReady] = useState(false);
   const [overflow, setOverflow] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const [sheetSize, setSheetSize] = useState({
     width: LETTER_WIDTH_IN * FALLBACK_PX_PER_IN,
     height: LETTER_HEIGHT_IN * FALLBACK_PX_PER_IN,
@@ -133,9 +139,47 @@ export default function SalesSheetPreview({
   }, [updateScale, measureOverflow]);
 
   function handlePrint() {
-    if (!ready) return;
-    // Ensure print uses 100% sheet size (CSS also resets transform).
+    if (!ready || pdfLoading) return;
     window.print();
+  }
+
+  async function handleDownloadPdf() {
+    if (!ready || pdfLoading) return;
+    setPdfError("");
+    setPdfLoading(true);
+
+    try {
+      const response = await fetch(`/api/admin/products/${productId}/pdf`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/pdf" },
+      });
+
+      if (!response.ok) {
+        let message = "Could not download PDF. Please try again.";
+        try {
+          const data = (await response.json()) as { error?: string };
+          if (data.error) message = data.error;
+        } catch {
+          // keep default message
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadFileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : "Could not download PDF.");
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   const scaledWidth = sheetSize.width * scale;
@@ -171,13 +215,27 @@ export default function SalesSheetPreview({
             <button
               type="button"
               onClick={handlePrint}
-              disabled={!ready}
+              disabled={!ready || pdfLoading}
               className="sales-sheet-chrome-btn sales-sheet-chrome-btn-print"
             >
               {ready ? "Print" : "Loading…"}
             </button>
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={!ready || pdfLoading}
+              className="sales-sheet-chrome-btn sales-sheet-chrome-btn-download"
+            >
+              {pdfLoading ? "Preparing PDF…" : "Download PDF"}
+            </button>
           </div>
         </div>
+
+        {pdfError ? (
+          <div className="sales-sheet-error-banner" role="alert">
+            {pdfError}
+          </div>
+        ) : null}
 
         {overflow ? (
           <div className="sales-sheet-overflow-banner" role="status">

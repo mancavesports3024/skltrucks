@@ -13,9 +13,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const isAdminRoute = pathname.startsWith("/admin");
+  const isAdminApiRoute = pathname.startsWith("/api/admin");
   const isLoginPage = pathname === "/admin/login";
 
   if (!isSupabaseConfigured()) {
+    if (isAdminApiRoute) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     if (isAdminRoute && !isLoginPage) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
@@ -24,7 +28,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isAdminRoute) {
+  if (isAdminRoute || isAdminApiRoute) {
     return await updateSession(request);
   }
 
@@ -32,5 +36,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/product-category/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/product-category/:path*"],
 };
