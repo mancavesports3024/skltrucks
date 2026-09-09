@@ -34,7 +34,7 @@ export default async function AdminPrintProductPage({ params }: AdminPrintProduc
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 py-6 print:max-w-none print:px-0 print:py-0">
+      <div className="mx-auto max-w-3xl px-4 py-6 print:m-0 print:max-w-none print:p-0">
         <ProductPrintSheet
           product={product}
           details={details}
