@@ -55,7 +55,8 @@ button {
     color: #111 !important;
   }
 
-  header,
+  /* Site chrome only — do not hide .print-sheet-header */
+  body > header,
   footer,
   .print-hidden,
   nav {
@@ -83,7 +84,7 @@ button {
 }
 
 .print-sheet-header {
-  align-items: center;
+  align-items: stretch;
   border-bottom: 2px solid #111;
   display: flex;
   gap: 0.75rem;
@@ -96,32 +97,38 @@ button {
 .print-sheet-header-left,
 .print-sheet-header-center,
 .print-sheet-header-right {
+  display: flex;
   flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 72px;
   min-width: 0;
 }
 
 .print-sheet-header-left {
-  display: flex;
-  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .print-sheet-logo-wrap {
   background: #111;
   display: inline-flex;
-  padding: 0.2rem 0.35rem;
+  height: 72px;
+  padding: 0.15rem 0.3rem;
 }
 
 .print-sheet-header-center {
+  align-items: center;
   text-align: center;
 }
 
 .print-sheet-header-right {
+  align-items: flex-end;
   text-align: right;
 }
 
 .print-sheet-logo {
   display: block;
-  height: 130px;
+  height: 100%;
   object-fit: contain;
   width: auto;
 }
