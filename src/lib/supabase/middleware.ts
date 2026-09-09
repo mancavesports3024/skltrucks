@@ -28,7 +28,12 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+  const isAdminApiRoute = request.nextUrl.pathname.startsWith("/api/admin");
   const isLoginPage = request.nextUrl.pathname === "/admin/login";
+
+  if (isAdminApiRoute && !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   if (isAdminRoute && !isLoginPage && !user) {
     const url = request.nextUrl.clone();

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import ProductPrintSheet from "@/components/ProductPrintSheet";
 import SalesSheetPreview from "@/components/SalesSheetPreview";
 import { getAdminProduct } from "@/app/admin/actions";
+import { buildSalesSheetFilename } from "@/lib/sales-sheet/filename";
 import { getSiteContent } from "@/lib/site-content";
 import { getPublicDetails } from "@/lib/vin/decode";
 
@@ -16,9 +17,15 @@ export default async function AdminPrintProductPage({ params }: AdminPrintProduc
 
   const site = await getSiteContent();
   const details = Object.entries(getPublicDetails(product.details));
+  const downloadFileName = buildSalesSheetFilename(product);
 
   return (
-    <SalesSheetPreview backHref="/admin" editHref={`/admin/products/${id}`}>
+    <SalesSheetPreview
+      productId={id}
+      downloadFileName={downloadFileName}
+      backHref="/admin"
+      editHref={`/admin/products/${id}`}
+    >
       <ProductPrintSheet
         product={product}
         details={details}
