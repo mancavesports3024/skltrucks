@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import PrintProductButton from "@/components/PrintProductButton";
 import ProductGallery from "@/components/ProductGallery";
 import ProductGrid from "@/components/ProductGrid";
-import ProductPrintSheet from "@/components/ProductPrintSheet";
 import { SITE } from "@/lib/constants";
 import { formatPrice, getAllProducts, getProductBySlug } from "@/lib/inventory";
 import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
-import { getSiteContent } from "@/lib/site-content";
 import { getPublicDetails } from "@/lib/vin/decode";
 
 interface ProductPageProps {
@@ -44,8 +41,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const site = await getSiteContent();
-
   const related = (await getAllProducts())
     .filter((p) => p.id !== product.id && p.type === product.type)
     .slice(0, 4);
@@ -64,16 +59,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   ];
 
   return (
-    <div className="py-8 sm:py-12 print:py-0">
-      <ProductPrintSheet
-        product={product}
-        details={publicDetails}
-        phone={site.contact.phone}
-        email={site.contact.email}
-        address={site.contact.address}
-      />
-
-      <div className="mx-auto max-w-7xl px-4 print:hidden">
+    <div className="py-8 sm:py-12">
+      <div className="mx-auto max-w-7xl px-4">
         <nav className="mb-4 flex flex-wrap gap-x-2 gap-y-1 text-sm text-neutral-500">
           <Link href="/" className="hover:text-[#fc0527]">
             Home
@@ -132,7 +119,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
               >
                 Contact Us
               </Link>
-              <PrintProductButton />
             </div>
           </div>
         </div>

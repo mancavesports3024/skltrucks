@@ -148,8 +148,9 @@ button {
 }
 
 .print-sheet-address {
-  color: #333;
-  font-size: 10pt;
+  color: #111;
+  font-size: 13pt;
+  font-weight: 600;
   line-height: 1.35;
   margin: 0;
 }
