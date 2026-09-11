@@ -241,12 +241,26 @@ export async function uploadSiteImage(formData: FormData): Promise<{ url?: strin
     return { error: "File too large. Maximum size is 10MB." };
   }
 
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `site/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  // GIF may be animated — store as uploaded. Optimize other site images to WebP.
+  let uploadBody: Blob | Buffer = file;
+  let contentType = file.type || "application/octet-stream";
+  let extension = (file.name.split(".").pop() || "jpg").toLowerCase();
 
-  const { error } = await supabase.storage.from("site-images").upload(path, file, {
-    cacheControl: "3600",
+  if (file.type !== "image/gif") {
+    const { optimizeSiteImage } = await import("@/lib/images/optimize-site-image");
+    const optimized = await optimizeSiteImage(Buffer.from(await file.arrayBuffer()));
+    uploadBody = Buffer.from(optimized.buffer);
+    contentType = optimized.contentType;
+    extension = optimized.extension;
+  }
+
+  const path = `site/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+  const { error } = await supabase.storage.from("site-images").upload(path, uploadBody, {
+    // Long-lived immutable caching; object names are unique per upload.
+    cacheControl: "31536000",
     upsert: false,
+    contentType,
   });
 
   if (error) {
