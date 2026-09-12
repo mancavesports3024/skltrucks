@@ -1,6 +1,11 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { HeroContent, SocialContent } from "@/types/site-content";
+import {
+  HERO_IMAGE_SIZES,
+  buildSiteImageDeliveryUrl,
+  buildSiteImageSrcSet,
+  canDeliverViaSiteImageApi,
+} from "@/lib/images/site-image-delivery";
 
 interface HeroProps {
   content: HeroContent;
@@ -9,16 +14,38 @@ interface HeroProps {
 
 export default function Hero({ content, social }: HeroProps) {
   const headlineLines = content.headline.split("\n").filter(Boolean);
+  const usesOptimizedDelivery = canDeliverViaSiteImageApi(content.image);
+  const heroSrc = usesOptimizedDelivery
+    ? buildSiteImageDeliveryUrl(content.image, 1080)
+    : content.image;
+  const heroSrcSet = buildSiteImageSrcSet(content.image);
 
   return (
     <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden md:min-h-[85vh]">
-      <Image
-        src={content.image}
+      {usesOptimizedDelivery && heroSrcSet ? (
+        <link
+          rel="preload"
+          as="image"
+          href={heroSrc}
+          imageSrcSet={heroSrcSet}
+          imageSizes={HERO_IMAGE_SIZES}
+          fetchPriority="high"
+        />
+      ) : null}
+      {/*
+        Responsive WebP delivery through /api/site-image (sharp):
+        Vercel /_next/image is disabled (images.unoptimized) after 402s,
+        and Supabase Image Transformations are not enabled (403 FeatureNotEnabled).
+      */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={heroSrc}
+        srcSet={heroSrcSet}
+        sizes={HERO_IMAGE_SIZES}
         alt="SKL Trucks inventory"
-        fill
-        className="object-cover"
-        priority
-        sizes="100vw"
+        className="absolute inset-0 h-full w-full object-cover"
+        fetchPriority="high"
+        decoding="async"
       />
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative z-10 mx-auto max-w-4xl px-4 text-center text-white">

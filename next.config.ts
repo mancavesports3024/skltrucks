@@ -7,8 +7,9 @@ const nextConfig: NextConfig = {
     return buildWordPressRedirects();
   },
   images: {
-    // Vercel Image Optimization is returning 402 Payment Required on this
-    // project, which breaks every next/image. Serve originals instead.
+    // Keep unoptimized: Vercel /_next/image previously returned 402 Payment
+    // Required on this project. Homepage hero delivery uses /api/site-image
+    // (sharp) instead of re-enabling the Vercel optimizer.
     unoptimized: true,
     remotePatterns: [
       {
