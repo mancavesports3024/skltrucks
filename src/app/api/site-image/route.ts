@@ -1,65 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  SITE_IMAGE_SRC_WIDTHS,
-  canDeliverViaSiteImageApi,
-} from "@/lib/images/site-image-delivery";
+import { parseApprovedSiteImageUrl } from "@/lib/images/site-image-delivery";
 import { resizeSiteImageToWidth } from "@/lib/images/optimize-site-image";
+import {
+  ALLOWED_SITE_IMAGE_CONTENT_TYPES,
+  normalizeImageContentType,
+  parseSiteImageQualityParam,
+  parseSiteImageWidthParam,
+} from "@/lib/images/site-image-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ALLOWED_WIDTHS = new Set<number>(SITE_IMAGE_SRC_WIDTHS);
-const MAX_QUALITY = 80;
-const MIN_QUALITY = 50;
+const FETCH_TIMEOUT_MS = 5_000;
+const MAX_UPSTREAM_BYTES = 10 * 1024 * 1024;
 
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+} as const;
+
+function errorJson(status: number, message: string) {
+  return NextResponse.json(
+    { error: message },
+    {
+      status,
+      headers: NO_STORE_HEADERS,
+    }
+  );
+}
+
+async function readUpstreamBody(
+  response: Response,
+  maxBytes: number
+): Promise<{ ok: true; buffer: Buffer } | { ok: false; status: number }> {
+  const contentLengthHeader = response.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      return { ok: false, status: 413 };
+    }
+  }
+
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) return { ok: false, status: 413 };
+    return { ok: true, buffer };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore cancel errors
+      }
+      return { ok: false, status: 413 };
+    }
+    chunks.push(value);
+  }
+
+  return { ok: true, buffer: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))) };
 }
 
 export async function GET(request: NextRequest) {
   const src = request.nextUrl.searchParams.get("url");
-  const widthParam = Number(request.nextUrl.searchParams.get("w") || "0");
-  const qualityParam = Number(request.nextUrl.searchParams.get("q") || "75");
+  const width = parseSiteImageWidthParam(request.nextUrl.searchParams.get("w"));
+  const quality = parseSiteImageQualityParam(request.nextUrl.searchParams.get("q"));
 
-  if (!src) return badRequest("Missing url");
-  if (!canDeliverViaSiteImageApi(src)) {
-    return badRequest("URL is not an allowed Supabase public object");
-  }
-  if (!ALLOWED_WIDTHS.has(widthParam)) {
-    return badRequest(`Unsupported width. Allowed: ${[...ALLOWED_WIDTHS].join(", ")}`);
-  }
+  if (!src) return errorJson(400, "Invalid request");
+  if (width == null) return errorJson(400, "Invalid request");
+  if (quality == null) return errorJson(400, "Invalid request");
 
-  const quality = Math.min(
-    MAX_QUALITY,
-    Math.max(MIN_QUALITY, Number.isFinite(qualityParam) ? qualityParam : 75)
-  );
+  const parsed = parseApprovedSiteImageUrl(src);
+  if (!parsed.ok) return errorJson(400, "Invalid request");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const upstream = await fetch(src, {
-      // Revalidate occasionally; responses are also cached by CDN via Cache-Control.
-      next: { revalidate: 86400 },
+    // redirect: "error" prevents open-proxy follow to localhost/private networks.
+    const upstream = await fetch(parsed.normalized, {
+      method: "GET",
+      redirect: "error",
+      signal: controller.signal,
+      headers: {
+        Accept: "image/*",
+      },
+      cache: "no-store",
     });
 
     if (!upstream.ok) {
-      return NextResponse.json(
-        { error: `Upstream image failed (${upstream.status})` },
-        { status: 502 }
-      );
+      return errorJson(502, "Image unavailable");
     }
 
-    const input = Buffer.from(await upstream.arrayBuffer());
-    const output = await resizeSiteImageToWidth(input, widthParam, quality);
+    const contentType = normalizeImageContentType(upstream.headers.get("content-type"));
+    if (!contentType || !ALLOWED_SITE_IMAGE_CONTENT_TYPES.has(contentType)) {
+      return errorJson(415, "Unsupported media type");
+    }
+
+    const body = await readUpstreamBody(upstream, MAX_UPSTREAM_BYTES);
+    if (!body.ok) {
+      return errorJson(body.status, "Image too large");
+    }
+
+    const output = await resizeSiteImageToWidth(body.buffer, width, quality);
 
     return new NextResponse(new Uint8Array(output), {
       status: 200,
       headers: {
         "Content-Type": "image/webp",
-        "Cache-Control": "public, max-age=31536000, immutable",
+        // Browser + shared/CDN caches (Vercel honors s-maxage / CDN directives).
+        "Cache-Control": "public, max-age=31536000, s-maxage=31536000, immutable",
+        "CDN-Cache-Control": "public, s-maxage=31536000, immutable",
+        "Vercel-CDN-Cache-Control": "public, s-maxage=31536000, immutable",
         "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {
-    console.error("[site-image]", error);
-    return NextResponse.json({ error: "Could not optimize image" }, { status: 500 });
+    const aborted =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        (error as { name?: string }).name === "AbortError");
+
+    if (aborted) {
+      return errorJson(504, "Image unavailable");
+    }
+
+    console.error("[site-image] optimize failed");
+    return errorJson(500, "Could not optimize image");
+  } finally {
+    clearTimeout(timeout);
   }
 }

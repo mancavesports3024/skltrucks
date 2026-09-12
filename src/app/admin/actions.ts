@@ -226,6 +226,14 @@ export async function getAdminProduct(id: string) {
 
 export async function uploadSiteImage(formData: FormData): Promise<{ url?: string; error?: string }> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
   const file = formData.get("file") as File;
 
   if (!file || file.size === 0) {
