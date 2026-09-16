@@ -5,7 +5,10 @@ import Marquee from "@/components/Marquee";
 import SectionTitle from "@/components/SectionTitle";
 import ProductGrid from "@/components/ProductGrid";
 import { getAllProducts } from "@/lib/inventory";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 import { getSiteContent } from "@/lib/site-content";
+
+export const metadata = indexablePageMetadata("/");
 
 export default async function HomePage() {
   const [featured, site] = await Promise.all([

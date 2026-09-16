@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Oswald, Poppins, Roboto } from "next/font/google";
+import { getMetadataBase } from "@/lib/seo/site-url";
 import "./globals.css";
 
 const oswald = Oswald({
@@ -21,6 +22,9 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
+  // Do not set alternates.canonical here — children would inherit "/" and every
+  // route would incorrectly canonicalize to the homepage.
+  metadataBase: getMetadataBase(),
   title: {
     default: "SKL Trucks LLC",
     template: "%s | SKL Trucks LLC",

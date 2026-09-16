@@ -38,15 +38,16 @@ Your client can manage trucks at **`/admin`** — similar to the WordPress produ
 
 4. **Configure environment variables**
 
-   Copy `.env.local.example` to `.env.local`:
+   Create `.env.local` (and the same keys in **Vercel → Project Settings → Environment Variables**):
 
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
    SUPABASE_SERVICE_ROLE_KEY=eyJ...
+   NEXT_PUBLIC_SITE_URL=https://www.skltrucks.com
    ```
 
-   Add the same variables in **Vercel → Project Settings → Environment Variables**.
+   `NEXT_PUBLIC_SITE_URL` is the **canonical public origin** (no trailing slash). Production must be `https://www.skltrucks.com`. It drives sitemap, robots, `metadataBase`, and per-page canonicals. Keep the apex→www 308; do **not** set this to `https://skltrucks.com`.
 
 5. **Import existing inventory**
 

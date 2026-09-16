@@ -2,7 +2,9 @@ import ContactForm from "@/components/ContactForm";
 import { getSiteContent } from "@/lib/site-content";
 import { phoneToHref } from "@/lib/phone";
 
-export const metadata = { title: "Contact Us" };
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
+
+export const metadata = indexablePageMetadata("/contact-us", { title: "Contact Us" });
 
 export default async function ContactPage() {
   const site = await getSiteContent();

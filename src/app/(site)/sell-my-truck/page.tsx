@@ -1,6 +1,7 @@
 import SellTruckForm from "@/components/SellTruckForm";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 
-export const metadata = { title: "Sell My Truck" };
+export const metadata = indexablePageMetadata("/sell-my-truck", { title: "Sell My Truck" });
 
 export default function SellMyTruckPage() {
   return (
