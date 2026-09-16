@@ -1,5 +1,5 @@
 /** Widths used for responsive homepage/site imagery (mobile-first). */
-export const SITE_IMAGE_SRC_WIDTHS = [640, 828, 1080, 1600, 1920] as const;
+export const SITE_IMAGE_SRC_WIDTHS = [640, 828, 1080, 1200, 1600, 1920] as const;
 
 export type SiteImageSrcWidth = (typeof SITE_IMAGE_SRC_WIDTHS)[number];
 
