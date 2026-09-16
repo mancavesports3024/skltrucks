@@ -107,12 +107,29 @@ describe("buildSiteImageDeliveryUrl cache keys", () => {
     expect(buildSiteImageDeliveryUrl("/logo.png", 640)).toBe("/logo.png");
     expect(buildSiteImageSrcSet("/logo.png")).toBeUndefined();
   });
+
+  it("includes 1200w in hero srcset between 1080 and 1600 for high-DPR mobile", () => {
+    const srcSet = buildSiteImageSrcSet(APPROVED);
+    expect(srcSet).toBeDefined();
+    expect(srcSet).toContain("1200w");
+    expect(srcSet).toMatch(/1080w, .*1200w, .*1600w/);
+
+    const candidate1200 = buildSiteImageDeliveryUrl(APPROVED, 1200);
+    expect(candidate1200).toBe(
+      `/api/site-image?url=${encodeURIComponent(APPROVED)}&w=1200&q=75`
+    );
+    // Preload imageSrcSet must stay identical to the hero img srcSet.
+    expect(srcSet).toContain(`${candidate1200} 1200w`);
+  });
 });
 
 describe("site-image request params", () => {
   it("allows only the width allowlist and bounded integer quality", () => {
     expect(parseSiteImageWidthParam("828")).toBe(828);
+    expect(parseSiteImageWidthParam("1200")).toBe(1200);
     expect(parseSiteImageWidthParam("999")).toBeNull();
+    expect(parseSiteImageWidthParam("1152")).toBeNull();
+    expect(parseSiteImageWidthParam("1280")).toBeNull();
     expect(parseSiteImageWidthParam("828.5")).toBeNull();
     expect(parseSiteImageWidthParam("-828")).toBeNull();
     expect(parseSiteImageWidthParam("0")).toBeNull();
