@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getAllProducts } from "@/lib/inventory";
-import { getSiteUrl } from "@/lib/seo/site-url";
+import { absoluteUrl } from "@/lib/seo/site-url";
 
 const STATIC_ROUTES: Array<{
   path: string;
@@ -18,21 +18,20 @@ const STATIC_ROUTES: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = getSiteUrl();
   const products = await getAllProducts();
   const now = new Date();
 
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
-    url: `${baseUrl}${path}`,
+    url: absoluteUrl(path),
     lastModified: now,
     changeFrequency,
     priority,
   }));
 
   const productEntries: MetadataRoute.Sitemap = products.map((product) => ({
-    url: `${baseUrl}/product/${product.slug}`,
+    url: absoluteUrl(`/product/${product.slug}`),
     lastModified: now,
-    changeFrequency: "weekly",
+    changeFrequency: "weekly" as const,
     priority: 0.8,
   }));
 

@@ -1,13 +1,14 @@
 import ProductGrid from "@/components/ProductGrid";
 import ShopFilters from "@/components/shop/ShopFilters";
 import { filterProducts } from "@/lib/inventory";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 import Link from "next/link";
 
 interface ShopPageProps {
   searchParams: Promise<{ category?: string; manufacturer?: string; sort?: string }>;
 }
 
-export const metadata = { title: "Inventory" };
+export const metadata = indexablePageMetadata("/shop", { title: "Inventory" });
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
   const params = await searchParams;

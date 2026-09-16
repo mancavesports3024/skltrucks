@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 
-export const metadata = { title: "Truck Financing" };
+export const metadata = indexablePageMetadata("/truck-financing", { title: "Truck Financing" });
 
 export default function TruckFinancingPage() {
   return (

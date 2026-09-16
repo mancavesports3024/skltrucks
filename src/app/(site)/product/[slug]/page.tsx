@@ -5,6 +5,7 @@ import ProductGrid from "@/components/ProductGrid";
 import { SITE } from "@/lib/constants";
 import { formatPrice, getAllProducts, getProductBySlug } from "@/lib/inventory";
 import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 import { getPublicDetails } from "@/lib/vin/decode";
 
 interface ProductPageProps {
@@ -20,7 +21,7 @@ export async function generateMetadata({ params }: ProductPageProps) {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product Not Found" };
-  return { title: product.name };
+  return indexablePageMetadata(`/product/${product.slug}`, { title: product.name });
 }
 
 function SpecList({ items }: { items: [string, string][] }) {

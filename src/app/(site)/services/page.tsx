@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 
-export const metadata = { title: "Services" };
+export const metadata = indexablePageMetadata("/services", { title: "Services" });
 
 const services = [
   {

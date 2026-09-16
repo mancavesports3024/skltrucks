@@ -1,8 +1,9 @@
 import Link from "next/link";
 import ProductGrid from "@/components/ProductGrid";
 import { getAllProducts } from "@/lib/inventory";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 
-export const metadata = { title: "Truck Sales" };
+export const metadata = indexablePageMetadata("/truck-sales", { title: "Truck Sales" });
 
 export default async function TruckSalesPage() {
   const products = await getAllProducts();

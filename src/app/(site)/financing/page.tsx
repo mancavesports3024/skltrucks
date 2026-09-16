@@ -1,6 +1,7 @@
 import FinancingForm from "@/components/FinancingForm";
+import { indexablePageMetadata } from "@/lib/seo/page-metadata";
 
-export const metadata = { title: "Financing" };
+export const metadata = indexablePageMetadata("/financing", { title: "Financing" });
 
 export default function FinancingPage() {
   return (
