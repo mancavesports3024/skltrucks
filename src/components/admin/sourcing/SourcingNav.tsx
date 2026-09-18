@@ -1,6 +1,12 @@
 import Link from "next/link";
 
-export type SourcingTab = "overview" | "leads" | "contacts" | "profile" | "digest";
+export type SourcingTab =
+  | "overview"
+  | "leads"
+  | "contacts"
+  | "profile"
+  | "digest"
+  | "intake";
 
 interface SourcingNavProps {
   active: SourcingTab;
@@ -9,6 +15,7 @@ interface SourcingNavProps {
 const TABS: { id: SourcingTab; label: string; href: string }[] = [
   { id: "overview", label: "Overview", href: "/admin/sourcing" },
   { id: "leads", label: "Truck leads", href: "/admin/sourcing/leads" },
+  { id: "intake", label: "Intake", href: "/admin/sourcing/intake" },
   { id: "contacts", label: "Suppliers", href: "/admin/sourcing/contacts" },
   { id: "profile", label: "Buying profile", href: "/admin/sourcing/profile" },
   { id: "digest", label: "Daily digest", href: "/admin/sourcing/digest" },

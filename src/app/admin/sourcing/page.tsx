@@ -137,8 +137,15 @@ export default async function SourcingOverviewPage() {
             </Link>
           </div>
           <p className="mt-2 text-sm text-neutral-600">
-            {digest.total} new or changed lead(s). Email is not scheduled or sent yet.
+            {digest.newListingCount} new · {digest.listingChangeCount} changed ·{" "}
+            {digest.seenAgainCount} seen again. Email is not scheduled or sent yet.
           </p>
+          <Link
+            href="/admin/sourcing/intake"
+            className="mt-3 inline-flex text-sm font-semibold text-[#fc0527] hover:underline"
+          >
+            Open CSV intake →
+          </Link>
         </section>
       </div>
     </div>

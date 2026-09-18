@@ -62,6 +62,14 @@ export interface MatchResult {
   earliestAcceptedModelYear: number;
 }
 
+/** Evidence snippets tied to required buying-profile specs. */
+export interface SpecEvidence {
+  engine?: string;
+  transmission?: string;
+  boxLength?: string;
+  gvwr?: string;
+}
+
 export interface TruckLead {
   id: string;
   seller: string;
@@ -100,10 +108,14 @@ export interface TruckLead {
   seedSource: string;
   matchStatus: MatchStatus;
   matchReasons: MatchReason[];
+  /** Evidence text for Cummins / automatic / box / manufacturer GVWR. */
+  specEvidence: SpecEvidence;
   /** When the listing was first discovered — not bumped by staff edits. */
   listingFirstSeenAt?: string;
   /** When listing-significant fields last changed — not bumped by notes/match-only edits. */
   listingLastChangedAt?: string;
+  /** Last time intake observed this listing (re-seen without change still bumps this). */
+  listingLastSeenAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -115,6 +127,7 @@ export type TruckLeadInput = Omit<
   | "matchReasons"
   | "listingFirstSeenAt"
   | "listingLastChangedAt"
+  | "listingLastSeenAt"
   | "createdAt"
   | "updatedAt"
 >;

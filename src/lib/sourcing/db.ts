@@ -12,6 +12,10 @@ import {
   type DbSupplierContact,
   type DbTruckLead,
 } from "@/lib/sourcing/mappers";
+import {
+  buildIntakeBatchFromCsv,
+  type IntakeBatchReport,
+} from "@/lib/sourcing/intake/import";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type {
   BuyingProfile,
@@ -114,6 +118,11 @@ export async function upsertTruckLead(
     matchReasons: match.reasons,
     listingLastChangedAt,
   });
+
+  // Ensure specEvidence always present for older callers
+  if (!input.specEvidence) {
+    row.spec_evidence = {};
+  }
 
   const query = id
     ? access.supabase.from("sourcing_truck_leads").update(row).eq("id", id)
@@ -224,4 +233,55 @@ export async function reclassifyAllLeads(): Promise<{ error?: string; updated?: 
   }
 
   return { updated };
+}
+
+/**
+ * Apply a staff-reviewed CSV intake batch. Persists first/last seen and listing changes.
+ * Does not schedule email or scrape remote sites.
+ */
+export async function applyCsvIntake(
+  csvText: string | null | undefined,
+  options?: { sourceLabel?: string; defaultSourceScope?: string }
+): Promise<{ error?: string; report?: IntakeBatchReport }> {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
+  const profile = await getBuyingProfile();
+  const existing = await getTruckLeads();
+  const report = buildIntakeBatchFromCsv(csvText, existing, profile, {
+    sourceLabel: options?.sourceLabel,
+    defaultSourceScope: options?.defaultSourceScope,
+  });
+
+  if (report.parseError) {
+    return { report };
+  }
+
+  for (const plan of report.plans) {
+    const match = classifyLead(plan.input, profile);
+    const row = truckLeadInputToRow({
+      ...plan.input,
+      matchStatus: match.status,
+      matchReasons: match.reasons,
+      listingFirstSeenAt: plan.listingFirstSeenAt,
+      listingLastSeenAt: plan.listingLastSeenAt,
+      listingLastChangedAt: plan.listingLastChangedAt,
+    });
+
+    if (plan.kind === "inserted") {
+      const { error } = await access.supabase.from("sourcing_truck_leads").insert(row);
+      if (error) {
+        report.errors.push(error.message);
+      }
+      continue;
+    }
+
+    const { error } = await access.supabase
+      .from("sourcing_truck_leads")
+      .update(row)
+      .eq("id", plan.existingId!);
+    if (error) report.errors.push(error.message);
+  }
+
+  return { report };
 }

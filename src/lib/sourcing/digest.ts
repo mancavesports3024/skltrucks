@@ -21,6 +21,7 @@ export interface DigestPreview {
   total: number;
   newListingCount: number;
   listingChangeCount: number;
+  seenAgainCount: number;
   groups: DigestGroup[];
 }
 
@@ -32,8 +33,8 @@ const STATUS_ORDER: MatchStatus[] = [
 ];
 
 /**
- * Daily digest preview of newly discovered listings and meaningful listing changes.
- * Staff call notes, workflow edits, and match recalculation alone do not appear.
+ * Daily digest preview of newly discovered listings, meaningful listing changes,
+ * and unchanged listings seen again on intake. Staff call notes alone do not appear.
  * Does not send email — preview only.
  */
 export function buildDailyDigestPreview(
@@ -59,6 +60,7 @@ export function buildDailyDigestPreview(
     total: events.length,
     newListingCount: events.filter((e) => e.kind === "new_listing").length,
     listingChangeCount: events.filter((e) => e.kind === "listing_change").length,
+    seenAgainCount: events.filter((e) => e.kind === "seen_again").length,
     groups,
   };
 }

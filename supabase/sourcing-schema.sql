@@ -195,6 +195,10 @@ create table if not exists public.sourcing_truck_leads (
   -- Digest timestamps: staff notes / match recalcs must NOT bump listing_last_changed_at
   listing_first_seen_at timestamptz not null default now(),
   listing_last_changed_at timestamptz not null default now(),
+  -- Re-observation on intake (unchanged listing seen again) — separate from call notes
+  listing_last_seen_at timestamptz not null default now(),
+  -- Evidence snippets for required specs (engine / transmission / box / gvwr)
+  spec_evidence jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -206,6 +210,16 @@ alter table public.sourcing_truck_leads
   add column if not exists listing_first_seen_at timestamptz not null default now();
 alter table public.sourcing_truck_leads
   add column if not exists listing_last_changed_at timestamptz not null default now();
+alter table public.sourcing_truck_leads
+  add column if not exists listing_last_seen_at timestamptz not null default now();
+alter table public.sourcing_truck_leads
+  add column if not exists spec_evidence jsonb not null default '{}'::jsonb;
+
+-- Backfill last_seen from first_seen where earlier drafts lacked the column semantics
+update public.sourcing_truck_leads
+set listing_last_seen_at = coalesce(listing_last_seen_at, listing_first_seen_at, created_at, now())
+where listing_last_seen_at is null
+   or listing_last_seen_at < coalesce(listing_first_seen_at, created_at);
 
 create index if not exists sourcing_truck_leads_match_status_idx
   on public.sourcing_truck_leads (match_status);
@@ -217,6 +231,8 @@ create index if not exists sourcing_truck_leads_listing_first_seen_idx
   on public.sourcing_truck_leads (listing_first_seen_at desc);
 create index if not exists sourcing_truck_leads_listing_changed_idx
   on public.sourcing_truck_leads (listing_last_changed_at desc);
+create index if not exists sourcing_truck_leads_listing_seen_idx
+  on public.sourcing_truck_leads (listing_last_seen_at desc);
 
 -- Duplicate prevention: VIN when present (global)
 create unique index if not exists sourcing_truck_leads_vin_unique

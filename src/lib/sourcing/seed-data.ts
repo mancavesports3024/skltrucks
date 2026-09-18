@@ -339,6 +339,12 @@ function leadBase(
     researchUncertaintyLabels: partial.researchUncertaintyLabels ?? ["unverified_seed_research"],
     isSeedResearch: true,
     seedSource: SEED_REPORT_LABEL,
+    specEvidence: partial.specEvidence ?? {
+      engine: "",
+      transmission: "",
+      boxLength: "",
+      gvwr: "",
+    },
     seedKey: partial.seedKey,
     supplierCompany: partial.supplierCompany,
   };

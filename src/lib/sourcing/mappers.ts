@@ -5,12 +5,14 @@ import type {
   MatchReason,
   MatchStatus,
   LeadWorkflowStatus,
+  SpecEvidence,
   SupplierContact,
   SupplierContactInput,
   TruckLead,
   TruckLeadInput,
 } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
+import { normalizeSpecEvidence } from "@/lib/sourcing/intake/sources";
 
 export interface DbBuyingProfile {
   id: string;
@@ -67,8 +69,10 @@ export interface DbTruckLead {
   seed_source: string | null;
   match_status: MatchStatus | null;
   match_reasons: MatchReason[] | null;
+  spec_evidence?: SpecEvidence | Record<string, unknown> | null;
   listing_first_seen_at?: string | null;
   listing_last_changed_at?: string | null;
+  listing_last_seen_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -171,8 +175,11 @@ export function rowToTruckLead(row: DbTruckLead): TruckLead {
     seedSource: row.seed_source ?? "",
     matchStatus: row.match_status ?? "needs_verification",
     matchReasons: Array.isArray(row.match_reasons) ? row.match_reasons : [],
+    specEvidence: normalizeSpecEvidence(row.spec_evidence),
     listingFirstSeenAt: row.listing_first_seen_at ?? row.created_at,
     listingLastChangedAt: row.listing_last_changed_at ?? row.updated_at,
+    listingLastSeenAt:
+      row.listing_last_seen_at ?? row.listing_first_seen_at ?? row.created_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -183,6 +190,8 @@ export function truckLeadInputToRow(
     matchStatus: MatchStatus;
     matchReasons: MatchReason[];
     listingLastChangedAt?: string | null;
+    listingFirstSeenAt?: string | null;
+    listingLastSeenAt?: string | null;
   }
 ) {
   const row: Record<string, unknown> = {
@@ -222,10 +231,17 @@ export function truckLeadInputToRow(
     seed_source: input.seedSource.trim(),
     match_status: input.matchStatus,
     match_reasons: input.matchReasons,
+    spec_evidence: normalizeSpecEvidence(input.specEvidence),
   };
 
   if (input.listingLastChangedAt) {
     row.listing_last_changed_at = input.listingLastChangedAt;
+  }
+  if (input.listingFirstSeenAt) {
+    row.listing_first_seen_at = input.listingFirstSeenAt;
+  }
+  if (input.listingLastSeenAt) {
+    row.listing_last_seen_at = input.listingLastSeenAt;
   }
 
   return row;

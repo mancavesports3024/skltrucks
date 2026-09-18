@@ -85,6 +85,9 @@ export default async function SourcingLeadsPage({ searchParams }: PageProps) {
                       {lead.isSeedResearch && (
                         <span className="ml-2 text-amber-700">seed</span>
                       )}
+                      {lead.seedSource?.includes("CSV") && (
+                        <span className="ml-2 text-sky-700">intake</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">{lead.seller || "—"}</td>

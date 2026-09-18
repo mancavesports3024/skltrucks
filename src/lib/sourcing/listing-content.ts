@@ -57,7 +57,7 @@ export function listingContentChanged(
   return listingContentFingerprint(before) !== listingContentFingerprint(after);
 }
 
-export type DigestEventKind = "new_listing" | "listing_change";
+export type DigestEventKind = "new_listing" | "listing_change" | "seen_again";
 
 export interface DigestLeadEvent {
   lead: TruckLead;
@@ -66,9 +66,10 @@ export interface DigestLeadEvent {
 }
 
 /**
- * Include a lead in the daily digest only for discovery or meaningful listing changes.
+ * Include a lead in the daily digest for discovery, meaningful listing changes,
+ * or re-observation (seen again) of an unchanged older listing.
  * Staff call notes, verification notes, workflow edits, and match recalculation alone
- * do not qualify (they touch updated_at but not listing_last_changed_at / first_seen).
+ * do not qualify (they touch updated_at but not listing timestamps).
  */
 export function selectDigestLeadEvents(
   leads: TruckLead[],
@@ -82,26 +83,43 @@ export function selectDigestLeadEvents(
   for (const lead of leads) {
     const firstSeen = lead.listingFirstSeenAt || lead.createdAt;
     const lastChanged = lead.listingLastChangedAt;
+    const lastSeen = lead.listingLastSeenAt;
 
     if (firstSeen) {
       const t = new Date(firstSeen).getTime();
       if (t >= start && t <= end) {
         events.push({ lead, kind: "new_listing", at: firstSeen });
-        continue; // new discovery covers the initial listing_last_changed_at bump
+        continue; // new discovery covers the initial stamps
       }
     }
 
     if (lastChanged && firstSeen) {
       const changedAt = new Date(lastChanged).getTime();
       const seenAt = new Date(firstSeen).getTime();
-      // Actual subsequent listing change (not the insert stamp)
       if (changedAt > seenAt && changedAt >= start && changedAt <= end) {
         events.push({ lead, kind: "listing_change", at: lastChanged });
+        continue;
       }
     } else if (lastChanged) {
       const changedAt = new Date(lastChanged).getTime();
       if (changedAt >= start && changedAt <= end) {
         events.push({ lead, kind: "listing_change", at: lastChanged });
+        continue;
+      }
+    }
+
+    // Unchanged listing observed again in the window (intake last_seen only)
+    if (lastSeen && firstSeen) {
+      const lastSeenAt = new Date(lastSeen).getTime();
+      const seenAt = new Date(firstSeen).getTime();
+      const changedAt = lastChanged ? new Date(lastChanged).getTime() : seenAt;
+      if (
+        lastSeenAt >= start &&
+        lastSeenAt <= end &&
+        lastSeenAt > seenAt &&
+        lastSeenAt > changedAt
+      ) {
+        events.push({ lead, kind: "seen_again", at: lastSeen });
       }
     }
   }

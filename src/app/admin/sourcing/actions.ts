@@ -8,6 +8,7 @@ import {
   deleteSupplierContact,
   deleteTruckLead,
   getBuyingProfile,
+  applyCsvIntake,
   reclassifyAllLeads,
   saveBuyingProfile,
   upsertSupplierContact,
@@ -37,6 +38,7 @@ function revalidateSourcing() {
   revalidatePath("/admin/sourcing/contacts");
   revalidatePath("/admin/sourcing/profile");
   revalidatePath("/admin/sourcing/digest");
+  revalidatePath("/admin/sourcing/intake");
 }
 
 export async function updateBuyingProfileAction(formData: FormData) {
@@ -314,4 +316,40 @@ export async function importSeedResearchAction() {
     leadsInserted,
     leadsSkipped,
   };
+}
+
+/**
+ * Staff-reviewed CSV intake (nonprod pilot). No scraping, no scheduled job, no email.
+ */
+export async function importCsvIntakeAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
+  const sourceLabel = String(formData.get("sourceLabel") ?? "Staff-reviewed CSV").trim();
+  const defaultSourceScope = String(formData.get("defaultSourceScope") ?? "").trim();
+  const pasted = String(formData.get("csvText") ?? "");
+  const file = formData.get("csvFile");
+
+  let csvText: string | null = pasted.trim() ? pasted : null;
+  if ((!csvText || !csvText.trim()) && file && typeof file === "object" && "text" in file) {
+    try {
+      csvText = await (file as File).text();
+    } catch {
+      return {
+        error: "Source failure: could not read the uploaded file.",
+        report: null,
+      };
+    }
+  }
+
+  if (csvText != null && !csvText.trim()) csvText = null;
+
+  const { error, report } = await applyCsvIntake(csvText, {
+    sourceLabel: sourceLabel || "Staff-reviewed CSV",
+    defaultSourceScope: defaultSourceScope || undefined,
+  });
+
+  if (error) return { error, report: null };
+  revalidateSourcing();
+  return { success: true, report };
 }

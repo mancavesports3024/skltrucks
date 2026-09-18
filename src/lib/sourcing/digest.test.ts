@@ -44,6 +44,7 @@ function lead(partial: Partial<TruckLead> & Pick<TruckLead, "id" | "matchStatus"
     isSeedResearch: false,
     seedSource: "",
     matchReasons: [],
+    specEvidence: { engine: "", transmission: "", boxLength: "", gvwr: "" },
     ...partial,
   };
 }
@@ -106,6 +107,7 @@ describe("buildDailyDigestPreview", () => {
     expect(digest.total).toBe(2);
     expect(digest.newListingCount).toBe(1);
     expect(digest.listingChangeCount).toBe(1);
+    expect(digest.seenAgainCount).toBe(0);
     expect(digest.groups.flatMap((g) => g.entries.map((e) => e.lead.id)).sort()).toEqual([
       "listing-change",
       "new",
@@ -118,6 +120,7 @@ describe("buildDailyDigestPreview", () => {
             matchStatus: "does_not_match",
             listingFirstSeenAt: "2026-09-01T10:00:00Z",
             listingLastChangedAt: "2026-09-01T10:00:00Z",
+            listingLastSeenAt: "2026-09-01T10:00:00Z",
             updatedAt: "2026-09-18T16:00:00Z",
           }),
         ],
@@ -125,5 +128,23 @@ describe("buildDailyDigestPreview", () => {
         now
       )
     ).toHaveLength(0);
+  });
+
+  it("marks unchanged listings re-observed as seen_again", () => {
+    const now = new Date("2026-09-18T18:00:00Z");
+    const digest = buildDailyDigestPreview(
+      [
+        lead({
+          id: "reseen",
+          matchStatus: "needs_verification",
+          listingFirstSeenAt: "2026-09-01T10:00:00Z",
+          listingLastChangedAt: "2026-09-01T10:00:00Z",
+          listingLastSeenAt: "2026-09-18T12:00:00Z",
+        }),
+      ],
+      now
+    );
+    expect(digest.seenAgainCount).toBe(1);
+    expect(digest.groups[0].entries[0].kind).toBe("seen_again");
   });
 });

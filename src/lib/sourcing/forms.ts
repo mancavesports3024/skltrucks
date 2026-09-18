@@ -131,6 +131,12 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
     researchUncertaintyLabels,
     isSeedResearch: checkbox(formData, "isSeedResearch"),
     seedSource: str(formData, "seedSource"),
+    specEvidence: {
+      engine: str(formData, "evidenceEngine"),
+      transmission: str(formData, "evidenceTransmission"),
+      boxLength: str(formData, "evidenceBoxLength"),
+      gvwr: str(formData, "evidenceGvwr"),
+    },
   };
 }
 

@@ -26,21 +26,21 @@ export default async function SourcingDigestPage() {
         <div>
           <h2 className="text-lg font-bold">Daily digest preview</h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Newly discovered listings and meaningful listing-field changes in the last 24 hours.
-            Recording a call, editing notes, or recalculating matches does not surface a lead here.
-            Email is not scheduled or sent in this pass.
+            Newly discovered listings, meaningful listing-field changes, and unchanged listings
+            seen again on intake (last 24 hours). Recording a call or editing SKL notes does not
+            surface a lead here. Email is not scheduled or sent in this pass.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Window: {new Date(digest.windowStart).toLocaleString()} →{" "}
             {new Date(digest.windowEnd).toLocaleString()} · {digest.total} event(s) (
             {digest.newListingCount} new · {digest.listingChangeCount} listing change
-            {digest.listingChangeCount === 1 ? "" : "s"})
+            {digest.listingChangeCount === 1 ? "" : "s"} · {digest.seenAgainCount} seen again)
           </p>
         </div>
 
         {digest.groups.length === 0 && (
           <div className="border border-neutral-200 bg-white p-6 text-sm text-neutral-600">
-            No new listings or listing changes in the last 24 hours.
+            No new listings, listing changes, or re-seen listings in the last 24 hours.
           </div>
         )}
 
@@ -63,8 +63,20 @@ export default async function SourcingDigestPage() {
                     >
                       {[lead.year, lead.makeModel].filter(Boolean).join(" ") || "Lead"}
                     </Link>
-                    <span className="border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-neutral-600">
-                      {kind === "new_listing" ? "New listing" : "Listing change"}
+                    <span
+                      className={`border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                        kind === "new_listing"
+                          ? "border-emerald-300 text-emerald-800 bg-emerald-50"
+                          : kind === "listing_change"
+                            ? "border-amber-300 text-amber-900 bg-amber-50"
+                            : "border-neutral-300 text-neutral-700 bg-neutral-50"
+                      }`}
+                    >
+                      {kind === "new_listing"
+                        ? "New listing"
+                        : kind === "listing_change"
+                          ? "Listing change"
+                          : "Seen again"}
                     </span>
                   </div>
                   <p className="text-sm text-neutral-600">

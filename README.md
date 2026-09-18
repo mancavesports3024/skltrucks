@@ -34,8 +34,9 @@ Do not rely on the `/admin` URL alone: every authenticated user is **not** autom
 - Editable **buying profile** in the database
 - Truck leads + supplier contacts with call notes and follow-up dates
 - Match classification: Confirmed match / Needs verification / Does not match / Out-of-range opportunity (out-of-range only when all required specs are confirmed and pass)
-- Daily digest **preview** of new listings and listing-field changes only (staff notes / match recalcs excluded)
+- Daily digest **preview** of new listings, listing-field changes, and unchanged listings **seen again** (staff notes / match recalcs excluded)
 - Scoped listing-ID uniqueness per seller/source; global VIN uniqueness
+- **Staff-reviewed CSV intake** at `/admin/sourcing/intake` (pilot until a dealer feed/email/API is authorized) — see `docs/sourcing-intake-sources.md`
 
 ## Admin Inventory Management
 
