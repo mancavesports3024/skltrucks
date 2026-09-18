@@ -59,8 +59,8 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
         {error === "sourcing_forbidden" && (
           <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
             Your signed-in account is not authorized for private sourcing. Add the email to{" "}
-            <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> (and optionally{" "}
-            <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>).
+            <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> and{" "}
+            <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>.
           </div>
         )}
         {!dbReady && (

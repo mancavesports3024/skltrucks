@@ -21,7 +21,8 @@ drop policy if exists "Staff read own sourcing allowlist row"
 create policy "Staff read own sourcing allowlist row"
   on public.sourcing_authorized_staff for select
   using (
-    lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    nullif(lower(coalesce(auth.email(), '')), '') is not null
+    and lower(email) = lower(auth.email())
   );
 
 -- Bootstrap SKL primary account (add more rows in SQL Editor as needed)
@@ -29,6 +30,7 @@ insert into public.sourcing_authorized_staff (email, display_name)
 values ('skltrucksllc@gmail.com', 'SKL Trucks')
 on conflict (email) do nothing;
 
+-- Staff authorization uses auth.email() (JWT email claim). Do not grant access when unset.
 create or replace function public.is_sourcing_staff()
 returns boolean
 language sql
@@ -39,7 +41,8 @@ as $$
   select exists (
     select 1
     from public.sourcing_authorized_staff s
-    where lower(s.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    where nullif(lower(coalesce(auth.email(), '')), '') is not null
+      and lower(s.email) = lower(auth.email())
   );
 $$;
 

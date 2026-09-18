@@ -17,7 +17,7 @@ Staff-only buying workspace at **`/admin/sourcing`**. Leads and supplier contact
 Access requires:
 1. A signed-in Supabase user
 2. Their email in the **`sourcing_authorized_staff`** table (RLS + `is_sourcing_staff()`)
-3. Optionally `SOURCING_STAFF_EMAILS` (comma-separated) for an app/middleware allowlist — defaults to `skltrucksllc@gmail.com`
+3. **`SOURCING_STAFF_EMAILS`** set explicitly (comma-separated) for app/middleware checks — an empty/missing value grants no access
 
 Do not rely on the `/admin` URL alone: every authenticated user is **not** automatically a sourcing user.
 

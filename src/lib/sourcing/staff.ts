@@ -1,11 +1,9 @@
 import { SITE } from "@/lib/constants";
 
-/** Default staff emails when SOURCING_STAFF_EMAILS is unset (must also exist in DB allowlist). */
-export const DEFAULT_SOURCING_STAFF_EMAILS = [SITE.email.toLowerCase()];
-
 /**
- * Parse comma/whitespace-separated staff emails from env.
- * Empty / missing env falls back to DEFAULT_SOURCING_STAFF_EMAILS for app-layer checks.
+ * Parse comma/whitespace-separated staff emails from SOURCING_STAFF_EMAILS.
+ * Empty / missing env returns [] — missing configuration must not grant access.
+ * Database `sourcing_authorized_staff` remains authoritative for RLS.
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
@@ -15,9 +13,6 @@ export function getSourcingStaffAllowlist(
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-  if (parsed.length === 0) {
-    return [...DEFAULT_SOURCING_STAFF_EMAILS];
-  }
   return [...new Set(parsed)];
 }
 
@@ -26,5 +21,9 @@ export function isSourcingStaffEmail(
   allowlist: string[] = getSourcingStaffAllowlist()
 ): boolean {
   if (!email) return false;
+  if (allowlist.length === 0) return false;
   return allowlist.includes(email.trim().toLowerCase());
 }
+
+/** Documented example seed email (must still be listed in env + DB to grant access). */
+export const EXAMPLE_SOURCING_STAFF_EMAIL = SITE.email.toLowerCase();
