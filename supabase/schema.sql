@@ -132,3 +132,6 @@ create policy "Authenticated delete site images"
 
 -- Migration for existing databases: add comments column
 -- alter table public.products add column if not exists comments text default '';
+
+-- Private truck sourcing (staff-only). Run after this file:
+--   supabase/sourcing-schema.sql

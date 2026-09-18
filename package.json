@@ -11,6 +11,7 @@
     "test": "vitest run",
     "sync-inventory": "node scripts/sync-inventory.mjs",
     "seed": "node --env-file=.env.local scripts/seed-supabase.mjs",
+    "seed-sourcing": "node --env-file=.env.local scripts/seed-sourcing.mjs",
     "pull-live": "node scripts/pull-live.mjs",
     "reset-inventory": "node scripts/reset-inventory.mjs",
     "fix-image-urls": "node --env-file=.env.local scripts/fix-image-urls.mjs"

@@ -10,6 +10,24 @@ Modern rebuild of [skltrucks.com](https://skltrucks.com/) built with **Next.js**
 - Contact, financing, and sell-my-truck forms
 - **Admin panel** at `/admin` for your client to add, edit, and delete inventory
 
+## Private truck sourcing (staff)
+
+Staff-only buying workspace at **`/admin/sourcing`** (same Supabase login as inventory admin). Leads and supplier contacts are **not** published to the public shop.
+
+### Setup
+
+1. Ensure the base schema is applied (`supabase/schema.sql`)
+2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (authenticated-only RLS; no public read)
+3. Sign in at `/admin/login`, open **Sourcing**
+4. Optionally click **Import unverified seed research** to load the Sept 18 report as unverified seed (skips category-page auction rows as individual trucks)
+
+### What it includes
+
+- Editable **buying profile** in the database (Cummins, automatic, 24/26/28′ box, GVWR strictly below 26,000, mileage, rolling 9-year age, liftgate preferred, 1,200 driving miles preferred, max price unset)
+- Truck leads + supplier contacts with call notes and follow-up dates
+- Match classification: Confirmed match / Needs verification / Does not match / Out-of-range opportunity
+- Daily digest **preview** (no email send yet)
+
 ## Admin Inventory Management
 
 Your client can manage trucks at **`/admin`** — similar to the WordPress product admin they used before, but built into this site.
