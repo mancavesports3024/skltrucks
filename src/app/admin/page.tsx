@@ -10,7 +10,7 @@ import { getSiteContentAdmin } from "@/lib/site-content";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 interface AdminPageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; error?: string }>;
 }
 
 function getActiveTab(tab?: string): AdminTab {
@@ -20,7 +20,7 @@ function getActiveTab(tab?: string): AdminTab {
 }
 
 export default async function AdminDashboard({ searchParams }: AdminPageProps) {
-  const { tab } = await searchParams;
+  const { tab, error } = await searchParams;
   const activeTab = getActiveTab(tab);
   const dbReady = isSupabaseConfigured();
 
@@ -56,6 +56,13 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
       <AdminHeader activeTab="inventory" />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
+        {error === "sourcing_forbidden" && (
+          <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            Your signed-in account is not authorized for private sourcing. Add the email to{" "}
+            <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> (and optionally{" "}
+            <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>).
+          </div>
+        )}
         {!dbReady && (
           <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
             <strong>Database not connected.</strong> Add Supabase environment variables to enable

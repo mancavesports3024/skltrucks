@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSourceListingId,
+  buildSourceScope,
   canonicalizeListingUrl,
   normalizeVin,
 } from "@/lib/sourcing/duplicates";
@@ -18,10 +19,31 @@ describe("duplicate keys", () => {
     ).toBe("https://example.com/truck/123");
   });
 
-  it("builds source listing ids from stock + seller when needed", () => {
+  it("scopes listing ids by seller so unrelated sellers can share a stock number", () => {
+    const stock = "7908";
+    const debary = {
+      sourceScope: buildSourceScope({ seller: "DeBary Truck Sales" }),
+      sourceListingId: buildSourceListingId({ stockNumber: stock }),
+    };
+    const miller = {
+      sourceScope: buildSourceScope({ seller: "Miller Used Trucks" }),
+      sourceListingId: buildSourceListingId({ stockNumber: stock }),
+    };
+
+    expect(debary.sourceListingId).toBe("7908");
+    expect(miller.sourceListingId).toBe("7908");
+    expect(debary.sourceScope).not.toBe(miller.sourceScope);
+    expect(`${debary.sourceScope}:${debary.sourceListingId}`).not.toBe(
+      `${miller.sourceScope}:${miller.sourceListingId}`
+    );
+  });
+
+  it("falls back to source hostname when seller is blank", () => {
     expect(
-      buildSourceListingId({ seller: "DeBary Truck Sales", stockNumber: "7908" })
-    ).toBe("debary-truck-sales:7908");
-    expect(buildSourceListingId({ sourceListingId: "ABC-1" })).toBe("abc-1");
+      buildSourceScope({
+        seller: "",
+        sourceUrl: "https://www.debarytrucksales.com/inventory/123",
+      })
+    ).toBe("debarytrucksales-com");
   });
 });

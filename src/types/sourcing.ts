@@ -67,6 +67,7 @@ export interface TruckLead {
   seller: string;
   supplierContactId: string | null;
   sourceUrl: string;
+  sourceScope: string;
   sourceListingId: string;
   canonicalListingUrl: string;
   stockNumber: string;
@@ -99,13 +100,23 @@ export interface TruckLead {
   seedSource: string;
   matchStatus: MatchStatus;
   matchReasons: MatchReason[];
+  /** When the listing was first discovered — not bumped by staff edits. */
+  listingFirstSeenAt?: string;
+  /** When listing-significant fields last changed — not bumped by notes/match-only edits. */
+  listingLastChangedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export type TruckLeadInput = Omit<
   TruckLead,
-  "id" | "matchStatus" | "matchReasons" | "createdAt" | "updatedAt"
+  | "id"
+  | "matchStatus"
+  | "matchReasons"
+  | "listingFirstSeenAt"
+  | "listingLastChangedAt"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 export interface SupplierContact {

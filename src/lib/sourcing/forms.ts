@@ -1,5 +1,6 @@
 import {
   buildSourceListingId,
+  buildSourceScope,
   canonicalizeListingUrl,
   normalizeVin,
 } from "@/lib/sourcing/duplicates";
@@ -71,10 +72,14 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
   const seller = str(formData, "seller");
   const stockNumber = str(formData, "stockNumber");
   const sourceUrl = str(formData, "sourceUrl");
+  const sourceScope = buildSourceScope({
+    seller,
+    sourceUrl,
+    sourceScope: str(formData, "sourceScope"),
+  });
   const sourceListingId = buildSourceListingId({
     sourceListingId: str(formData, "sourceListingId"),
     stockNumber,
-    seller,
   });
   const canonicalListingUrl = canonicalizeListingUrl(
     str(formData, "canonicalListingUrl") || sourceUrl
@@ -95,6 +100,7 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
     seller,
     supplierContactId: str(formData, "supplierContactId") || null,
     sourceUrl,
+    sourceScope,
     sourceListingId,
     canonicalListingUrl,
     stockNumber,

@@ -34,6 +34,7 @@ export interface DbTruckLead {
   seller: string | null;
   supplier_contact_id: string | null;
   source_url: string | null;
+  source_scope: string | null;
   source_listing_id: string | null;
   canonical_listing_url: string | null;
   stock_number: string | null;
@@ -66,6 +67,8 @@ export interface DbTruckLead {
   seed_source: string | null;
   match_status: MatchStatus | null;
   match_reasons: MatchReason[] | null;
+  listing_first_seen_at?: string | null;
+  listing_last_changed_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -134,6 +137,7 @@ export function rowToTruckLead(row: DbTruckLead): TruckLead {
     seller: row.seller ?? "",
     supplierContactId: row.supplier_contact_id,
     sourceUrl: row.source_url ?? "",
+    sourceScope: row.source_scope ?? "",
     sourceListingId: row.source_listing_id ?? "",
     canonicalListingUrl: row.canonical_listing_url ?? "",
     stockNumber: row.stock_number ?? "",
@@ -167,18 +171,25 @@ export function rowToTruckLead(row: DbTruckLead): TruckLead {
     seedSource: row.seed_source ?? "",
     matchStatus: row.match_status ?? "needs_verification",
     matchReasons: Array.isArray(row.match_reasons) ? row.match_reasons : [],
+    listingFirstSeenAt: row.listing_first_seen_at ?? row.created_at,
+    listingLastChangedAt: row.listing_last_changed_at ?? row.updated_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export function truckLeadInputToRow(
-  input: TruckLeadInput & { matchStatus: MatchStatus; matchReasons: MatchReason[] }
+  input: TruckLeadInput & {
+    matchStatus: MatchStatus;
+    matchReasons: MatchReason[];
+    listingLastChangedAt?: string | null;
+  }
 ) {
-  return {
+  const row: Record<string, unknown> = {
     seller: input.seller.trim(),
     supplier_contact_id: input.supplierContactId || null,
     source_url: input.sourceUrl.trim(),
+    source_scope: input.sourceScope.trim(),
     source_listing_id: input.sourceListingId.trim(),
     canonical_listing_url: input.canonicalListingUrl.trim(),
     stock_number: input.stockNumber.trim(),
@@ -212,6 +223,12 @@ export function truckLeadInputToRow(
     match_status: input.matchStatus,
     match_reasons: input.matchReasons,
   };
+
+  if (input.listingLastChangedAt) {
+    row.listing_last_changed_at = input.listingLastChangedAt;
+  }
+
+  return row;
 }
 
 export function rowToSupplierContact(row: DbSupplierContact): SupplierContact {

@@ -35,10 +35,10 @@ export default async function SourcingOverviewPage() {
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:py-8">
         {!dbReady && (
           <div className="border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            <strong>Database not connected.</strong> Sourcing tables require Supabase auth (same as{" "}
-            <code className="bg-amber-100 px-1">/admin</code>). Add env vars, run{" "}
-            <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code>, then sign in.
-            No sourcing data is exposed publicly.
+            <strong>Database not connected.</strong> Sourcing requires Supabase plus{" "}
+            <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> and your email
+            in <code className="bg-amber-100 px-1">sourcing_authorized_staff</code>. No sourcing
+            data is exposed publicly.
           </div>
         )}
 

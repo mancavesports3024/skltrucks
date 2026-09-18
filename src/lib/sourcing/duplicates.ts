@@ -37,19 +37,63 @@ export function normalizeVin(vin: string): string {
   return vin.trim().toUpperCase().replace(/\s+/g, "");
 }
 
+export function slugifySourceScope(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Scope for listing-ID uniqueness: prefer seller slug, else source URL hostname.
+ * Unrelated sellers can share the same stock / listing id.
+ */
+export function buildSourceScope(parts: {
+  seller?: string;
+  sourceUrl?: string;
+  sourceScope?: string;
+}): string {
+  const explicit = slugifySourceScope(parts.sourceScope ?? "");
+  if (explicit) return explicit;
+
+  const seller = slugifySourceScope(parts.seller ?? "");
+  if (seller) return seller;
+
+  const url = (parts.sourceUrl ?? "").trim();
+  if (!url) return "";
+  try {
+    return slugifySourceScope(new URL(url).hostname.replace(/^www\./, ""));
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Local listing id within a source scope (stock number or explicit id).
+ * Does not embed seller — uniqueness is (source_scope, source_listing_id).
+ */
 export function buildSourceListingId(parts: {
   sourceListingId?: string;
   stockNumber?: string;
-  seller?: string;
 }): string {
-  const explicit = (parts.sourceListingId ?? "").trim();
-  if (explicit) return explicit.toLowerCase();
+  const explicit = (parts.sourceListingId ?? "").trim().toLowerCase();
+  if (explicit) return explicit;
+  const stock = (parts.stockNumber ?? "").trim().toLowerCase();
+  return stock;
+}
 
-  const stock = (parts.stockNumber ?? "").trim();
-  const seller = (parts.seller ?? "").trim().toLowerCase().replace(/\s+/g, "-");
-  if (stock && seller) return `${seller}:${stock.toLowerCase()}`;
-  if (stock) return stock.toLowerCase();
-  return "";
+/** @deprecated Prefer buildSourceScope + buildSourceListingId */
+export function buildScopedListingKey(parts: {
+  sourceListingId?: string;
+  stockNumber?: string;
+  seller?: string;
+  sourceUrl?: string;
+}): { sourceScope: string; sourceListingId: string } {
+  return {
+    sourceScope: buildSourceScope(parts),
+    sourceListingId: buildSourceListingId(parts),
+  };
 }
 
 export function duplicateConflictMessage(errorMessage: string): string | null {
@@ -57,14 +101,17 @@ export function duplicateConflictMessage(errorMessage: string): string | null {
   if (msg.includes("sourcing_truck_leads_vin_unique")) {
     return "A lead with this VIN already exists.";
   }
-  if (msg.includes("sourcing_truck_leads_source_listing_id_unique")) {
-    return "A lead with this source listing ID / stock number already exists.";
+  if (
+    msg.includes("sourcing_truck_leads_scoped_listing_unique") ||
+    msg.includes("sourcing_truck_leads_source_listing_id_unique")
+  ) {
+    return "A lead with this source listing ID already exists for this seller/source.";
   }
   if (msg.includes("sourcing_truck_leads_canonical_url_unique")) {
     return "A lead with this listing URL already exists.";
   }
   if (msg.includes("duplicate key")) {
-    return "Duplicate lead detected (VIN, listing ID, or URL).";
+    return "Duplicate lead detected (VIN, scoped listing ID, or URL).";
   }
   return null;
 }

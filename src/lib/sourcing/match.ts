@@ -294,6 +294,8 @@ export function classifyLead(
   const required = reasons.filter((r) => r.required);
   const anyRequiredFail = required.some((r) => r.outcome === "fail");
   const anyRequiredUnknown = required.some((r) => r.outcome === "unknown");
+  const allRequiredPass =
+    required.length > 0 && required.every((r) => r.outcome === "pass");
   const distanceOver =
     lead.drivingDistanceMiles != null &&
     lead.drivingDistanceMiles > profile.preferredMaxDrivingMiles;
@@ -301,14 +303,16 @@ export function classifyLead(
   let status: MatchStatus;
   if (anyRequiredFail) {
     status = "does_not_match";
-  } else if (distanceOver) {
-    // Preferred distance exceeded — still an opportunity, not a hard exclusion
-    status = "out_of_range_opportunity";
   } else if (anyRequiredUnknown) {
-    // Unknown required specs must never count as confirmed match
+    // Unknown required specs must never count as confirmed or out-of-range
     status = "needs_verification";
-  } else {
+  } else if (allRequiredPass && distanceOver) {
+    // Out-of-range only when every required spec is confirmed and passes
+    status = "out_of_range_opportunity";
+  } else if (allRequiredPass) {
     status = "confirmed_match";
+  } else {
+    status = "needs_verification";
   }
 
   return { status, reasons, earliestAcceptedModelYear: earliestYear };

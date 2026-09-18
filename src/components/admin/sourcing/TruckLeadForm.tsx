@@ -136,13 +136,26 @@ export default function TruckLeadForm({ lead, contacts }: TruckLeadFormProps) {
           </div>
           <div>
             <label className={labelClass} htmlFor="sourceListingId">
-              Source listing ID (optional override)
+              Source listing ID (local to seller/source)
             </label>
             <input
               id="sourceListingId"
               name="sourceListingId"
               className={inputClass}
               defaultValue={lead?.sourceListingId}
+              placeholder="Defaults from stock number"
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="sourceScope">
+              Source scope (seller/host — for duplicate scoping)
+            </label>
+            <input
+              id="sourceScope"
+              name="sourceScope"
+              className={inputClass}
+              defaultValue={lead?.sourceScope}
+              placeholder="Defaults from seller name"
             />
           </div>
           <div>

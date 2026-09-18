@@ -1,3 +1,5 @@
+import { requireSourcingStaff } from "@/lib/sourcing/access";
+import { listingContentChanged } from "@/lib/sourcing/listing-content";
 import { classifyLead } from "@/lib/sourcing/match";
 import {
   buyingProfileToRow,
@@ -11,7 +13,6 @@ import {
   type DbTruckLead,
 } from "@/lib/sourcing/mappers";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
 import type {
   BuyingProfile,
   BuyingProfileInput,
@@ -22,16 +23,13 @@ import type {
 } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 
-async function adminClient() {
-  if (!isSupabaseConfigured()) return null;
-  return createClient();
-}
-
 export async function getBuyingProfile(): Promise<BuyingProfile> {
-  const supabase = await adminClient();
-  if (!supabase) return { ...DEFAULT_BUYING_PROFILE };
+  if (!isSupabaseConfigured()) return { ...DEFAULT_BUYING_PROFILE };
 
-  const { data, error } = await supabase
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { ...DEFAULT_BUYING_PROFILE };
+
+  const { data, error } = await access.supabase
     .from("sourcing_buying_profile")
     .select("*")
     .eq("id", "default")
@@ -48,10 +46,10 @@ export async function getBuyingProfile(): Promise<BuyingProfile> {
 export async function saveBuyingProfile(
   input: BuyingProfileInput
 ): Promise<{ error?: string; profile?: BuyingProfile }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
-  const { data, error } = await supabase
+  const { data, error } = await access.supabase
     .from("sourcing_buying_profile")
     .upsert({ id: "default", ...buyingProfileToRow(input) })
     .select("*")
@@ -62,13 +60,13 @@ export async function saveBuyingProfile(
 }
 
 export async function getTruckLeads(): Promise<TruckLead[]> {
-  const supabase = await adminClient();
-  if (!supabase) return [];
+  const access = await requireSourcingStaff();
+  if (!access.ok) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await access.supabase
     .from("sourcing_truck_leads")
     .select("*")
-    .order("updated_at", { ascending: false });
+    .order("listing_last_changed_at", { ascending: false });
 
   if (error) {
     console.error("[sourcing] leads:", error.message);
@@ -79,10 +77,10 @@ export async function getTruckLeads(): Promise<TruckLead[]> {
 }
 
 export async function getTruckLeadById(id: string): Promise<TruckLead | null> {
-  const supabase = await adminClient();
-  if (!supabase) return null;
+  const access = await requireSourcingStaff();
+  if (!access.ok) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await access.supabase
     .from("sourcing_truck_leads")
     .select("*")
     .eq("id", id)
@@ -96,20 +94,30 @@ export async function upsertTruckLead(
   input: TruckLeadInput,
   id?: string
 ): Promise<{ error?: string; lead?: TruckLead }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const profile = await getBuyingProfile();
   const match = classifyLead(input, profile);
+
+  let listingLastChangedAt: string | undefined;
+  if (id) {
+    const existing = await getTruckLeadById(id);
+    if (existing && listingContentChanged(existing, input)) {
+      listingLastChangedAt = new Date().toISOString();
+    }
+  }
+
   const row = truckLeadInputToRow({
     ...input,
     matchStatus: match.status,
     matchReasons: match.reasons,
+    listingLastChangedAt,
   });
 
   const query = id
-    ? supabase.from("sourcing_truck_leads").update(row).eq("id", id)
-    : supabase.from("sourcing_truck_leads").insert(row);
+    ? access.supabase.from("sourcing_truck_leads").update(row).eq("id", id)
+    : access.supabase.from("sourcing_truck_leads").insert(row);
 
   const { data, error } = await query.select("*").single();
   if (error) return { error: error.message };
@@ -117,19 +125,19 @@ export async function upsertTruckLead(
 }
 
 export async function deleteTruckLead(id: string): Promise<{ error?: string }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
-  const { error } = await supabase.from("sourcing_truck_leads").delete().eq("id", id);
+  const { error } = await access.supabase.from("sourcing_truck_leads").delete().eq("id", id);
   if (error) return { error: error.message };
   return {};
 }
 
 export async function getSupplierContacts(): Promise<SupplierContact[]> {
-  const supabase = await adminClient();
-  if (!supabase) return [];
+  const access = await requireSourcingStaff();
+  if (!access.ok) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await access.supabase
     .from("sourcing_supplier_contacts")
     .select("*")
     .order("company", { ascending: true });
@@ -143,10 +151,10 @@ export async function getSupplierContacts(): Promise<SupplierContact[]> {
 }
 
 export async function getSupplierContactById(id: string): Promise<SupplierContact | null> {
-  const supabase = await adminClient();
-  if (!supabase) return null;
+  const access = await requireSourcingStaff();
+  if (!access.ok) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await access.supabase
     .from("sourcing_supplier_contacts")
     .select("*")
     .eq("id", id)
@@ -160,13 +168,13 @@ export async function upsertSupplierContact(
   input: SupplierContactInput,
   id?: string
 ): Promise<{ error?: string; contact?: SupplierContact }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const row = supplierContactInputToRow(input);
   const query = id
-    ? supabase.from("sourcing_supplier_contacts").update(row).eq("id", id)
-    : supabase.from("sourcing_supplier_contacts").insert(row);
+    ? access.supabase.from("sourcing_supplier_contacts").update(row).eq("id", id)
+    : access.supabase.from("sourcing_supplier_contacts").insert(row);
 
   const { data, error } = await query.select("*").single();
   if (error) return { error: error.message };
@@ -174,17 +182,21 @@ export async function upsertSupplierContact(
 }
 
 export async function deleteSupplierContact(id: string): Promise<{ error?: string }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
-  const { error } = await supabase.from("sourcing_supplier_contacts").delete().eq("id", id);
+  const { error } = await access.supabase.from("sourcing_supplier_contacts").delete().eq("id", id);
   if (error) return { error: error.message };
   return {};
 }
 
+/**
+ * Recalculate match_status / match_reasons only.
+ * Does not bump listing_last_changed_at (staff/system edit, not a listing change).
+ */
 export async function reclassifyAllLeads(): Promise<{ error?: string; updated?: number }> {
-  const supabase = await adminClient();
-  if (!supabase) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const profile = await getBuyingProfile();
   const leads = await getTruckLeads();
@@ -199,7 +211,7 @@ export async function reclassifyAllLeads(): Promise<{ error?: string; updated?: 
       continue;
     }
 
-    const { error } = await supabase
+    const { error } = await access.supabase
       .from("sourcing_truck_leads")
       .update({
         match_status: match.status,

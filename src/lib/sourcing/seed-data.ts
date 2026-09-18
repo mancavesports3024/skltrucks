@@ -1,5 +1,9 @@
 import type { ListedWeightTerm, TruckLeadInput, SupplierContactInput } from "@/types/sourcing";
-import { buildSourceListingId, canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
+import {
+  buildSourceListingId,
+  buildSourceScope,
+  canonicalizeListingUrl,
+} from "@/lib/sourcing/duplicates";
 
 /**
  * Unverified seed research from the Sept 18, 2026 SKL Box Truck Sourcing Report.
@@ -291,15 +295,20 @@ function leadBase(
     >
 ): SeedLead {
   const canonical = canonicalizeListingUrl(partial.canonicalListingUrl || partial.sourceUrl);
+  const sourceScope = buildSourceScope({
+    seller: partial.seller,
+    sourceUrl: partial.sourceUrl,
+    sourceScope: partial.sourceScope,
+  });
   const sourceListingId = buildSourceListingId({
     sourceListingId: partial.sourceListingId || partial.seedKey,
     stockNumber: partial.stockNumber,
-    seller: partial.seller,
   });
 
   return {
     seller: partial.seller,
     sourceUrl: partial.sourceUrl,
+    sourceScope,
     sourceListingId,
     canonicalListingUrl: canonical,
     stockNumber: partial.stockNumber ?? "",

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { duplicateConflictMessage } from "@/lib/sourcing/duplicates";
 import {
   deleteSupplierContact,
@@ -20,12 +21,15 @@ import {
 } from "@/lib/sourcing/forms";
 import { classifyLead } from "@/lib/sourcing/match";
 import {
+  rowToSupplierContact,
+  rowToTruckLead,
+  truckLeadInputToRow,
+  supplierContactInputToRow,
+} from "@/lib/sourcing/mappers";
+import {
   SEED_SUPPLIER_CONTACTS,
   SEED_TRUCK_LEADS,
 } from "@/lib/sourcing/seed-data";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
-import { truckLeadInputToRow, supplierContactInputToRow } from "@/lib/sourcing/mappers";
 
 function revalidateSourcing() {
   revalidatePath("/admin/sourcing");
@@ -36,7 +40,8 @@ function revalidateSourcing() {
 }
 
 export async function updateBuyingProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const input = parseBuyingProfileForm(formData);
   const result = await saveBuyingProfile(input);
@@ -50,7 +55,8 @@ export async function updateBuyingProfileAction(formData: FormData) {
 }
 
 export async function saveTruckLeadAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const id = String(formData.get("id") ?? "").trim() || undefined;
   const input = parseTruckLeadForm(formData);
@@ -69,6 +75,9 @@ export async function saveTruckLeadAction(formData: FormData) {
 }
 
 export async function deleteTruckLeadAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing lead id." };
   const result = await deleteTruckLead(id);
@@ -77,8 +86,12 @@ export async function deleteTruckLeadAction(formData: FormData) {
   redirect("/admin/sourcing/leads");
 }
 
+/**
+ * Staff call notes / follow-up — must not bump listing_last_changed_at.
+ */
 export async function recordLeadCallAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const id = String(formData.get("id") ?? "");
   const note = String(formData.get("callNote") ?? "");
@@ -87,8 +100,7 @@ export async function recordLeadCallAction(formData: FormData) {
   if (!id) return { error: "Missing lead id." };
   if (!note.trim()) return { error: "Call note is required." };
 
-  const supabase = await createClient();
-  const { data: existing, error: fetchError } = await supabase
+  const { data: existing, error: fetchError } = await access.supabase
     .from("sourcing_truck_leads")
     .select("*")
     .eq("id", id)
@@ -96,7 +108,6 @@ export async function recordLeadCallAction(formData: FormData) {
 
   if (fetchError || !existing) return { error: fetchError?.message ?? "Lead not found." };
 
-  const { rowToTruckLead } = await import("@/lib/sourcing/mappers");
   const lead = rowToTruckLead(existing);
   const sklCallNotes = appendCallNote(lead.sklCallNotes, note);
   const verificationNotes = followUp
@@ -106,7 +117,8 @@ export async function recordLeadCallAction(formData: FormData) {
   const profile = await getBuyingProfile();
   const match = classifyLead(lead, profile);
 
-  const { error } = await supabase
+  // Intentionally omit listing_last_changed_at — staff activity only
+  const { error } = await access.supabase
     .from("sourcing_truck_leads")
     .update({
       skl_call_notes: sklCallNotes,
@@ -120,21 +132,20 @@ export async function recordLeadCallAction(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  // Optionally set supplier follow-up
   if (followUp && lead.supplierContactId) {
-    await supabase
+    const { data: contactRow } = await access.supabase
+      .from("sourcing_supplier_contacts")
+      .select("call_notes")
+      .eq("id", lead.supplierContactId)
+      .maybeSingle();
+
+    await access.supabase
       .from("sourcing_supplier_contacts")
       .update({
         next_follow_up_date: followUp,
         last_contact_date: new Date().toISOString().slice(0, 10),
         call_notes: appendCallNote(
-          (
-            await supabase
-              .from("sourcing_supplier_contacts")
-              .select("call_notes")
-              .eq("id", lead.supplierContactId)
-              .maybeSingle()
-          ).data?.call_notes ?? "",
+          contactRow?.call_notes ?? "",
           `Re: lead ${lead.stockNumber || lead.vin || id}: ${note.trim()}`
         ),
       })
@@ -147,7 +158,8 @@ export async function recordLeadCallAction(formData: FormData) {
 }
 
 export async function saveSupplierContactAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const id = String(formData.get("id") ?? "").trim() || undefined;
   const input = parseSupplierContactForm(formData);
@@ -161,6 +173,9 @@ export async function saveSupplierContactAction(formData: FormData) {
 }
 
 export async function deleteSupplierContactAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Missing contact id." };
   const result = await deleteSupplierContact(id);
@@ -170,7 +185,8 @@ export async function deleteSupplierContactAction(formData: FormData) {
 }
 
 export async function recordSupplierCallAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
   const id = String(formData.get("id") ?? "");
   const note = String(formData.get("callNote") ?? "");
@@ -179,8 +195,7 @@ export async function recordSupplierCallAction(formData: FormData) {
   if (!id) return { error: "Missing contact id." };
   if (!note.trim()) return { error: "Call note is required." };
 
-  const supabase = await createClient();
-  const { data: existing, error: fetchError } = await supabase
+  const { data: existing, error: fetchError } = await access.supabase
     .from("sourcing_supplier_contacts")
     .select("*")
     .eq("id", id)
@@ -188,11 +203,10 @@ export async function recordSupplierCallAction(formData: FormData) {
 
   if (fetchError || !existing) return { error: fetchError?.message ?? "Contact not found." };
 
-  const { rowToSupplierContact } = await import("@/lib/sourcing/mappers");
   const contact = rowToSupplierContact(existing);
   const today = new Date().toISOString().slice(0, 10);
 
-  const { error } = await supabase
+  const { error } = await access.supabase
     .from("sourcing_supplier_contacts")
     .update({
       call_notes: appendCallNote(contact.callNotes, note),
@@ -209,16 +223,15 @@ export async function recordSupplierCallAction(formData: FormData) {
 }
 
 /**
- * Import unverified seed research. Safe to re-run: skips duplicates by VIN / listing id / URL.
- * Does not scrape live sites.
+ * Import unverified seed research. Safe to re-run: skips duplicates by VIN / scoped listing id / URL.
+ * Does not scrape live sites. Does not bump listing timestamps beyond insert defaults.
  */
 export async function importSeedResearchAction() {
-  if (!isSupabaseConfigured()) return { error: "Database not connected." };
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
 
-  const supabase = await createClient();
   const profile = await getBuyingProfile();
 
-  // Ensure default buying profile row exists
   await saveBuyingProfile({
     requireCummins: profile.requireCummins,
     requireAutomatic: profile.requireAutomatic,
@@ -241,7 +254,7 @@ export async function importSeedResearchAction() {
   for (const seed of SEED_SUPPLIER_CONTACTS) {
     const { seedKey, ...input } = seed;
     void seedKey;
-    const { data: existing } = await supabase
+    const { data: existing } = await access.supabase
       .from("sourcing_supplier_contacts")
       .select("id, company")
       .ilike("company", input.company)
@@ -254,7 +267,7 @@ export async function importSeedResearchAction() {
       continue;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await access.supabase
       .from("sourcing_supplier_contacts")
       .insert(supplierContactInputToRow(input))
       .select("id")
@@ -282,7 +295,7 @@ export async function importSeedResearchAction() {
       matchReasons: match.reasons,
     });
 
-    const { error } = await supabase.from("sourcing_truck_leads").insert(row);
+    const { error } = await access.supabase.from("sourcing_truck_leads").insert(row);
     if (error) {
       if (duplicateConflictMessage(error.message)) {
         leadsSkipped += 1;

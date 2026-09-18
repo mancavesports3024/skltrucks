@@ -138,6 +138,35 @@ describe("required versus preferred", () => {
     expect(result.status).toBe("out_of_range_opportunity");
   });
 
+  it("does not use out-of-range when a required spec is still unknown", () => {
+    const result = classifyLead(
+      baseLead({
+        drivingDistanceMiles: 1392,
+        listedWeightLbs: 25999,
+        listedWeightTerm: "gvw",
+        manufacturerGvwrLbs: null,
+        gvwrDoorPlateVerified: false,
+      }),
+      DEFAULT_BUYING_PROFILE,
+      asOf
+    );
+    expect(result.status).toBe("needs_verification");
+    expect(result.status).not.toBe("out_of_range_opportunity");
+  });
+
+  it("keeps required failures as does_not_match even when distance is over preferred range", () => {
+    const result = classifyLead(
+      baseLead({
+        drivingDistanceMiles: 1392,
+        listedWeightLbs: 26000,
+        listedWeightTerm: "gvwr",
+      }),
+      DEFAULT_BUYING_PROFILE,
+      asOf
+    );
+    expect(result.status).toBe("does_not_match");
+  });
+
   it("does not invent a confirmed match when a required field is unknown", () => {
     const result = classifyLead(
       baseLead({ engineIsCummins: null }),

@@ -12,21 +12,30 @@ Modern rebuild of [skltrucks.com](https://skltrucks.com/) built with **Next.js**
 
 ## Private truck sourcing (staff)
 
-Staff-only buying workspace at **`/admin/sourcing`** (same Supabase login as inventory admin). Leads and supplier contacts are **not** published to the public shop.
+Staff-only buying workspace at **`/admin/sourcing`**. Leads and supplier contacts are **not** published to the public shop.
+
+Access requires:
+1. A signed-in Supabase user
+2. Their email in the **`sourcing_authorized_staff`** table (RLS + `is_sourcing_staff()`)
+3. Optionally `SOURCING_STAFF_EMAILS` (comma-separated) for an app/middleware allowlist — defaults to `skltrucksllc@gmail.com`
+
+Do not rely on the `/admin` URL alone: every authenticated user is **not** automatically a sourcing user.
 
 ### Setup
 
 1. Ensure the base schema is applied (`supabase/schema.sql`)
-2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (authenticated-only RLS; no public read)
-3. Sign in at `/admin/login`, open **Sourcing**
-4. Optionally click **Import unverified seed research** to load the Sept 18 report as unverified seed (skips category-page auction rows as individual trucks)
+2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (idempotent / safe to re-run)
+3. Confirm staff emails in `sourcing_authorized_staff` (seeded with `skltrucksllc@gmail.com`)
+4. Sign in at `/admin/login`, open **Sourcing**
+5. Optionally click **Import unverified seed research**
 
 ### What it includes
 
-- Editable **buying profile** in the database (Cummins, automatic, 24/26/28′ box, GVWR strictly below 26,000, mileage, rolling 9-year age, liftgate preferred, 1,200 driving miles preferred, max price unset)
+- Editable **buying profile** in the database
 - Truck leads + supplier contacts with call notes and follow-up dates
-- Match classification: Confirmed match / Needs verification / Does not match / Out-of-range opportunity
-- Daily digest **preview** (no email send yet)
+- Match classification: Confirmed match / Needs verification / Does not match / Out-of-range opportunity (out-of-range only when all required specs are confirmed and pass)
+- Daily digest **preview** of new listings and listing-field changes only (staff notes / match recalcs excluded)
+- Scoped listing-ID uniqueness per seller/source; global VIN uniqueness
 
 ## Admin Inventory Management
 
