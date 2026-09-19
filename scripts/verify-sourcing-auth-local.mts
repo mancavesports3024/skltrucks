@@ -1,6 +1,8 @@
 /**
  * Local nonprod authorization checks against Supabase (no OpenAI).
  * Run: npx tsx --env-file=.env.local scripts/verify-sourcing-auth-local.mts
+ *
+ * Expects admin-aligned is_sourcing_staff() (authenticated role) + search lock RPCs.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -56,54 +58,41 @@ async function main() {
     });
   }
 
-  // 4) SQL: is_sourcing_staff false without matching active row (JWT outsider)
+  // 4) optional directory bootstrap row still present
   {
-    // Use service role to run raw check via RPC won't set JWT email.
-    // Verify inactive/missing row semantics with service + direct SQL via REST is limited;
-    // confirm function definition exists and staff row is active for bootstrap email.
     const { data: staff, error } = await serviceClient
       .from("sourcing_authorized_staff")
       .select("email, active")
       .eq("email", "skltrucksllc@gmail.com")
       .maybeSingle();
-    const ok = !error && staff?.active === true;
+    const ok = !error && staff?.email === "skltrucksllc@gmail.com";
     results.push({
-      name: "bootstrap staff row active",
+      name: "optional bootstrap staff directory row present",
       ok,
       detail: error?.message || JSON.stringify(staff),
     });
   }
 
-  // 5) deactivate probe email → ensure table supports active=false
+  // 5) lock RPCs exist (service role is not authenticated JWT → acquire returns false, no error)
   {
-    const probe = "rls-inactive-probe@example.com";
-    await serviceClient.from("sourcing_authorized_staff").upsert({
-      email: probe,
-      display_name: "Inactive Probe",
-      active: false,
-    });
-    const { data } = await serviceClient
-      .from("sourcing_authorized_staff")
-      .select("active")
-      .eq("email", probe)
-      .maybeSingle();
-    results.push({
-      name: "inactive staff row supported",
-      ok: data?.active === false,
-      detail: JSON.stringify(data),
-    });
-    await serviceClient.from("sourcing_authorized_staff").delete().eq("email", probe);
-  }
-
-  // 6) lock RPCs exist
-  {
-    const { error } = await serviceClient.rpc("try_acquire_sourcing_search_lock", {
+    const { data, error } = await serviceClient.rpc("try_acquire_sourcing_search_lock", {
       p_holder: "service-probe@example.com",
       p_ttl_seconds: 60,
     });
-    // service role JWT has no staff email → function should return false (not error)
+    const ok = !error && data === false;
     results.push({
-      name: "try_acquire_sourcing_search_lock callable",
+      name: "try_acquire_sourcing_search_lock callable (false without auth role)",
+      ok,
+      detail: error?.message || String(data),
+    });
+  }
+
+  {
+    const { error } = await serviceClient.rpc("release_sourcing_search_lock", {
+      p_holder: "service-probe@example.com",
+    });
+    results.push({
+      name: "release_sourcing_search_lock callable",
       ok: !error,
       detail: error?.message || "ok",
     });

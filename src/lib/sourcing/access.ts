@@ -1,7 +1,4 @@
-import {
-  isSourcingStaffAllowlistConfigured,
-  isSourcingStaffEmail,
-} from "@/lib/sourcing/staff";
+import { isSourcingStaffEmail } from "@/lib/sourcing/staff";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import type { User, SupabaseClient } from "@supabase/supabase-js";
@@ -11,18 +8,9 @@ export type SourcingAccess =
   | { ok: false; error: string; status: 401 | 403 };
 
 /**
- * Authorize private sourcing (/admin/sourcing only).
- *
- * Requires ALL of:
- * 1. Authenticated Supabase user
- * 2. Email present in SOURCING_STAFF_EMAILS (fail-closed if unset/empty)
- * 3. is_sourcing_staff() RPC true — active row in sourcing_authorized_staff
- *
- * Being an inventory /admin user alone is not enough.
- * Does not change authorization for the rest of /admin.
- *
- * SQL/RLS enforces the database staff row; the application additionally
- * requires the server-side environment allowlist.
+ * Authorize sourcing access for the signed-in admin user.
+ * Same bar as inventory: authenticated Supabase user.
+ * Optional SOURCING_STAFF_EMAILS can narrow further; RLS uses is_sourcing_staff().
  */
 export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isSupabaseConfigured()) {
@@ -38,15 +26,6 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
     return { ok: false, error: "Unauthorized", status: 401 };
   }
 
-  if (!isSourcingStaffAllowlistConfigured()) {
-    return {
-      ok: false,
-      error:
-        "Forbidden — SOURCING_STAFF_EMAILS is missing or empty. Sourcing authorizes nobody until it lists staff emails.",
-      status: 403,
-    };
-  }
-
   if (!isSourcingStaffEmail(user.email)) {
     return {
       ok: false,
@@ -55,6 +34,7 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
     };
   }
 
+  // Defense in depth: same rule as RLS (authenticated role after schema apply)
   const { data: isStaff, error } = await supabase.rpc("is_sourcing_staff");
   if (error) {
     console.error("[sourcing] is_sourcing_staff RPC:", error.message);
@@ -69,8 +49,7 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isStaff) {
     return {
       ok: false,
-      error:
-        "Forbidden — no active sourcing_authorized_staff row for this account.",
+      error: "Forbidden — sign in with an admin account to use private sourcing.",
       status: 403,
     };
   }
