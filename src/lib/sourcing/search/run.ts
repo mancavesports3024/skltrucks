@@ -12,14 +12,19 @@ import {
   candidateToContactInput,
   candidateToTruckLeadInput,
 } from "@/lib/sourcing/search/map-candidates";
-import { runInternetSearch } from "@/lib/sourcing/search/providers";
+import {
+  resolveSearchProviderId,
+  runInternetSearch,
+} from "@/lib/sourcing/search/providers";
+import {
+  buildFailedSearchReport,
+} from "@/lib/sourcing/search/provider-error";
 import {
   resolveSearchLockStore,
   SEARCH_ALREADY_RUNNING_MESSAGE,
   type SearchLockStore,
 } from "@/lib/sourcing/search/search-lock";
 import type { SearchRunReport } from "@/lib/sourcing/search/types";
-import { sanitizeProviderError } from "@/lib/sourcing/search/types";
 import {
   getBuyingProfile,
   getSupplierContacts,
@@ -81,6 +86,17 @@ export async function executeInternetSearchPilot(options?: {
   const lock = options?.lockStore ?? resolveSearchLockStore(access.supabase);
   const holderEmail = access.user.email ?? "";
 
+  // Resolve provider before any network call so failure reports never hardcode mock.
+  const resolvedProviderId = resolveSearchProviderId({
+    forceMock: options?.forceMock,
+  });
+  const resolvedModel =
+    resolvedProviderId === "openai"
+      ? process.env.OPENAI_SEARCH_MODEL?.trim() || "gpt-4o-mini"
+      : resolvedProviderId === "tavily"
+        ? "tavily"
+        : "mock";
+
   let search: SearchProviderResult;
   try {
     const locked = await runProviderSearchWithLock({
@@ -97,33 +113,12 @@ export async function executeInternetSearchPilot(options?: {
     }
     search = locked.search;
   } catch (e) {
-    const message = sanitizeProviderError(e);
-    const failedReport: SearchRunReport = {
-      status: "failed",
-      generatedAt: new Date().toISOString(),
-      buyingProfile: profile,
-      queriesExecuted: [],
-      sourcesSearched: [],
-      resultsExamined: 0,
-      newLeadsSaved: 0,
-      confirmedMatches: 0,
-      needsVerification: 0,
-      duplicatesOrRejected: 0,
-      contactsSaved: 0,
-      apiUsage: {
-        provider: "mock",
-        model: "none",
-        webSearchCalls: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        estimatedCostUsd: 0,
-        live: false,
-        creditsConsumed: 0,
-      },
-      errors: [message],
-      trucksSaved: [],
-      contactsFound: [],
-    };
+    const failedReport = buildFailedSearchReport({
+      profile,
+      error: e,
+      resolvedProviderId,
+      resolvedModel,
+    });
     await persistSearchRun(access.supabase, holderEmail, failedReport);
     return { report: failedReport };
   }
@@ -143,7 +138,7 @@ export async function executeInternetSearchPilot(options?: {
     duplicatesOrRejected: 0,
     contactsSaved: 0,
     apiUsage: search.usage,
-    errors: [],
+    errors: [...(search.stageErrors ?? [])],
     trucksSaved: [],
     contactsFound: [],
   };

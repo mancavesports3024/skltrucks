@@ -4,6 +4,7 @@
  */
 import { isIndividualListingUrl } from "@/lib/sourcing/search/map-candidates";
 import { applyDeterministicEngineIsCummins } from "@/lib/sourcing/search/deterministic-specs";
+import { parseModelJsonObject } from "@/lib/sourcing/search/json-safe";
 import type {
   ExtractedContactCandidate,
   ExtractedTruckCandidate,
@@ -73,16 +74,12 @@ function pickBool(obj: Record<string, unknown>, ...keys: string[]): boolean | nu
   return null;
 }
 
+/**
+ * Parse model JSON. Trailing commas outside strings may be cleaned once;
+ * comments, unquoted keys, and truncated JSON still fail (retry at provider layer).
+ */
 export function parseJsonObject(raw: string): Record<string, unknown> {
-  const trimmed = String(raw ?? "").trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const jsonText = fenced ? fenced[1].trim() : trimmed;
-  const start = jsonText.indexOf("{");
-  const end = jsonText.lastIndexOf("}");
-  if (start < 0 || end <= start) {
-    throw new Error("Model did not return JSON object.");
-  }
-  return JSON.parse(jsonText.slice(start, end + 1)) as Record<string, unknown>;
+  return parseModelJsonObject(raw).value;
 }
 
 export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
