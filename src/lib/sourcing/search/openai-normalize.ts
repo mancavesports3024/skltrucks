@@ -102,8 +102,11 @@ export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
     boxLengthEvidence: pickStr(t, "boxLengthEvidence", "box_length_evidence"),
     manufacturerGvwrLbs: pickNum(t, "manufacturerGvwrLbs", "manufacturer_gvwr_lbs", "gvwr"),
     listedWeightLbs: pickNum(t, "listedWeightLbs", "listed_weight_lbs"),
-    listedWeightTerm: (pickStr(t, "listedWeightTerm", "listed_weight_term") ||
-      "unknown") as "gvwr" | "gvw" | "unknown",
+    listedWeightTerm: (() => {
+      const raw = pickStr(t, "listedWeightTerm", "listed_weight_term").toLowerCase();
+      if (raw === "gvwr" || raw === "gvw") return raw;
+      return "unknown";
+    })(),
     gvwrEvidence: pickStr(t, "gvwrEvidence", "gvwr_evidence"),
     mileage: pickNum(t, "mileage", "miles"),
     hasLiftgate: pickBool(t, "hasLiftgate", "has_liftgate", "liftgate"),
