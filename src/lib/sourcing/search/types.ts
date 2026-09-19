@@ -14,6 +14,8 @@ export interface SearchApiUsage {
   creditsConsumed: number;
   searchesRun?: number;
   extractsRun?: number;
+  /** Formatting-only JSON retries performed (OpenAI). */
+  formatRetries?: number;
 }
 
 export interface ExtractedTruckCandidate {

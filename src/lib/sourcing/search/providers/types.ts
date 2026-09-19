@@ -7,6 +7,8 @@ export interface SearchProviderResult {
   usage: SearchApiUsage;
   rawText: string;
   queriesPlanned: string[];
+  /** Non-fatal stage errors (e.g. one inspect URL failed parse). */
+  stageErrors?: string[];
 }
 
 export interface SearchProviderOptions {
