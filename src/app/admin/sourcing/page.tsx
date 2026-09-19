@@ -127,6 +127,22 @@ export default async function SourcingOverviewPage() {
 
         <section className="border border-neutral-200 bg-white p-6">
           <div className="flex items-center justify-between gap-4">
+            <h2 className="font-bold">Internet search pilot</h2>
+            <Link
+              href="/admin/sourcing/search"
+              className="text-sm font-semibold text-[#fc0527] hover:underline"
+            >
+              Run search →
+            </Link>
+          </div>
+          <p className="mt-2 text-sm text-neutral-600">
+            Staff-only “Run search now” (no cron). Finds individual listings and seller call routes
+            from the active buying profile; results land here as private leads.
+          </p>
+        </section>
+
+        <section className="border border-neutral-200 bg-white p-6">
+          <div className="flex items-center justify-between gap-4">
             <h2 className="font-bold">Daily digest preview (last 24h)</h2>
             <Link
               href="/admin/sourcing/digest"

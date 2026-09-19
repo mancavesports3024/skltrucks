@@ -6,7 +6,8 @@ export type SourcingTab =
   | "contacts"
   | "profile"
   | "digest"
-  | "intake";
+  | "intake"
+  | "search";
 
 interface SourcingNavProps {
   active: SourcingTab;
@@ -14,6 +15,7 @@ interface SourcingNavProps {
 
 const TABS: { id: SourcingTab; label: string; href: string }[] = [
   { id: "overview", label: "Overview", href: "/admin/sourcing" },
+  { id: "search", label: "Search", href: "/admin/sourcing/search" },
   { id: "leads", label: "Truck leads", href: "/admin/sourcing/leads" },
   { id: "intake", label: "Intake", href: "/admin/sourcing/intake" },
   { id: "contacts", label: "Suppliers", href: "/admin/sourcing/contacts" },

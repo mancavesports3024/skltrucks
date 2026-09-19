@@ -34,6 +34,17 @@ Optional: set **`SOURCING_STAFF_EMAILS`** (comma-separated) to further restrict 
 - Daily digest **preview** of new listings, listing-field changes, and unchanged listings **seen again** (staff notes / match recalcs excluded)
 - Scoped listing-ID uniqueness per seller/source; global VIN uniqueness
 - **Staff-reviewed CSV intake** at `/admin/sourcing/intake` (pilot until a dealer feed/email/API is authorized) — see `docs/sourcing-intake-sources.md`
+- **Internet search pilot** at `/admin/sourcing/search` — staff “Run search now” (no cron) via OpenAI Responses `web_search`; see `docs/sourcing-internet-search-pilot.md`
+
+### Internet search pilot credentials
+
+| Variable | Notes |
+|---|---|
+| `OPENAI_API_KEY` | Server-only. Required for live search. |
+| `OPENAI_SEARCH_MODEL` | Optional; default `gpt-4o-mini` |
+| `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional; default `6` |
+
+No other web-search provider is configured in this repo. Estimated live cost ≈ **$0.04–$0.08 per run** (≈ $0.01 per web_search call + tokens). Without the key, use **Run mock search**.
 
 ## Admin Inventory Management
 
@@ -70,6 +81,10 @@ Your client can manage trucks at **`/admin`** — similar to the WordPress produ
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
    SUPABASE_SERVICE_ROLE_KEY=eyJ...
    NEXT_PUBLIC_SITE_URL=https://www.skltrucks.com
+   # Optional — internet search pilot (server-only, never NEXT_PUBLIC_)
+   # OPENAI_API_KEY=sk-...
+   # OPENAI_SEARCH_MODEL=gpt-4o-mini
+   # OPENAI_SEARCH_MAX_TOOL_CALLS=6
    ```
 
    `NEXT_PUBLIC_SITE_URL` is the **canonical public origin** (no trailing slash). Production must be `https://www.skltrucks.com`. It drives sitemap, robots, `metadataBase`, and per-page canonicals. Keep the apex→www 308; do **not** set this to `https://skltrucks.com`.

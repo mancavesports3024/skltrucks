@@ -39,6 +39,7 @@ function revalidateSourcing() {
   revalidatePath("/admin/sourcing/profile");
   revalidatePath("/admin/sourcing/digest");
   revalidatePath("/admin/sourcing/intake");
+  revalidatePath("/admin/sourcing/search");
 }
 
 export async function updateBuyingProfileAction(formData: FormData) {
@@ -352,4 +353,19 @@ export async function importCsvIntakeAction(formData: FormData) {
   if (error) return { error, report: null };
   revalidateSourcing();
   return { success: true, report };
+}
+
+/**
+ * Staff-only internet search pilot (no cron). Uses OpenAI web_search when
+ * OPENAI_API_KEY is set; otherwise forceMock / missing key → deterministic mock.
+ * API key never leaves the server.
+ */
+export async function runInternetSearchAction(forceMock = false) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null };
+
+  const { executeInternetSearchPilot } = await import("@/lib/sourcing/search/run");
+  const result = await executeInternetSearchPilot({ forceMock });
+  if (result.report) revalidateSourcing();
+  return result;
 }

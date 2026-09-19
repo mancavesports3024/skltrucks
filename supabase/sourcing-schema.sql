@@ -266,3 +266,38 @@ create policy "Sourcing staff manage truck leads"
   on public.sourcing_truck_leads for all
   using (public.is_sourcing_staff())
   with check (public.is_sourcing_staff());
+
+-- ---------------------------------------------------------------------------
+-- Internet search runs (nonprod pilot reports — no cron)
+-- ---------------------------------------------------------------------------
+create table if not exists public.sourcing_search_runs (
+  id uuid primary key default gen_random_uuid(),
+  status text not null default 'completed'
+    check (status in ('completed', 'partial', 'failed')),
+  buying_profile_snapshot jsonb not null default '{}'::jsonb,
+  queries text[] not null default '{}',
+  sources_searched text[] not null default '{}',
+  results_examined integer not null default 0,
+  new_leads integer not null default 0,
+  confirmed_matches integer not null default 0,
+  needs_verification integer not null default 0,
+  duplicates_or_rejected integer not null default 0,
+  contacts_saved integer not null default 0,
+  api_usage jsonb not null default '{}'::jsonb,
+  errors text[] not null default '{}',
+  report jsonb not null default '{}'::jsonb,
+  created_by_email text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists sourcing_search_runs_created_at_idx
+  on public.sourcing_search_runs (created_at desc);
+
+alter table public.sourcing_search_runs enable row level security;
+
+drop policy if exists "Sourcing staff manage search runs"
+  on public.sourcing_search_runs;
+create policy "Sourcing staff manage search runs"
+  on public.sourcing_search_runs for all
+  using (public.is_sourcing_staff())
+  with check (public.is_sourcing_staff());
