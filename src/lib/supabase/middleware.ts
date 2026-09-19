@@ -47,7 +47,12 @@ export async function updateSession(request: NextRequest) {
   if (isSourcingRoute && user && !isSourcingStaffEmail(user.email)) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
-    url.searchParams.set("error", "sourcing_forbidden");
+    // Distinguish empty/missing env vs email not on the list (still deny either way)
+    const allowlistConfigured = (process.env.SOURCING_STAFF_EMAILS ?? "").trim().length > 0;
+    url.searchParams.set(
+      "error",
+      allowlistConfigured ? "sourcing_forbidden_email" : "sourcing_forbidden_env"
+    );
     return NextResponse.redirect(url);
   }
 

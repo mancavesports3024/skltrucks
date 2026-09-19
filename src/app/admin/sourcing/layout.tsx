@@ -9,7 +9,13 @@ export default async function SourcingLayout({ children }: { children: React.Rea
   const access = await requireSourcingStaff();
   if (!access.ok) {
     if (access.status === 401) redirect("/admin/login");
-    redirect("/admin?error=sourcing_forbidden");
+    const reason =
+      access.error.includes("not available")
+        ? "sourcing_forbidden_schema"
+        : access.error.includes("sourcing_authorized_staff")
+          ? "sourcing_forbidden_db"
+          : "sourcing_forbidden_email";
+    redirect(`/admin?error=${reason}`);
   }
   return children;
 }
