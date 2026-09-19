@@ -14,17 +14,22 @@ Modern rebuild of [skltrucks.com](https://skltrucks.com/) built with **Next.js**
 
 Staff-only buying workspace at **`/admin/sourcing`**. Leads and supplier contacts are **not** published to the public shop.
 
-**Access matches inventory admin:** any signed-in Supabase Auth user (the same accounts that manage trucks at `/admin`). For a small SKL team, create each person as an Auth user — they get inventory and sourcing together.
+**Access is fail-closed for `/admin/sourcing` only** (inventory `/admin` is unchanged):
 
-Optional: set **`SOURCING_STAFF_EMAILS`** (comma-separated) to further restrict sourcing to a subset of admins. When unset/empty, all authenticated admins are allowed.
+1. Signed-in Supabase Auth user
+2. Email listed in server env **`SOURCING_STAFF_EMAILS`** (comma-separated). Missing/empty/malformed → **nobody** is authorized
+3. Matching **active** row in `sourcing_authorized_staff` (enforced by SQL `is_sourcing_staff()` / RLS)
+
+SQL/RLS uses the database authorization row; the application **additionally** requires the server-side environment allowlist. Being an authenticated inventory admin alone is **not** enough for sourcing.
 
 ### Setup
 
 1. Ensure the base schema is applied (`supabase/schema.sql`)
 2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (idempotent / safe to re-run)
-3. Create each teammate under Supabase → Authentication → Users (same as inventory admin)
-4. Sign in at `/admin/login`, open **Sourcing**
-5. Optionally use **Intake** CSV or **Import unverified seed research**
+3. Insert/activate each sourcing teammate in `sourcing_authorized_staff`
+4. Set **`SOURCING_STAFF_EMAILS`** on the server (Vercel / `.env.local`) to the same emails
+5. Sign in at `/admin/login`, open **Sourcing**
+6. Optionally use **Intake** CSV or **Import unverified seed research**
 
 ### What it includes
 

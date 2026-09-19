@@ -1,28 +1,41 @@
 /**
- * Sourcing uses the same access bar as inventory admin: any signed-in
- * Supabase Auth user. Optional SOURCING_STAFF_EMAILS can further restrict
- * (comma-separated); when unset/empty, all authenticated admins are allowed.
+ * Fail-closed sourcing email allowlist (application layer).
+ *
+ * SOURCING_STAFF_EMAILS must contain the user's normalized email.
+ * Missing, empty, or malformed env authorizes nobody.
+ * RLS/SQL uses sourcing_authorized_staff separately — both are required.
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
 ): string[] {
-  const parsed = (envValue ?? "")
+  if (envValue == null) return [];
+  const trimmed = String(envValue).trim();
+  if (!trimmed) return [];
+
+  const parsed = trimmed
     .split(/[,\s]+/)
     .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+    .filter((e) => e.includes("@") && e.length > 3);
 
   return [...new Set(parsed)];
 }
 
 /**
- * When SOURCING_STAFF_EMAILS is set, only those emails pass.
- * When unset/empty, any signed-in account with an email passes (same as /admin).
+ * True only when the email is explicitly listed in SOURCING_STAFF_EMAILS.
+ * Empty/unset allowlist → false (fail closed).
  */
 export function isSourcingStaffEmail(
   email: string | null | undefined,
   allowlist: string[] = getSourcingStaffAllowlist()
 ): boolean {
-  if (!email) return false;
-  if (allowlist.length === 0) return true;
+  if (!email || !String(email).trim()) return false;
+  if (allowlist.length === 0) return false;
   return allowlist.includes(email.trim().toLowerCase());
+}
+
+/** True when the env allowlist is configured with at least one valid email. */
+export function isSourcingStaffAllowlistConfigured(
+  envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
+): boolean {
+  return getSourcingStaffAllowlist(envValue).length > 0;
 }

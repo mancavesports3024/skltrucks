@@ -68,18 +68,27 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
                 <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> in the SQL
                 Editor (same project this site uses), then retry.
               </>
-            ) : error === "sourcing_forbidden_email" ? (
+            ) : error === "sourcing_forbidden_email" || error === "sourcing_forbidden_env" ? (
               <>
-                This deployment has <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>{" "}
-                set, and your signed-in account is not on that list. Add the email or clear the
-                variable so all admin logins can use sourcing.
+                Private sourcing requires your email in{" "}
+                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> (missing/empty
+                authorizes nobody) and an active{" "}
+                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> row. Inventory
+                admin access alone is not enough.
+              </>
+            ) : error === "sourcing_forbidden_db" ? (
+              <>
+                Your account is on the env allowlist, but there is no active{" "}
+                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> row for this
+                email. Add one in Supabase, then retry.
               </>
             ) : (
               <>
-                Private sourcing uses the same admin login as inventory. Sign in with a Supabase
-                Auth account that can open <code className="bg-amber-100 px-1">/admin</code>, and
-                ensure <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> is
-                applied to this project.
+                Private sourcing is fail-closed: set{" "}
+                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>, apply{" "}
+                <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code>, and ensure
+                an active staff row. Inventory <code className="bg-amber-100 px-1">/admin</code>{" "}
+                access alone is not enough.
               </>
             )}
           </div>

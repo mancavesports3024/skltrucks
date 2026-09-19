@@ -1,35 +1,32 @@
 -- Private truck sourcing tool schema
--- Run in Supabase SQL Editor AFTER production use (after schema.sql).
+-- Run in Supabase SQL Editor BEFORE production use (after schema.sql).
 -- Safe for existing DBs: uses IF NOT EXISTS / DROP IF EXISTS / additive ALTERs.
--- No public read policies. Access matches inventory admin: any authenticated
--- Supabase Auth user (the same accounts that can manage trucks at /admin).
+-- No public read policies.
+--
+-- Authorization (fail-closed):
+--   SQL/RLS: is_sourcing_staff() requires an *active* row in
+--   sourcing_authorized_staff matching auth.jwt() email.
+--   Application: additionally requires SOURCING_STAFF_EMAILS (server env)
+--   to list that same email. Missing/empty env authorizes nobody at the app layer.
+--   Being an authenticated /admin user alone is not enough for /admin/sourcing.
 
 -- ---------------------------------------------------------------------------
--- Optional staff directory (not required for access; kept for notes / future use)
+-- Authorized sourcing staff (required for RLS + is_sourcing_staff)
 -- ---------------------------------------------------------------------------
 create table if not exists public.sourcing_authorized_staff (
   email text primary key,
   display_name text not null default '',
+  active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
+-- Additive for databases that applied an earlier draft without active
+alter table public.sourcing_authorized_staff
+  add column if not exists active boolean not null default true;
+
 alter table public.sourcing_authorized_staff enable row level security;
 
--- Authenticated admins may read the directory
-drop policy if exists "Staff read own sourcing allowlist row"
-  on public.sourcing_authorized_staff;
-drop policy if exists "Authenticated read sourcing staff directory"
-  on public.sourcing_authorized_staff;
-create policy "Authenticated read sourcing staff directory"
-  on public.sourcing_authorized_staff for select
-  using (auth.role() = 'authenticated');
-
--- Bootstrap SKL primary account (informational)
-insert into public.sourcing_authorized_staff (email, display_name)
-values ('skltrucksllc@gmail.com', 'SKL Trucks')
-on conflict (email) do nothing;
-
--- Same bar as inventory: signed-in Auth user (auth.role() = authenticated).
+-- Fail-closed: authenticated JWT email must match an active authorized-staff row.
 create or replace function public.is_sourcing_staff()
 returns boolean
 language sql
@@ -37,12 +34,129 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce(auth.role() = 'authenticated', false);
+  select exists (
+    select 1
+    from public.sourcing_authorized_staff s
+    where s.active = true
+      and lower(btrim(s.email)) = lower(btrim(coalesce(auth.jwt() ->> 'email', '')))
+      and coalesce(auth.role() = 'authenticated', false)
+  );
 $$;
 
 revoke all on function public.is_sourcing_staff() from public;
 grant execute on function public.is_sourcing_staff() to authenticated;
 grant execute on function public.is_sourcing_staff() to anon;
+
+drop policy if exists "Staff read own sourcing allowlist row"
+  on public.sourcing_authorized_staff;
+drop policy if exists "Authenticated read sourcing staff directory"
+  on public.sourcing_authorized_staff;
+drop policy if exists "Sourcing staff read authorized staff directory"
+  on public.sourcing_authorized_staff;
+-- Directory readable only by users who already pass is_sourcing_staff()
+-- (function is SECURITY DEFINER so the email lookup itself is not blocked by RLS).
+create policy "Sourcing staff read authorized staff directory"
+  on public.sourcing_authorized_staff for select
+  using (public.is_sourcing_staff());
+
+-- Bootstrap SKL primary account (active). Still requires SOURCING_STAFF_EMAILS at app layer.
+insert into public.sourcing_authorized_staff (email, display_name, active)
+values ('skltrucksllc@gmail.com', 'SKL Trucks', true)
+on conflict (email) do update
+  set active = true,
+      display_name = excluded.display_name;
+
+-- ---------------------------------------------------------------------------
+-- Single-flight lock for internet search (prevents overlapping paid provider runs)
+-- ---------------------------------------------------------------------------
+create table if not exists public.sourcing_search_lock (
+  id text primary key default 'global' check (id = 'global'),
+  holder_email text not null default '',
+  acquired_at timestamptz,
+  expires_at timestamptz not null default '1970-01-01T00:00:00Z'::timestamptz
+);
+
+insert into public.sourcing_search_lock (id, holder_email, expires_at)
+values ('global', '', '1970-01-01T00:00:00Z'::timestamptz)
+on conflict (id) do nothing;
+
+alter table public.sourcing_search_lock enable row level security;
+
+drop policy if exists "Sourcing staff read search lock"
+  on public.sourcing_search_lock;
+create policy "Sourcing staff read search lock"
+  on public.sourcing_search_lock for select
+  using (public.is_sourcing_staff());
+
+create or replace function public.try_acquire_sourcing_search_lock(
+  p_holder text,
+  p_ttl_seconds integer default 600
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated integer := 0;
+  ttl integer := greatest(60, least(coalesce(p_ttl_seconds, 600), 3600));
+  holder text := lower(btrim(coalesce(p_holder, '')));
+begin
+  if holder = '' then
+    return false;
+  end if;
+  if not public.is_sourcing_staff() then
+    return false;
+  end if;
+
+  update public.sourcing_search_lock
+  set
+    holder_email = holder,
+    acquired_at = now(),
+    expires_at = now() + make_interval(secs => ttl)
+  where id = 'global'
+    and (
+      expires_at <= now()
+      or holder_email = ''
+      or lower(btrim(holder_email)) = holder
+    );
+
+  get diagnostics updated = row_count;
+  return updated = 1;
+end;
+$$;
+
+create or replace function public.release_sourcing_search_lock(p_holder text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated integer := 0;
+  holder text := lower(btrim(coalesce(p_holder, '')));
+begin
+  if holder = '' then
+    return false;
+  end if;
+
+  update public.sourcing_search_lock
+  set
+    holder_email = '',
+    acquired_at = null,
+    expires_at = '1970-01-01T00:00:00Z'::timestamptz
+  where id = 'global'
+    and lower(btrim(holder_email)) = holder;
+
+  get diagnostics updated = row_count;
+  return updated = 1;
+end;
+$$;
+
+revoke all on function public.try_acquire_sourcing_search_lock(text, integer) from public;
+revoke all on function public.release_sourcing_search_lock(text) from public;
+grant execute on function public.try_acquire_sourcing_search_lock(text, integer) to authenticated;
+grant execute on function public.release_sourcing_search_lock(text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Buying profile

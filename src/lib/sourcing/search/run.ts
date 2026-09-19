@@ -13,6 +13,11 @@ import {
   candidateToTruckLeadInput,
 } from "@/lib/sourcing/search/map-candidates";
 import { runInternetSearch } from "@/lib/sourcing/search/providers";
+import {
+  resolveSearchLockStore,
+  SEARCH_ALREADY_RUNNING_MESSAGE,
+  type SearchLockStore,
+} from "@/lib/sourcing/search/search-lock";
 import type { SearchRunReport } from "@/lib/sourcing/search/types";
 import { sanitizeProviderError } from "@/lib/sourcing/search/types";
 import {
@@ -22,14 +27,49 @@ import {
   upsertSupplierContact,
 } from "@/lib/sourcing/db";
 import { truckLeadInputToRow } from "@/lib/sourcing/mappers";
-import type { TruckLead } from "@/types/sourcing";
+import type { BuyingProfile, TruckLead } from "@/types/sourcing";
+import type { SearchProviderResult } from "@/lib/sourcing/search/providers/types";
+
+/**
+ * Acquire the single-flight search lock, run the provider, always release.
+ * Blocked attempts make zero provider calls.
+ */
+export async function runProviderSearchWithLock(options: {
+  lock: SearchLockStore;
+  holderEmail: string;
+  runSearch: () => Promise<SearchProviderResult>;
+}): Promise<{ error?: string; search?: SearchProviderResult }> {
+  const acquired = await options.lock.tryAcquire(options.holderEmail);
+  if (!acquired.ok) {
+    return {
+      error:
+        acquired.reason === "already_running"
+          ? SEARCH_ALREADY_RUNNING_MESSAGE
+          : acquired.message || SEARCH_ALREADY_RUNNING_MESSAGE,
+    };
+  }
+  try {
+    const search = await options.runSearch();
+    return { search };
+  } finally {
+    await options.lock.release(options.holderEmail);
+  }
+}
 
 /**
  * Execute one internet search pilot run (no cron).
  * Uses DB buying profile + resolved provider (Tavily → OpenAI → mock).
+ * Acquires a single-flight lock before any provider call.
  */
 export async function executeInternetSearchPilot(options?: {
   forceMock?: boolean;
+  /** Test-only lock store override (also via setSearchLockStoreForTests). */
+  lockStore?: SearchLockStore;
+  /** Test-only provider runner override. */
+  runSearch?: (
+    profile: BuyingProfile,
+    opts?: { forceMock?: boolean }
+  ) => Promise<SearchProviderResult>;
 }): Promise<{ error?: string; report?: SearchRunReport }> {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
@@ -38,12 +78,27 @@ export async function executeInternetSearchPilot(options?: {
   const existingLeads = await getTruckLeads();
   const existingContacts = await getSupplierContacts();
 
-  let search;
+  const lock = options?.lockStore ?? resolveSearchLockStore(access.supabase);
+  const holderEmail = access.user.email ?? "";
+
+  let search: SearchProviderResult;
   try {
-    search = await runInternetSearch(profile, { forceMock: options?.forceMock });
+    const locked = await runProviderSearchWithLock({
+      lock,
+      holderEmail,
+      runSearch: () =>
+        options?.runSearch
+          ? options.runSearch(profile, { forceMock: options?.forceMock })
+          : runInternetSearch(profile, { forceMock: options?.forceMock }),
+    });
+
+    if (locked.error || !locked.search) {
+      return { error: locked.error || SEARCH_ALREADY_RUNNING_MESSAGE };
+    }
+    search = locked.search;
   } catch (e) {
     const message = sanitizeProviderError(e);
-    const report: SearchRunReport = {
+    const failedReport: SearchRunReport = {
       status: "failed",
       generatedAt: new Date().toISOString(),
       buyingProfile: profile,
@@ -69,8 +124,8 @@ export async function executeInternetSearchPilot(options?: {
       trucksSaved: [],
       contactsFound: [],
     };
-    await persistSearchRun(access.supabase, access.user.email ?? "", report);
-    return { report };
+    await persistSearchRun(access.supabase, holderEmail, failedReport);
+    return { report: failedReport };
   }
 
   const report: SearchRunReport = {

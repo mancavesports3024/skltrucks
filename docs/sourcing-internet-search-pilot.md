@@ -21,8 +21,11 @@ Code entry: `src/lib/sourcing/search/providers/` — `runInternetSearch()` resol
 | `OPENAI_SEARCH_MODEL` | Optional | Default `gpt-4o-mini` |
 | `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional | Default `6` |
 | `SOURCING_SEARCH_PROVIDER` | Optional | Force `tavily` \| `openai` \| `mock` when that provider is configured |
+| `SOURCING_STAFF_EMAILS` | **Required for sourcing** | Fail-closed allowlist; missing/empty authorizes nobody |
 
 Never put these in `NEXT_PUBLIC_*`, client components, logs, test output, or error messages.
+
+Only one staff search may run at a time (server-side lock). A second concurrent attempt returns “search already running” with **zero** provider calls.
 
 ## Tavily credit budget (per staff run)
 
@@ -36,7 +39,9 @@ The search-run report shows **provider** and **credits consumed**.
 
 ## Schema
 
-Re-apply `supabase/sourcing-schema.sql` so `sourcing_search_runs` exists (idempotent). Do **not** treat that as a production migration / deploy step for the pilot itself.
+Re-apply `supabase/sourcing-schema.sql` so `sourcing_search_runs`, fail-closed `is_sourcing_staff()`, and `sourcing_search_lock` exist (idempotent).
+
+SQL/RLS uses the database `sourcing_authorized_staff` row; the application additionally requires `SOURCING_STAFF_EMAILS`.
 
 ## Success criteria
 
