@@ -51,7 +51,7 @@ function countWebSearchCalls(response: OpenAI.Responses.Response): number {
 }
 
 export function parseSearchPayloadJson(raw: string): SearchModelPayload {
-  const trimmed = raw.trim();
+  const trimmed = String(raw ?? "").trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonText = fenced ? fenced[1].trim() : trimmed;
   const start = jsonText.indexOf("{");
@@ -59,12 +59,120 @@ export function parseSearchPayloadJson(raw: string): SearchModelPayload {
   if (start < 0 || end <= start) {
     throw new Error("Model did not return JSON object.");
   }
-  const parsed = JSON.parse(jsonText.slice(start, end + 1)) as SearchModelPayload;
+  const parsed = JSON.parse(jsonText.slice(start, end + 1)) as Record<string, unknown>;
+  const rawTrucks = Array.isArray(parsed.trucks) ? parsed.trucks : [];
+  const rawContacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
+
+  const asRecord = (v: unknown): Record<string, unknown> =>
+    v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+
+  const pickStr = (obj: Record<string, unknown>, ...keys: string[]): string => {
+    for (const k of keys) {
+      const v = obj[k];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+
+  const pickNum = (obj: Record<string, unknown>, ...keys: string[]): number | null => {
+    for (const k of keys) {
+      const v = obj[k];
+      if (v == null || v === "") continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+
+  const pickBool = (obj: Record<string, unknown>, ...keys: string[]): boolean | null => {
+    for (const k of keys) {
+      const v = obj[k];
+      if (v === true || v === false) return v;
+      if (typeof v === "string") {
+        const s = v.trim().toLowerCase();
+        if (s === "true" || s === "yes") return true;
+        if (s === "false" || s === "no") return false;
+      }
+    }
+    return null;
+  };
+
+  const trucks = rawTrucks.map((item) => {
+    const t = asRecord(item);
+    const listingUrl = pickStr(t, "listingUrl", "listing_url", "url", "sourceUrl", "source_url");
+    return {
+      listingUrl,
+      sourceName: pickStr(t, "sourceName", "source_name", "source"),
+      seller: pickStr(t, "seller", "dealer", "company"),
+      stockNumber: pickStr(t, "stockNumber", "stock_number", "stock"),
+      vin: pickStr(t, "vin", "VIN"),
+      year: pickNum(t, "year"),
+      makeModel: pickStr(t, "makeModel", "make_model", "model", "make"),
+      engine: pickStr(t, "engine"),
+      engineIsCummins: pickBool(t, "engineIsCummins", "engine_is_cummins"),
+      engineEvidence: pickStr(t, "engineEvidence", "engine_evidence"),
+      transmission: pickStr(t, "transmission"),
+      transmissionIsAutomatic: pickBool(
+        t,
+        "transmissionIsAutomatic",
+        "transmission_is_automatic"
+      ),
+      transmissionEvidence: pickStr(t, "transmissionEvidence", "transmission_evidence"),
+      boxLengthFt: pickNum(t, "boxLengthFt", "box_length_ft", "boxLength"),
+      boxLengthEvidence: pickStr(t, "boxLengthEvidence", "box_length_evidence"),
+      manufacturerGvwrLbs: pickNum(
+        t,
+        "manufacturerGvwrLbs",
+        "manufacturer_gvwr_lbs",
+        "gvwr"
+      ),
+      listedWeightLbs: pickNum(t, "listedWeightLbs", "listed_weight_lbs"),
+      listedWeightTerm: (pickStr(t, "listedWeightTerm", "listed_weight_term") ||
+        "unknown") as "gvwr" | "gvw" | "unknown",
+      gvwrEvidence: pickStr(t, "gvwrEvidence", "gvwr_evidence"),
+      mileage: pickNum(t, "mileage", "miles"),
+      hasLiftgate: pickBool(t, "hasLiftgate", "has_liftgate", "liftgate"),
+      askingPrice: pickNum(t, "askingPrice", "asking_price", "price"),
+      auctionCurrentBid: pickNum(t, "auctionCurrentBid", "auction_current_bid"),
+      location: pickStr(t, "location"),
+      drivingDistanceMiles: pickNum(t, "drivingDistanceMiles", "driving_distance_miles"),
+      distanceIsEstimate: pickBool(t, "distanceIsEstimate", "distance_is_estimate") !== false,
+      phone: pickStr(t, "phone", "telephone", "tel"),
+      contactName: pickStr(t, "contactName", "contact_name"),
+      contactRole: pickStr(t, "contactRole", "contact_role", "role"),
+      evidenceUrl: pickStr(t, "evidenceUrl", "evidence_url") || listingUrl,
+      notes: pickStr(t, "notes"),
+    };
+  });
+
+  const contacts = rawContacts.map((item) => {
+    const c = asRecord(item);
+    return {
+      company: pickStr(c, "company", "seller", "dealer"),
+      contactName: pickStr(c, "contactName", "contact_name", "name"),
+      role: pickStr(c, "role", "contactRole", "contact_role"),
+      phone: pickStr(c, "phone", "telephone", "tel"),
+      email: pickStr(c, "email"),
+      sourceUrl: pickStr(c, "sourceUrl", "source_url", "url"),
+      supplierType: pickStr(c, "supplierType", "supplier_type"),
+      evidenceQuote: pickStr(c, "evidenceQuote", "evidence_quote"),
+      notes: pickStr(c, "notes"),
+    };
+  });
+
   return {
-    trucks: Array.isArray(parsed.trucks) ? parsed.trucks : [],
-    contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
-    sourcesConsulted: Array.isArray(parsed.sourcesConsulted) ? parsed.sourcesConsulted : [],
-    queriesUsed: Array.isArray(parsed.queriesUsed) ? parsed.queriesUsed : [],
+    trucks,
+    contacts,
+    sourcesConsulted: Array.isArray(parsed.sourcesConsulted)
+      ? parsed.sourcesConsulted.map(String)
+      : Array.isArray(parsed.sources_consulted)
+        ? (parsed.sources_consulted as unknown[]).map(String)
+        : [],
+    queriesUsed: Array.isArray(parsed.queriesUsed)
+      ? parsed.queriesUsed.map(String)
+      : Array.isArray(parsed.queries_used)
+        ? (parsed.queries_used as unknown[]).map(String)
+        : [],
     notes: String(parsed.notes ?? ""),
   };
 }

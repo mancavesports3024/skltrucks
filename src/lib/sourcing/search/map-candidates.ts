@@ -36,7 +36,7 @@ export function isBlockedListingHost(hostname: string): boolean {
 
 /** Reject category/search pages that are not individual vehicle URLs. */
 export function isIndividualListingUrl(url: string): boolean {
-  const trimmed = url.trim();
+  const trimmed = (url ?? "").trim();
   if (!trimmed) return false;
   let parsed: URL;
   try {
@@ -83,6 +83,12 @@ export function isIndividualListingUrl(url: string): boolean {
 export function candidateToTruckLeadInput(
   t: ExtractedTruckCandidate
 ): { input: TruckLeadInput; rejectReason?: string } {
+  if (!t?.listingUrl || !String(t.listingUrl).trim()) {
+    return {
+      input: {} as TruckLeadInput,
+      rejectReason: "Missing individual listing URL.",
+    };
+  }
   if (!isIndividualListingUrl(t.listingUrl)) {
     return {
       input: {} as TruckLeadInput,
@@ -102,14 +108,14 @@ export function candidateToTruckLeadInput(
     evidence,
   });
 
-  const seller = (t.seller || t.sourceName || "").trim();
-  const sourceUrl = t.listingUrl.trim();
+  const seller = String(t.seller || t.sourceName || "").trim();
+  const sourceUrl = String(t.listingUrl).trim();
   const sourceScope = buildSourceScope({
     seller,
     sourceUrl,
     sourceScope: t.sourceName,
   });
-  const stockNumber = (t.stockNumber || "").trim();
+  const stockNumber = String(t.stockNumber || "").trim();
   const sourceListingId = buildSourceListingId({
     sourceListingId: stockNumber,
     stockNumber,
@@ -219,8 +225,8 @@ export function candidateToContactInput(
     notes: string;
   }
 ): { input: SupplierContactInput; rejectReason?: string } {
-  const phone = (c.phone || "").trim();
-  const company = (c.company || "").trim();
+  const phone = String(c.phone || "").trim();
+  const company = String(c.company || "").trim();
   if (!company) {
     return { input: {} as SupplierContactInput, rejectReason: "Missing company name." };
   }
@@ -233,12 +239,12 @@ export function candidateToContactInput(
 
   const input: SupplierContactInput = {
     company,
-    contactName: (c.contactName || "").trim(),
-    role: (c.role || "").trim(),
+    contactName: String(c.contactName || "").trim(),
+    role: String(c.role || "").trim(),
     phone,
-    email: (c.email || "").trim(),
-    sourceUrl: (c.sourceUrl || "").trim(),
-    supplierType: (c.supplierType || "").trim() || "Web search",
+    email: String(c.email || "").trim(),
+    sourceUrl: String(c.sourceUrl || "").trim(),
+    supplierType: String(c.supplierType || "").trim() || "Web search",
     dealerWholesaleStatus: "",
     lastContactDate: null,
     nextFollowUpDate: null,

@@ -126,10 +126,10 @@ export function estimateTavilyCostUsd(credits: number): number {
 
 export function emptySpecEvidenceFromCandidate(t: ExtractedTruckCandidate): SpecEvidence {
   return {
-    engine: (t.engineEvidence || "").trim(),
-    transmission: (t.transmissionEvidence || "").trim(),
-    boxLength: (t.boxLengthEvidence || "").trim(),
-    gvwr: (t.gvwrEvidence || "").trim(),
+    engine: String(t.engineEvidence || "").trim(),
+    transmission: String(t.transmissionEvidence || "").trim(),
+    boxLength: String(t.boxLengthEvidence || "").trim(),
+    gvwr: String(t.gvwrEvidence || "").trim(),
   };
 }
 
