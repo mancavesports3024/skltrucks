@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/app/admin/actions";
 
-export type AdminTab = "inventory" | "homepage" | "account";
+export type AdminTab = "inventory" | "homepage" | "sourcing" | "account";
 
 interface AdminHeaderProps {
   activeTab: AdminTab;
@@ -11,6 +11,7 @@ export default function AdminHeader({ activeTab }: AdminHeaderProps) {
   const tabs: { id: AdminTab; label: string; href: string }[] = [
     { id: "inventory", label: "Inventory", href: "/admin" },
     { id: "homepage", label: "Homepage", href: "/admin?tab=homepage" },
+    { id: "sourcing", label: "Sourcing", href: "/admin/sourcing" },
     { id: "account", label: "Account", href: "/admin?tab=account" },
   ];
 
@@ -20,7 +21,7 @@ export default function AdminHeader({ activeTab }: AdminHeaderProps) {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg font-bold sm:text-xl">SKL Trucks Admin</h1>
-            <p className="text-sm text-neutral-400">Manage inventory and homepage</p>
+            <p className="text-sm text-neutral-400">Manage inventory, homepage, and private sourcing</p>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/" target="_blank" className="flex min-h-11 items-center text-sm hover:text-[#fc0527]">

@@ -10,6 +10,49 @@ Modern rebuild of [skltrucks.com](https://skltrucks.com/) built with **Next.js**
 - Contact, financing, and sell-my-truck forms
 - **Admin panel** at `/admin` for your client to add, edit, and delete inventory
 
+## Private truck sourcing (staff)
+
+Staff-only buying workspace at **`/admin/sourcing`**. Leads and supplier contacts are **not** published to the public shop.
+
+**Access is fail-closed for `/admin/sourcing` only** (inventory `/admin` is unchanged):
+
+1. Signed-in Supabase Auth user
+2. Email listed in server env **`SOURCING_STAFF_EMAILS`** (comma-separated). Missing/empty/malformed → **nobody** is authorized
+3. Matching **active** row in `sourcing_authorized_staff` (enforced by SQL `is_sourcing_staff()` / RLS)
+
+SQL/RLS uses the database authorization row; the application **additionally** requires the server-side environment allowlist. Being an authenticated inventory admin alone is **not** enough for sourcing.
+
+### Setup
+
+1. Ensure the base schema is applied (`supabase/schema.sql`)
+2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (idempotent / safe to re-run)
+3. Insert/activate each sourcing teammate in `sourcing_authorized_staff`
+4. Set **`SOURCING_STAFF_EMAILS`** on the server (Vercel / `.env.local`) to the same emails
+5. Sign in at `/admin/login`, open **Sourcing**
+6. Optionally use **Intake** CSV or **Import unverified seed research**
+
+### What it includes
+
+- Editable **buying profile** in the database
+- Truck leads + supplier contacts with call notes and follow-up dates
+- Match classification: Confirmed match / Needs verification / Does not match / Out-of-range opportunity (out-of-range only when all required specs are confirmed and pass)
+- Daily digest **preview** of new listings, listing-field changes, and unchanged listings **seen again** (staff notes / match recalcs excluded)
+- Scoped listing-ID uniqueness per seller/source; global VIN uniqueness
+- **Staff-reviewed CSV intake** at `/admin/sourcing/intake` (pilot until a dealer feed/email/API is authorized) — see `docs/sourcing-intake-sources.md`
+- **Internet search pilot** at `/admin/sourcing/search` — staff “Run search now” (no cron). Preferred live provider: **Tavily**; OpenAI optional; mock for tests. See `docs/sourcing-internet-search-pilot.md`.
+
+### Internet search pilot credentials
+
+| Variable | Notes |
+|---|---|
+| `TAVILY_API_KEY` | **Server-only.** Required for the initial live pilot. |
+| `OPENAI_API_KEY` | Optional later / fallback if Tavily unset. |
+| `SOURCING_SEARCH_PROVIDER` | Optional: `tavily` \| `openai` \| `mock` |
+| `OPENAI_SEARCH_MODEL` | Optional; default `gpt-4o-mini` |
+| `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional; default `6` |
+
+Tavily basic search ≈ 1 credit/request; basic extract ≈ 1 credit per 5 URLs. Each staff run is capped at **≤20 credits**. Without a live key, use **Run mock search**.
+
 ## Admin Inventory Management
 
 Your client can manage trucks at **`/admin`** — similar to the WordPress product admin they used before, but built into this site.
@@ -45,6 +88,12 @@ Your client can manage trucks at **`/admin`** — similar to the WordPress produ
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
    SUPABASE_SERVICE_ROLE_KEY=eyJ...
    NEXT_PUBLIC_SITE_URL=https://www.skltrucks.com
+   # Optional — internet search pilot (server-only, never NEXT_PUBLIC_)
+   # TAVILY_API_KEY=tvly-...
+   # OPENAI_API_KEY=sk-...
+   # SOURCING_SEARCH_PROVIDER=tavily
+   # OPENAI_SEARCH_MODEL=gpt-4o-mini
+   # OPENAI_SEARCH_MAX_TOOL_CALLS=6
    ```
 
    `NEXT_PUBLIC_SITE_URL` is the **canonical public origin** (no trailing slash). Production must be `https://www.skltrucks.com`. It drives sitemap, robots, `metadataBase`, and per-page canonicals. Keep the apex→www 308; do **not** set this to `https://skltrucks.com`.

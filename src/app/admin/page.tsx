@@ -10,7 +10,7 @@ import { getSiteContentAdmin } from "@/lib/site-content";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 interface AdminPageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; error?: string }>;
 }
 
 function getActiveTab(tab?: string): AdminTab {
@@ -20,7 +20,7 @@ function getActiveTab(tab?: string): AdminTab {
 }
 
 export default async function AdminDashboard({ searchParams }: AdminPageProps) {
-  const { tab } = await searchParams;
+  const { tab, error } = await searchParams;
   const activeTab = getActiveTab(tab);
   const dbReady = isSupabaseConfigured();
 
@@ -56,6 +56,43 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
       <AdminHeader activeTab="inventory" />
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
+        {(error === "sourcing_forbidden" ||
+          error === "sourcing_forbidden_env" ||
+          error === "sourcing_forbidden_email" ||
+          error === "sourcing_forbidden_db" ||
+          error === "sourcing_forbidden_schema") && (
+          <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            {error === "sourcing_forbidden_schema" ? (
+              <>
+                Sourcing tables are not available in this Supabase project yet. Apply{" "}
+                <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> in the SQL
+                Editor (same project this site uses), then retry.
+              </>
+            ) : error === "sourcing_forbidden_email" || error === "sourcing_forbidden_env" ? (
+              <>
+                Private sourcing requires your email in{" "}
+                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> (missing/empty
+                authorizes nobody) and an active{" "}
+                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> row. Inventory
+                admin access alone is not enough.
+              </>
+            ) : error === "sourcing_forbidden_db" ? (
+              <>
+                Your account is on the env allowlist, but there is no active{" "}
+                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> row for this
+                email. Add one in Supabase, then retry.
+              </>
+            ) : (
+              <>
+                Private sourcing is fail-closed: set{" "}
+                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>, apply{" "}
+                <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code>, and ensure
+                an active staff row. Inventory <code className="bg-amber-100 px-1">/admin</code>{" "}
+                access alone is not enough.
+              </>
+            )}
+          </div>
+        )}
         {!dbReady && (
           <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
             <strong>Database not connected.</strong> Add Supabase environment variables to enable

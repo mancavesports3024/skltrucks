@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isSourcingStaffEmail } from "@/lib/sourcing/staff";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -30,6 +31,7 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
   const isAdminApiRoute = request.nextUrl.pathname.startsWith("/api/admin");
   const isLoginPage = request.nextUrl.pathname === "/admin/login";
+  const isSourcingRoute = request.nextUrl.pathname.startsWith("/admin/sourcing");
 
   if (isAdminApiRoute && !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,6 +40,14 @@ export async function updateSession(request: NextRequest) {
   if (isAdminRoute && !isLoginPage && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Optional extra gate: only when SOURCING_STAFF_EMAILS is explicitly set
+  if (isSourcingRoute && user && !isSourcingStaffEmail(user.email)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    url.searchParams.set("error", "sourcing_forbidden_email");
     return NextResponse.redirect(url);
   }
 

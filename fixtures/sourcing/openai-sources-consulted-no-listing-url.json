@@ -1,0 +1,65 @@
+{
+  "_fixtureNote": "Sanitized reconstruction of the 2026-09-19 live OpenAI failure: sourcesConsulted held individual listing URLs, but truck objects lacked listingUrl and contacts lacked company/sourceUrl. Never zip sourcesConsulted into trucks by array index.",
+  "trucks": [
+    {
+      "location": "Denver, CO",
+      "year": null,
+      "makeModel": "",
+      "engine": "",
+      "engineIsCummins": null,
+      "engineEvidence": "",
+      "transmission": "",
+      "transmissionIsAutomatic": null,
+      "transmissionEvidence": "",
+      "boxLengthFt": null,
+      "boxLengthEvidence": "",
+      "manufacturerGvwrLbs": null,
+      "listedWeightLbs": null,
+      "listedWeightTerm": "unknown",
+      "gvwrEvidence": "",
+      "mileage": null,
+      "hasLiftgate": null,
+      "askingPrice": null,
+      "auctionCurrentBid": null,
+      "phone": "",
+      "seller": "",
+      "stockNumber": "",
+      "vin": ""
+    },
+    {
+      "location": "Hobart, WI"
+    },
+    {
+      "location": "Englewood, CO"
+    },
+    {
+      "location": "Miami, FL"
+    },
+    {
+      "location": "Miami, FL"
+    }
+  ],
+  "contacts": [
+    {
+      "phone": "(303) 261-9000"
+    },
+    {
+      "phone": "(833) 265-6113"
+    },
+    {},
+    {
+      "phone": "(877) 889-2074"
+    }
+  ],
+  "sourcesConsulted": [
+    "https://www.stapletonmotors.com/inventory/2019-kenworth-t270-/917966",
+    "https://www.nationalequipmentregistry.com/listings/9498567-used-2017-freightliner-m60-box-truck-cummins-diesel-automatic-26-box-electric-liftgate-under-cdl",
+    "https://www.dastrucks.net/inventory/2020-international-mv607/1088433",
+    "https://www.truckandvanoutlet.com/for-sale/2020-international-mv607-26-box-truck-with-liftgate-cummins-power-allison-automatic-214k-miles-non-cdl-14490868",
+    "https://www.truckandvanoutlet.com/for-sale/2023-international-mv607-26-box-truck-with-liftgate-cummins-power-allison-automatic-xtra-clean-non-cdl-14496495"
+  ],
+  "queriesUsed": [
+    "Cummins automatic 24 OR 26 OR 28 foot box truck for sale GVWR under 26000 under 275,000 miles liftgate"
+  ],
+  "notes": "The provided listings meet the specified criteria, including Cummins engine, automatic transmission, box lengths of 24 or 26 feet, GVWR strictly below 26,000 lbs, model years 2017 or newer, and liftgates. Mileage and pricing vary among the listings."
+}

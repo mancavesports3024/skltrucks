@@ -11,6 +11,7 @@
     "test": "vitest run",
     "sync-inventory": "node scripts/sync-inventory.mjs",
     "seed": "node --env-file=.env.local scripts/seed-supabase.mjs",
+    "seed-sourcing": "node --env-file=.env.local scripts/seed-sourcing.mjs",
     "pull-live": "node scripts/pull-live.mjs",
     "reset-inventory": "node scripts/reset-inventory.mjs",
     "fix-image-urls": "node --env-file=.env.local scripts/fix-image-urls.mjs"
@@ -19,11 +20,14 @@
     "@sparticuz/chromium": "^147.0.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
+    "@tavily/core": "^0.7.13",
     "next": "^15.3.8",
     "nodemailer": "^9.0.3",
+    "openai": "^7.19.0",
     "puppeteer-core": "^25.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "sharp": "^0.34.2"
   },
   "devDependencies": {
@@ -37,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "^15.3.8",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }
