@@ -3,6 +3,7 @@
  * Never associates sourcesConsulted[i] with trucks[i] by array position.
  */
 import { isIndividualListingUrl } from "@/lib/sourcing/search/map-candidates";
+import { applyDeterministicEngineIsCummins } from "@/lib/sourcing/search/deterministic-specs";
 import type {
   ExtractedContactCandidate,
   ExtractedTruckCandidate,
@@ -87,6 +88,25 @@ export function parseJsonObject(raw: string): Record<string, unknown> {
 export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
   const t = asRecord(item);
   const listingUrl = pickStr(t, "listingUrl", "listing_url", "url", "sourceUrl", "source_url");
+  const engine = pickStr(t, "engine");
+  const engineEvidence = pickStr(t, "engineEvidence", "engine_evidence");
+  const claimedCummins = pickBool(t, "engineIsCummins", "engine_is_cummins");
+  const listedWeightTerm = normalizeListedWeightTerm(
+    pickStr(t, "listedWeightTerm", "listed_weight_term")
+  );
+  let listedWeightLbs = pickNum(t, "listedWeightLbs", "listed_weight_lbs");
+  const manufacturerGvwrLbs = pickNum(
+    t,
+    "manufacturerGvwrLbs",
+    "manufacturer_gvwr_lbs",
+    "gvwr"
+  );
+  // When the model puts GVWR only in manufacturerGvwrLbs with term gvwr, mirror
+  // into listedWeightLbs so match rules see an evidenced listing GVWR.
+  if (listedWeightTerm === "gvwr" && listedWeightLbs == null && manufacturerGvwrLbs != null) {
+    listedWeightLbs = manufacturerGvwrLbs;
+  }
+
   return {
     listingUrl,
     sourceName: pickStr(t, "sourceName", "source_name", "source"),
@@ -95,9 +115,13 @@ export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
     vin: pickStr(t, "vin", "VIN"),
     year: pickNum(t, "year"),
     makeModel: pickStr(t, "makeModel", "make_model", "model", "make"),
-    engine: pickStr(t, "engine"),
-    engineIsCummins: pickBool(t, "engineIsCummins", "engine_is_cummins"),
-    engineEvidence: pickStr(t, "engineEvidence", "engine_evidence"),
+    engine,
+    engineIsCummins: applyDeterministicEngineIsCummins({
+      engine,
+      engineEvidence,
+      engineIsCummins: claimedCummins,
+    }),
+    engineEvidence,
     transmission: pickStr(t, "transmission"),
     transmissionIsAutomatic: pickBool(
       t,
@@ -107,11 +131,9 @@ export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
     transmissionEvidence: pickStr(t, "transmissionEvidence", "transmission_evidence"),
     boxLengthFt: pickNum(t, "boxLengthFt", "box_length_ft", "boxLength"),
     boxLengthEvidence: pickStr(t, "boxLengthEvidence", "box_length_evidence"),
-    manufacturerGvwrLbs: pickNum(t, "manufacturerGvwrLbs", "manufacturer_gvwr_lbs", "gvwr"),
-    listedWeightLbs: pickNum(t, "listedWeightLbs", "listed_weight_lbs"),
-    listedWeightTerm: normalizeListedWeightTerm(
-      pickStr(t, "listedWeightTerm", "listed_weight_term")
-    ),
+    manufacturerGvwrLbs,
+    listedWeightLbs,
+    listedWeightTerm,
     gvwrEvidence: pickStr(t, "gvwrEvidence", "gvwr_evidence"),
     mileage: pickNum(t, "mileage", "miles"),
     hasLiftgate: pickBool(t, "hasLiftgate", "has_liftgate", "liftgate"),

@@ -32,9 +32,14 @@ export function earliestAcceptedModelYear(
 }
 
 /**
- * Manufacturer-rated GVWR is only known when the door plate is verified,
- * or the listing explicitly uses GVWR (not GVW) and we have that value.
- * A field labeled "GVW" is never treated as confirmed manufacturer GVWR.
+ * Manufacturer-rated GVWR for match comparison.
+ *
+ * - Door-plate verified values are preferred.
+ * - Listing-stated GVWR (term "gvwr" + lbs, or manufacturerGvwrLbs from listing
+ *   evidence) is used for pass/fail — including deterministic rejection when
+ *   the value is at/over the profile max. Needs verification is only for
+ *   genuinely missing or GVW-labeled (ambiguous) weights.
+ * - A field labeled "GVW" is never treated as confirmed manufacturer GVWR.
  */
 export function resolveManufacturerGvwrLbs(lead: LeadMatchInput): {
   value: number | null;
@@ -57,19 +62,23 @@ export function resolveManufacturerGvwrLbs(lead: LeadMatchInput): {
     };
   }
 
+  // Listing provided a manufacturer GVWR number (evidence present upstream)
+  // even when OpenAI left listedWeightLbs empty — still compare for reject/pass.
+  if (lead.manufacturerGvwrLbs != null) {
+    return {
+      value: lead.manufacturerGvwrLbs,
+      outcome: "pass",
+      note: lead.listedWeightTerm === "gvwr"
+        ? "Listing states manufacturer-rated GVWR"
+        : "Listing manufacturer GVWR value present",
+    };
+  }
+
   if (lead.listedWeightTerm === "gvw" && lead.listedWeightLbs != null) {
     return {
       value: null,
       outcome: "unknown",
       note: `Listing uses "GVW" (${lead.listedWeightLbs.toLocaleString()} lbs), not manufacturer-rated GVWR — request door-plate rating before confirming`,
-    };
-  }
-
-  if (lead.manufacturerGvwrLbs != null && !lead.gvwrDoorPlateVerified) {
-    return {
-      value: null,
-      outcome: "unknown",
-      note: "Manufacturer GVWR value present but door plate not verified",
     };
   }
 

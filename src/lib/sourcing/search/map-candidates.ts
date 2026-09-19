@@ -6,6 +6,7 @@ import {
 } from "@/lib/sourcing/duplicates";
 import { applyEvidenceGate } from "@/lib/sourcing/intake/csv";
 import { emptySpecEvidence } from "@/lib/sourcing/intake/sources";
+import { applyDeterministicEngineIsCummins } from "@/lib/sourcing/search/deterministic-specs";
 import type { ExtractedTruckCandidate } from "@/lib/sourcing/search/types";
 import { emptySpecEvidenceFromCandidate } from "@/lib/sourcing/search/types";
 import type { SupplierContactInput, TruckLeadInput } from "@/types/sourcing";
@@ -108,6 +109,16 @@ export function candidateToTruckLeadInput(
     evidence,
   });
 
+  // Deterministic reject only: known non-Cummins engine text forces fail even when
+  // OpenAI left engineIsCummins null/true. Do not invent Cummins=true without evidence.
+  const inferred = applyDeterministicEngineIsCummins({
+    engine: t.engine,
+    engineEvidence: t.engineEvidence || evidence.engine,
+    engineIsCummins: gated.engineIsCummins,
+  });
+  const deterministicEngine =
+    inferred === false ? false : gated.engineIsCummins;
+
   const seller = String(t.seller || t.sourceName || "").trim();
   const sourceUrl = String(t.listingUrl).trim();
   const sourceScope = buildSourceScope({
@@ -182,7 +193,7 @@ export function candidateToTruckLeadInput(
     boxLengthFt: gated.boxLengthFt,
     boxLengthRaw: t.boxLengthFt != null ? `${t.boxLengthFt}'` : "",
     engine: (t.engine || "").trim(),
-    engineIsCummins: gated.engineIsCummins,
+    engineIsCummins: deterministicEngine,
     transmission: (t.transmission || "").trim(),
     transmissionIsAutomatic: gated.transmissionIsAutomatic,
     listedWeightLbs: gated.listedWeightLbs,
