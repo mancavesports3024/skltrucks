@@ -236,6 +236,13 @@ export function candidateToContactInput(
       rejectReason: "No publicly verified phone number.",
     };
   }
+  const sourceUrl = String(c.sourceUrl || "").trim();
+  if (!sourceUrl) {
+    return {
+      input: {} as SupplierContactInput,
+      rejectReason: "Missing sourceUrl — required on every contact.",
+    };
+  }
 
   const input: SupplierContactInput = {
     company,
@@ -243,7 +250,7 @@ export function candidateToContactInput(
     role: String(c.role || "").trim(),
     phone,
     email: String(c.email || "").trim(),
-    sourceUrl: String(c.sourceUrl || "").trim(),
+    sourceUrl,
     supplierType: String(c.supplierType || "").trim() || "Web search",
     dealerWholesaleStatus: "",
     lastContactDate: null,

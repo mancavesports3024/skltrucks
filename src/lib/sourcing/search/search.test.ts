@@ -145,10 +145,15 @@ describe("cost estimate + JSON parse", () => {
     expect(cost).toBeLessThan(0.1);
   });
 
-  it("parses fenced JSON payloads", () => {
+  it("parses fenced JSON payloads and drops incomplete/invalid trucks/contacts", () => {
     const raw = "```json\n" + JSON.stringify(MOCK_SEARCH_PAYLOAD) + "\n```";
     const parsed = parseSearchPayloadJson(raw);
-    expect(parsed.trucks).toHaveLength(3);
-    expect(parsed.contacts).toHaveLength(2);
+    // Category search page + contact without phone are rejected at normalize time
+    expect(parsed.trucks).toHaveLength(2);
+    expect(parsed.contacts).toHaveLength(1);
+    expect(parsed.trucks.every((t) => t.listingUrl)).toBe(true);
+    expect(parsed.contacts[0].company).toBeTruthy();
+    expect(parsed.contacts[0].phone).toBeTruthy();
+    expect(parsed.contacts[0].sourceUrl).toBeTruthy();
   });
 });
