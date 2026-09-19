@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { candidateToContactInput } from "@/lib/sourcing/search/map-candidates";
 import {
+  mapRawTruck,
+  normalizeListedWeightTerm,
   normalizeSearchPayload,
   parseDiscoveryPayloadJson,
   parseInspectPayloadJson,
@@ -146,6 +148,30 @@ describe("stage2 inspect binding", () => {
       supplied
     );
     expect(bad.truck).toBeNull();
+  });
+});
+
+describe("regression: listedWeightTerm casing normalizes to DB values", () => {
+  it('maps "GVWR", "Gvwr", and "gvwr" to database value "gvwr"', () => {
+    expect(normalizeListedWeightTerm("GVWR")).toBe("gvwr");
+    expect(normalizeListedWeightTerm("Gvwr")).toBe("gvwr");
+    expect(normalizeListedWeightTerm("gvwr")).toBe("gvwr");
+    expect(normalizeListedWeightTerm("GVW")).toBe("gvw");
+    expect(normalizeListedWeightTerm("gVw")).toBe("gvw");
+    expect(normalizeListedWeightTerm("")).toBe("unknown");
+    expect(normalizeListedWeightTerm("other")).toBe("unknown");
+  });
+
+  it("mapRawTruck lowercases listedWeightTerm before DB write", () => {
+    for (const raw of ["GVWR", "Gvwr", "gvwr"] as const) {
+      const truck = mapRawTruck({
+        listingUrl:
+          "https://www.stapletonmotors.com/inventory/2019-kenworth-t270-/917966",
+        listedWeightTerm: raw,
+        listedWeightLbs: 25999,
+      });
+      expect(truck.listedWeightTerm).toBe("gvwr");
+    }
   });
 });
 

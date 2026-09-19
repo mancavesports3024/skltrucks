@@ -42,6 +42,13 @@ export function pickStr(obj: Record<string, unknown>, ...keys: string[]): string
   return "";
 }
 
+/** DB check constraint accepts only lowercase gvwr | gvw | unknown (plus other). */
+export function normalizeListedWeightTerm(raw: string): "gvwr" | "gvw" | "unknown" {
+  const term = String(raw ?? "").trim().toLowerCase();
+  if (term === "gvwr" || term === "gvw") return term;
+  return "unknown";
+}
+
 function pickNum(obj: Record<string, unknown>, ...keys: string[]): number | null {
   for (const k of keys) {
     const v = obj[k];
@@ -102,11 +109,9 @@ export function mapRawTruck(item: unknown): ExtractedTruckCandidate {
     boxLengthEvidence: pickStr(t, "boxLengthEvidence", "box_length_evidence"),
     manufacturerGvwrLbs: pickNum(t, "manufacturerGvwrLbs", "manufacturer_gvwr_lbs", "gvwr"),
     listedWeightLbs: pickNum(t, "listedWeightLbs", "listed_weight_lbs"),
-    listedWeightTerm: (() => {
-      const raw = pickStr(t, "listedWeightTerm", "listed_weight_term").toLowerCase();
-      if (raw === "gvwr" || raw === "gvw") return raw;
-      return "unknown";
-    })(),
+    listedWeightTerm: normalizeListedWeightTerm(
+      pickStr(t, "listedWeightTerm", "listed_weight_term")
+    ),
     gvwrEvidence: pickStr(t, "gvwrEvidence", "gvwr_evidence"),
     mileage: pickNum(t, "mileage", "miles"),
     hasLiftgate: pickBool(t, "hasLiftgate", "has_liftgate", "liftgate"),

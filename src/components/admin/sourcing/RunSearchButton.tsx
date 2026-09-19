@@ -157,7 +157,17 @@ export function SearchReportPanel({ report }: { report: SearchRunReport }) {
                   {t.listingUrl}
                 </a>
               </div>
-              {t.reason && <p className="text-xs text-neutral-500">{t.reason}</p>}
+              {t.reason && (
+                <p
+                  className={
+                    /database insert failed/i.test(t.reason)
+                      ? "text-xs text-red-800"
+                      : "text-xs text-neutral-500"
+                  }
+                >
+                  {t.reason}
+                </p>
+              )}
             </li>
           ))}
           {report.trucksSaved.length === 0 && (

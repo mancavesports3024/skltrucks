@@ -9,7 +9,6 @@ import {
 import {
   parseDiscoveryPayloadJson,
   parseInspectPayloadJson,
-  parseSearchPayloadJson,
 } from "@/lib/sourcing/search/openai-normalize";
 import type { SearchProviderFn, SearchProviderResult } from "@/lib/sourcing/search/providers/types";
 import type {
