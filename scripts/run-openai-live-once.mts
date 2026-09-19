@@ -53,11 +53,16 @@ async function main() {
   const { candidateToTruckLeadInput, candidateToContactInput } = await import(
     "../src/lib/sourcing/search/map-candidates.ts"
   );
+  const {
+    findUnambiguousContactMatch,
+    formatDatabaseInsertFailure,
+    preferSellerDisplayName,
+  } = await import("../src/lib/sourcing/search/link-contact.ts");
   const { findExistingLead, planIntakeRow } = await import(
     "../src/lib/sourcing/intake/import.ts"
   );
   const { classifyLead } = await import("../src/lib/sourcing/match.ts");
-  const { truckLeadInputToRow, rowToTruckLead, supplierContactInputToRow } =
+  const { truckLeadInputToRow, rowToTruckLead, rowToSupplierContact, supplierContactInputToRow } =
     await import("../src/lib/sourcing/mappers.ts");
   const { DEFAULT_BUYING_PROFILE } = await import("../src/types/sourcing.ts");
 
@@ -73,9 +78,8 @@ async function main() {
         tavily_configured: isTavilyConfigured(),
         resolved_provider: resolved,
         falls_back_to_tavily: resolved === "tavily",
-        model:
-          process.env.OPENAI_SEARCH_MODEL?.trim() || "gpt-4o-mini",
-        max_tool_calls: Number(process.env.OPENAI_SEARCH_MAX_TOOL_CALLS || "6"),
+        model: process.env.OPENAI_SEARCH_MODEL?.trim() || "gpt-4o-mini",
+        max_tool_calls: Number(process.env.OPENAI_SEARCH_MAX_TOOL_CALLS || "5"),
       },
       null,
       2
@@ -84,6 +88,16 @@ async function main() {
 
   if (resolved !== "openai") {
     console.error("REFUSE: resolved provider is not openai (" + resolved + ")");
+    process.exit(2);
+  }
+  const model = process.env.OPENAI_SEARCH_MODEL?.trim() || "gpt-4o-mini";
+  if (model !== "gpt-4o-mini") {
+    console.error("REFUSE: OPENAI_SEARCH_MODEL must be gpt-4o-mini (got: " + model + ")");
+    process.exit(2);
+  }
+  const maxCalls = Number(process.env.OPENAI_SEARCH_MAX_TOOL_CALLS || "5");
+  if (maxCalls > 5) {
+    console.error("REFUSE: OPENAI_SEARCH_MAX_TOOL_CALLS must be ≤5 (got: " + maxCalls + ")");
     process.exit(2);
   }
 
@@ -140,13 +154,25 @@ async function main() {
   const { data: existingRows } = await supabase.from("sourcing_truck_leads").select("*");
   const existingLeads = (existingRows || []).map(rowToTruckLead);
 
+  const { data: existingContactRows } = await supabase
+    .from("sourcing_supplier_contacts")
+    .select("*");
+  type Linkable = { id: string; company: string; phone: string; sourceUrl: string };
+  const contactPool: Linkable[] = (existingContactRows || []).map((row) => {
+    const c = rowToSupplierContact(row);
+    return { id: c.id, company: c.company, phone: c.phone, sourceUrl: c.sourceUrl };
+  });
+
   console.log("\n=== LIVE OPENAI RUN (not mock, not Tavily) ===");
   // Call OpenAI provider directly — bypasses any Tavily preference path.
   let search;
   try {
     search = await runOpenAiProviderSearch(profile);
   } catch (e) {
-    console.error("OpenAI provider failed:", redact(e instanceof Error ? (e.stack || e.message) : String(e)));
+    console.error(
+      "OpenAI provider failed:",
+      redact(e instanceof Error ? e.stack || e.message : String(e))
+    );
     process.exit(1);
   }
 
@@ -180,174 +206,7 @@ async function main() {
     detailedResults: [] as Array<Record<string, unknown>>,
   };
 
-  const batch = [...existingLeads];
-  const now = new Date();
-
-  for (const truck of search.payload.trucks) {
-    try {
-    const mapped = candidateToTruckLeadInput(truck);
-    const detail: Record<string, unknown> = {
-      listingUrl: truck.listingUrl,
-      appearsCurrentlyAvailable: "unknown_not_verified_beyond_listing_text",
-      seller: truck.seller || truck.sourceName,
-      phone: truck.phone || null,
-      contactName: truck.contactName || null,
-      contactRole: truck.contactRole || null,
-      year: truck.year,
-      makeModel: truck.makeModel,
-      engine: truck.engine,
-      engineIsCummins: truck.engineIsCummins,
-      engineEvidence: truck.engineEvidence || null,
-      transmission: truck.transmission,
-      transmissionIsAutomatic: truck.transmissionIsAutomatic,
-      transmissionEvidence: truck.transmissionEvidence || null,
-      boxLengthFt: truck.boxLengthFt,
-      boxLengthEvidence: truck.boxLengthEvidence || null,
-      manufacturerGvwrLbs: truck.manufacturerGvwrLbs,
-      listedWeightLbs: truck.listedWeightLbs,
-      listedWeightTerm: truck.listedWeightTerm,
-      gvwrEvidence: truck.gvwrEvidence || null,
-      mileage: truck.mileage,
-      hasLiftgate: truck.hasLiftgate,
-      askingPrice: truck.askingPrice,
-      auctionCurrentBid: truck.auctionCurrentBid,
-      location: truck.location,
-      drivingDistanceMiles: truck.drivingDistanceMiles,
-      distanceIsEstimate: truck.distanceIsEstimate,
-      evidenceUrl: truck.evidenceUrl || truck.listingUrl,
-      notes: truck.notes || null,
-      stockNumber: truck.stockNumber || null,
-      vin: truck.vin || null,
-    };
-
-    if (mapped.rejectReason) {
-      (report.duplicatesOrRejected as number) += 1;
-      detail.classification = "Rejected";
-      detail.reason = mapped.rejectReason;
-      detail.outcome = "rejected";
-      (report.detailedResults as Array<Record<string, unknown>>).push(detail);
-      (report.trucksSaved as Array<Record<string, unknown>>).push({
-        seller: truck.seller,
-        stockNumber: truck.stockNumber,
-        listingUrl: truck.listingUrl,
-        matchStatus: "rejected",
-        outcome: "rejected",
-        reason: mapped.rejectReason,
-      });
-      continue;
-    }
-
-    const existing = findExistingLead(batch, mapped.input);
-    const plan = planIntakeRow(mapped.input, existing, profile, {
-      dateObserved: now.toISOString().slice(0, 10),
-      missingEvidence: [],
-      now,
-    });
-    const match = classifyLead(plan.input, profile);
-    const row = truckLeadInputToRow({
-      ...plan.input,
-      matchStatus: match.status,
-      matchReasons: match.reasons,
-      listingFirstSeenAt: plan.listingFirstSeenAt,
-      listingLastSeenAt: plan.listingLastSeenAt,
-      listingLastChangedAt: plan.listingLastChangedAt,
-    });
-
-    let savedId = plan.existingId;
-    if (plan.kind === "inserted") {
-      const { data, error } = await supabase
-        .from("sourcing_truck_leads")
-        .insert(row)
-        .select("id")
-        .single();
-      if (error) {
-        (report.duplicatesOrRejected as number) += 1;
-        detail.classification = "Rejected";
-        detail.reason = error.message;
-        detail.outcome = "rejected";
-        if (/duplicate|unique/i.test(error.message)) detail.duplicate = true;
-        (report.detailedResults as Array<Record<string, unknown>>).push(detail);
-        continue;
-      }
-      savedId = data.id;
-      (report.newLeadsSaved as number) += 1;
-    } else {
-      const { error } = await supabase
-        .from("sourcing_truck_leads")
-        .update(row)
-        .eq("id", plan.existingId!);
-      if (error) {
-        (report.errors as string[]).push(error.message);
-        detail.classification = match.status;
-        detail.reason = error.message;
-        detail.outcome = plan.kind;
-        (report.detailedResults as Array<Record<string, unknown>>).push(detail);
-        continue;
-      }
-      if (plan.kind === "seen_again" || plan.kind === "listing_change") {
-        detail.duplicateOrPreviouslySeen = plan.kind;
-      }
-    }
-
-    if (match.status === "confirmed_match") (report.confirmedMatches as number) += 1;
-    if (match.status === "needs_verification") (report.needsVerification as number) += 1;
-
-    const label =
-      match.status === "confirmed_match"
-        ? "Confirmed match"
-        : match.status === "needs_verification"
-          ? "Needs verification"
-          : match.status === "does_not_match"
-            ? "Rejected (does not match)"
-            : match.status;
-
-    detail.classification = label;
-    detail.matchReasons = match.reasons;
-    detail.outcome = plan.kind;
-    detail.gatedSpecEvidence = plan.input.specEvidence;
-    detail.missingRequiredReason = match.reasons
-      .filter((r) => r.outcome === "unknown" || r.outcome === "fail")
-      .map((r) => `${r.constraint}: ${r.note || r.outcome}`);
-
-    (report.detailedResults as Array<Record<string, unknown>>).push(detail);
-    (report.trucksSaved as Array<Record<string, unknown>>).push({
-      id: savedId,
-      seller: plan.input.seller,
-      stockNumber: plan.input.stockNumber,
-      listingUrl: plan.input.sourceUrl,
-      matchStatus: match.status,
-      outcome: plan.kind,
-      phone: truck.phone,
-    });
-
-    const synthetic = {
-      id: savedId || `tmp-${(report.trucksSaved as unknown[]).length}`,
-      ...plan.input,
-      matchStatus: match.status,
-      matchReasons: match.reasons,
-      listingFirstSeenAt: plan.listingFirstSeenAt,
-      listingLastChangedAt: plan.listingLastChangedAt,
-      listingLastSeenAt: plan.listingLastSeenAt,
-    };
-    if (existing) {
-      const idx = batch.findIndex((l) => l.id === existing.id);
-      if (idx >= 0) batch[idx] = synthetic as (typeof batch)[0];
-    } else {
-      batch.push(synthetic as (typeof batch)[0]);
-    }
-    } catch (e) {
-      (report.duplicatesOrRejected as number) += 1;
-      (report.errors as string[]).push(redact(e instanceof Error ? e.message : String(e)));
-      (report.detailedResults as Array<Record<string, unknown>>).push({
-        listingUrl: truck?.listingUrl || null,
-        seller: truck?.seller || truck?.sourceName || null,
-        classification: "Rejected",
-        reason: redact(e instanceof Error ? e.message : String(e)),
-        outcome: "rejected",
-      });
-    }
-  }
-
+  // Contacts first so same-run trucks can link by company / phone / domain.
   for (const contact of search.payload.contacts) {
     const mapped = candidateToContactInput(contact);
     if (mapped.rejectReason) {
@@ -362,13 +221,17 @@ async function main() {
       });
       continue;
     }
-    const { data: existingContact } = await supabase
-      .from("sourcing_supplier_contacts")
-      .select("id")
-      .ilike("company", mapped.input.company)
-      .limit(1)
-      .maybeSingle();
-    if (existingContact?.id) {
+    const existingInPool = findUnambiguousContactMatch(
+      {
+        seller: mapped.input.company,
+        companyName: mapped.input.company,
+        phone: mapped.input.phone,
+        listingUrl: mapped.input.sourceUrl,
+        sourceUrl: mapped.input.sourceUrl,
+      },
+      contactPool
+    );
+    if (existingInPool) {
       (report.contactsFound as Array<Record<string, unknown>>).push({
         company: mapped.input.company,
         phone: mapped.input.phone,
@@ -376,23 +239,61 @@ async function main() {
         sourceUrl: mapped.input.sourceUrl,
         outcome: "skipped_duplicate_company",
         reason: "Company already in supplier contacts.",
+        linkedContactId: existingInPool.id,
       });
       continue;
     }
-    const { error } = await supabase
+    const { data: existingContact } = await supabase
       .from("sourcing_supplier_contacts")
-      .insert(supplierContactInputToRow(mapped.input));
+      .select("id, company, phone, source_url")
+      .ilike("company", mapped.input.company)
+      .limit(1)
+      .maybeSingle();
+    if (existingContact?.id) {
+      if (!contactPool.some((c) => c.id === existingContact.id)) {
+        contactPool.push({
+          id: existingContact.id,
+          company: existingContact.company,
+          phone: existingContact.phone ?? mapped.input.phone,
+          sourceUrl: existingContact.source_url ?? mapped.input.sourceUrl,
+        });
+      }
+      (report.contactsFound as Array<Record<string, unknown>>).push({
+        company: mapped.input.company,
+        phone: mapped.input.phone,
+        contactName: mapped.input.contactName || null,
+        sourceUrl: mapped.input.sourceUrl,
+        outcome: "skipped_duplicate_company",
+        reason: "Company already in supplier contacts.",
+        linkedContactId: existingContact.id,
+      });
+      continue;
+    }
+    const { data: insertedContact, error } = await supabase
+      .from("sourcing_supplier_contacts")
+      .insert(supplierContactInputToRow(mapped.input))
+      .select("*")
+      .single();
     if (error) {
-      (report.errors as string[]).push(error.message);
+      const reason = formatDatabaseInsertFailure(error.message);
+      (report.errors as string[]).push(reason);
+      (report.duplicatesOrRejected as number) += 1;
       (report.contactsFound as Array<Record<string, unknown>>).push({
         company: mapped.input.company,
         phone: mapped.input.phone,
         sourceUrl: mapped.input.sourceUrl,
         outcome: "rejected",
-        reason: error.message,
+        reason,
       });
       continue;
     }
+    const saved = rowToSupplierContact(insertedContact);
+    contactPool.push({
+      id: saved.id,
+      company: saved.company,
+      phone: saved.phone,
+      sourceUrl: saved.sourceUrl,
+    });
     (report.contactsSaved as number) += 1;
     (report.contactsFound as Array<Record<string, unknown>>).push({
       company: mapped.input.company,
@@ -402,7 +303,221 @@ async function main() {
       sourceUrl: mapped.input.sourceUrl,
       evidenceQuote: contact.evidenceQuote || null,
       outcome: "inserted",
+      linkedContactId: saved.id,
     });
+  }
+
+  const batch = [...existingLeads];
+  const now = new Date();
+
+  for (const truck of search.payload.trucks) {
+    try {
+      const mapped = candidateToTruckLeadInput(truck);
+      const detail: Record<string, unknown> = {
+        listingUrl: truck.listingUrl,
+        appearsCurrentlyAvailable: "unknown_not_verified_beyond_listing_text",
+        seller: truck.seller || truck.sourceName,
+        phone: truck.phone || null,
+        contactName: truck.contactName || null,
+        contactRole: truck.contactRole || null,
+        year: truck.year,
+        makeModel: truck.makeModel,
+        engine: truck.engine,
+        engineIsCummins: truck.engineIsCummins,
+        engineEvidence: truck.engineEvidence || null,
+        transmission: truck.transmission,
+        transmissionIsAutomatic: truck.transmissionIsAutomatic,
+        transmissionEvidence: truck.transmissionEvidence || null,
+        boxLengthFt: truck.boxLengthFt,
+        boxLengthEvidence: truck.boxLengthEvidence || null,
+        manufacturerGvwrLbs: truck.manufacturerGvwrLbs,
+        listedWeightLbs: truck.listedWeightLbs,
+        listedWeightTerm: truck.listedWeightTerm,
+        gvwrEvidence: truck.gvwrEvidence || null,
+        mileage: truck.mileage,
+        hasLiftgate: truck.hasLiftgate,
+        askingPrice: truck.askingPrice,
+        auctionCurrentBid: truck.auctionCurrentBid,
+        location: truck.location,
+        drivingDistanceMiles: truck.drivingDistanceMiles,
+        distanceIsEstimate: truck.distanceIsEstimate,
+        evidenceUrl: truck.evidenceUrl || truck.listingUrl,
+        notes: truck.notes || null,
+        stockNumber: truck.stockNumber || null,
+        vin: truck.vin || null,
+      };
+
+      if (mapped.rejectReason) {
+        (report.duplicatesOrRejected as number) += 1;
+        detail.classification = "Rejected";
+        detail.reason = mapped.rejectReason;
+        detail.outcome = "rejected";
+        (report.detailedResults as Array<Record<string, unknown>>).push(detail);
+        (report.trucksSaved as Array<Record<string, unknown>>).push({
+          seller: truck.seller,
+          stockNumber: truck.stockNumber,
+          listingUrl: truck.listingUrl,
+          matchStatus: "rejected",
+          outcome: "rejected",
+          reason: mapped.rejectReason,
+        });
+        continue;
+      }
+
+      const linked = findUnambiguousContactMatch(
+        {
+          seller: mapped.input.seller,
+          companyName: truck.seller || truck.sourceName,
+          phone: truck.phone,
+          listingUrl: truck.listingUrl || mapped.input.sourceUrl,
+          sourceUrl: mapped.input.sourceUrl,
+        },
+        contactPool
+      );
+      if (linked) {
+        mapped.input.supplierContactId = linked.id;
+        mapped.input.seller = preferSellerDisplayName(
+          mapped.input.seller,
+          mapped.input.sourceUrl,
+          linked.company
+        );
+        detail.linkedContactId = linked.id;
+        detail.linkedContactCompany = linked.company;
+        detail.seller = mapped.input.seller;
+      }
+
+      const existing = findExistingLead(batch, mapped.input);
+      const plan = planIntakeRow(mapped.input, existing, profile, {
+        dateObserved: now.toISOString().slice(0, 10),
+        missingEvidence: [],
+        now,
+      });
+      const match = classifyLead(plan.input, profile);
+      const row = truckLeadInputToRow({
+        ...plan.input,
+        matchStatus: match.status,
+        matchReasons: match.reasons,
+        listingFirstSeenAt: plan.listingFirstSeenAt,
+        listingLastSeenAt: plan.listingLastSeenAt,
+        listingLastChangedAt: plan.listingLastChangedAt,
+      });
+
+      let savedId = plan.existingId;
+      if (plan.kind === "inserted") {
+        const { data, error } = await supabase
+          .from("sourcing_truck_leads")
+          .insert(row)
+          .select("id")
+          .single();
+        if (error) {
+          const reason = formatDatabaseInsertFailure(error.message);
+          (report.duplicatesOrRejected as number) += 1;
+          (report.errors as string[]).push(reason);
+          detail.classification = "Rejected";
+          detail.reason = reason;
+          detail.outcome = "rejected";
+          if (/duplicate|unique/i.test(error.message)) detail.duplicate = true;
+          (report.detailedResults as Array<Record<string, unknown>>).push(detail);
+          (report.trucksSaved as Array<Record<string, unknown>>).push({
+            seller: plan.input.seller,
+            stockNumber: plan.input.stockNumber,
+            listingUrl: plan.input.sourceUrl,
+            matchStatus: match.status,
+            outcome: "rejected",
+            reason,
+          });
+          // Never count failed inserts as saved leads
+          continue;
+        }
+        savedId = data.id;
+        (report.newLeadsSaved as number) += 1;
+      } else {
+        const { error } = await supabase
+          .from("sourcing_truck_leads")
+          .update(row)
+          .eq("id", plan.existingId!);
+        if (error) {
+          const reason = formatDatabaseInsertFailure(error.message);
+          (report.errors as string[]).push(reason);
+          (report.duplicatesOrRejected as number) += 1;
+          detail.classification = "Rejected";
+          detail.reason = reason;
+          detail.outcome = "rejected";
+          (report.detailedResults as Array<Record<string, unknown>>).push(detail);
+          (report.trucksSaved as Array<Record<string, unknown>>).push({
+            seller: plan.input.seller,
+            stockNumber: plan.input.stockNumber,
+            listingUrl: plan.input.sourceUrl,
+            matchStatus: match.status,
+            outcome: "rejected",
+            reason,
+          });
+          continue;
+        }
+        if (plan.kind === "seen_again" || plan.kind === "listing_change") {
+          detail.duplicateOrPreviouslySeen = plan.kind;
+        }
+      }
+
+      if (match.status === "confirmed_match") (report.confirmedMatches as number) += 1;
+      if (match.status === "needs_verification") (report.needsVerification as number) += 1;
+
+      const label =
+        match.status === "confirmed_match"
+          ? "Confirmed match"
+          : match.status === "needs_verification"
+            ? "Needs verification"
+            : match.status === "does_not_match"
+              ? "Rejected (does not match)"
+              : match.status;
+
+      detail.classification = label;
+      detail.matchReasons = match.reasons;
+      detail.outcome = plan.kind;
+      detail.supplierContactId = plan.input.supplierContactId;
+      detail.gatedSpecEvidence = plan.input.specEvidence;
+      detail.missingRequiredReason = match.reasons
+        .filter((r) => r.outcome === "unknown" || r.outcome === "fail")
+        .map((r) => `${r.code}: ${r.label}`);
+
+      (report.detailedResults as Array<Record<string, unknown>>).push(detail);
+      (report.trucksSaved as Array<Record<string, unknown>>).push({
+        id: savedId,
+        seller: plan.input.seller,
+        stockNumber: plan.input.stockNumber,
+        listingUrl: plan.input.sourceUrl,
+        matchStatus: match.status,
+        outcome: plan.kind,
+        phone: truck.phone,
+        supplierContactId: plan.input.supplierContactId,
+      });
+
+      const synthetic = {
+        id: savedId || `tmp-${(report.trucksSaved as unknown[]).length}`,
+        ...plan.input,
+        matchStatus: match.status,
+        matchReasons: match.reasons,
+        listingFirstSeenAt: plan.listingFirstSeenAt,
+        listingLastChangedAt: plan.listingLastChangedAt,
+        listingLastSeenAt: plan.listingLastSeenAt,
+      };
+      if (existing) {
+        const idx = batch.findIndex((l) => l.id === existing.id);
+        if (idx >= 0) batch[idx] = synthetic as (typeof batch)[0];
+      } else {
+        batch.push(synthetic as (typeof batch)[0]);
+      }
+    } catch (e) {
+      (report.duplicatesOrRejected as number) += 1;
+      (report.errors as string[]).push(redact(e instanceof Error ? e.message : String(e)));
+      (report.detailedResults as Array<Record<string, unknown>>).push({
+        listingUrl: truck?.listingUrl || null,
+        seller: truck?.seller || truck?.sourceName || null,
+        classification: "Rejected",
+        reason: redact(e instanceof Error ? e.message : String(e)),
+        outcome: "rejected",
+      });
+    }
   }
 
   if ((report.errors as string[]).length) report.status = "partial";
@@ -428,26 +543,35 @@ async function main() {
   writeFileSync(outPath, JSON.stringify(report, null, 2));
   console.log("\n=== REPORT SAVED ===");
   console.log(outPath);
-  console.log(redact(JSON.stringify({
-    provider: search.usage.provider,
-    live: search.usage.live,
-    model: search.usage.model,
-    webSearchCalls: search.usage.webSearchCalls,
-    inputTokens: search.usage.inputTokens,
-    outputTokens: search.usage.outputTokens,
-    estimatedCostUsd: search.usage.estimatedCostUsd,
-    queriesExecuted: report.queriesExecuted,
-    sourcesSearched: report.sourcesSearched,
-    resultsExamined: report.resultsExamined,
-    newLeadsSaved: report.newLeadsSaved,
-    confirmedMatches: report.confirmedMatches,
-    needsVerification: report.needsVerification,
-    duplicatesOrRejected: report.duplicatesOrRejected,
-    contactsSaved: report.contactsSaved,
-    trucks: report.detailedResults,
-    contacts: report.contactsFound,
-    providerNotes: search.payload.notes,
-  }, null, 2)));
+  console.log(
+    redact(
+      JSON.stringify(
+        {
+          provider: search.usage.provider,
+          live: search.usage.live,
+          model: search.usage.model,
+          webSearchCalls: search.usage.webSearchCalls,
+          inputTokens: search.usage.inputTokens,
+          outputTokens: search.usage.outputTokens,
+          estimatedCostUsd: search.usage.estimatedCostUsd,
+          queriesExecuted: report.queriesExecuted,
+          sourcesSearched: report.sourcesSearched,
+          resultsExamined: report.resultsExamined,
+          newLeadsSaved: report.newLeadsSaved,
+          confirmedMatches: report.confirmedMatches,
+          needsVerification: report.needsVerification,
+          duplicatesOrRejected: report.duplicatesOrRejected,
+          contactsSaved: report.contactsSaved,
+          trucks: report.detailedResults,
+          contacts: report.contactsFound,
+          errors: report.errors,
+          providerNotes: search.payload.notes,
+        },
+        null,
+        2
+      )
+    )
+  );
 }
 
 main().catch((e) => {
