@@ -199,7 +199,7 @@ export function candidateToTruckLeadInput(
       ...gated.uncertaintyLabels,
     ],
     isSeedResearch: false,
-    seedSource: "Internet Search Pilot (OpenAI web_search)",
+    seedSource: "Internet Search Pilot",
     specEvidence: { ...emptySpecEvidence(), ...evidence },
   };
 

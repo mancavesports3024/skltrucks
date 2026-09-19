@@ -3,6 +3,18 @@ import { buildWordPressRedirects } from "./src/lib/seo/redirects";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  // Allow Server Actions through Cursor Cloud / agent port-forward hosts.
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        "localhost:3000",
+        "127.0.0.1:3000",
+        "*.cursorvm.com",
+        "*.agent.cvm.dev",
+        "*.cvm.dev",
+      ],
+    },
+  },
   async redirects() {
     return buildWordPressRedirects();
   },
