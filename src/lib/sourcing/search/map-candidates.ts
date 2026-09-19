@@ -10,14 +10,29 @@ import type { ExtractedTruckCandidate } from "@/lib/sourcing/search/types";
 import { emptySpecEvidenceFromCandidate } from "@/lib/sourcing/search/types";
 import type { SupplierContactInput, TruckLeadInput } from "@/types/sourcing";
 
-const CATEGORY_PATH_HINTS = [
-  "/search",
-  "/search-inventory",
-  "/inventory/",
-  "/category/",
-  "/listings",
-  "/results",
+const BLOCKED_HOST_SUFFIXES = [
+  "youtube.com",
+  "youtu.be",
+  "reddit.com",
+  "facebook.com",
+  "fb.com",
+  "instagram.com",
+  "tiktok.com",
+  "twitter.com",
+  "x.com",
+  "c-span.org",
+  "wikipedia.org",
+  "automattic.com",
 ];
+
+const CATEGORY_PATH_RE =
+  /\/(search|search-inventory|results|category|categories|listings|for-sale|trucks-for-sale|shop|used)\/?$/i;
+
+/** Hosts that are never individual commercial truck listing pages. */
+export function isBlockedListingHost(hostname: string): boolean {
+  const host = hostname.replace(/^www\./, "").toLowerCase();
+  return BLOCKED_HOST_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`));
+}
 
 /** Reject category/search pages that are not individual vehicle URLs. */
 export function isIndividualListingUrl(url: string): boolean {
@@ -30,20 +45,39 @@ export function isIndividualListingUrl(url: string): boolean {
     return false;
   }
   if (!/^https?:$/i.test(parsed.protocol)) return false;
+  if (isBlockedListingHost(parsed.hostname)) return false;
+
   const path = parsed.pathname.replace(/\/+$/, "") || "/";
-  // Bare inventory roots / search paths without a specific unit slug
   if (path === "/" || path === "/inventory" || path === "/search-inventory") return false;
-  if (/\/search(-inventory)?\/?$/i.test(path)) return false;
-  // Allow /inventory/used-...-vin-or-stock style
+  if (CATEGORY_PATH_RE.test(path)) return false;
   if (/\/inventory\/?$/i.test(path)) return false;
-  // Heuristic: must have a path segment that looks like a unit page
+  // Marketplace search pages with query params but no unit slug
+  if (/\/(search|listings)\b/i.test(path) && !/\/(listing|inventory|detail|unit|stock|vdp)\b/i.test(path)) {
+    // allow /inventory/used-2019-... below; block /search? and /listings?
+    if (!/\/inventory\/.+/i.test(path)) return false;
+  }
+  // Craigslist area search, Autotrader SRP, CarGurus shop hubs
+  if (/craigslist\.org$/i.test(parsed.hostname) && /\/search\b/i.test(path)) return false;
+  if (/autotrader\.com$/i.test(parsed.hostname) && /\/cars-for-sale\b/i.test(path)) return false;
+  if (/cargurus\.com$/i.test(parsed.hostname) && /\/shop\b/i.test(path)) return false;
+  if (/commercialtrucktrader\.com$/i.test(parsed.hostname) && /trucks-for-sale/i.test(path)) {
+    // dealer hub or category search — need a numeric listing id segment to accept later
+    if (!/\/\d{6,}\b/.test(path)) return false;
+  }
+  if (/truckpaper\.com$/i.test(parsed.hostname) && /\/listings\b/i.test(path)) return false;
+
   const segments = path.split("/").filter(Boolean);
   if (segments.length < 2) {
-    // single segment like /PU-1001 might be ok
     return segments.length === 1 && segments[0].length > 4;
   }
-  void CATEGORY_PATH_HINTS;
-  return true;
+
+  // Prefer paths that look like a specific unit (inventory slug, listing id, detail)
+  const last = segments[segments.length - 1] || "";
+  const looksLikeUnit =
+    /used-|for-sale|inventory|listing|detail|vdp|stock|unit|\d{5,}/i.test(path) ||
+    /[a-z]{2,}-\d{2,}/i.test(last) ||
+    /^\d{6,}$/.test(last);
+  return looksLikeUnit;
 }
 
 export function candidateToTruckLeadInput(

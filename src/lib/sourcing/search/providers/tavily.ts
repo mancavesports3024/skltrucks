@@ -194,6 +194,18 @@ export async function runTavilySearch(
         includeRawContent: false,
         includeImages: false,
         includeUsage: true,
+        excludeDomains: [
+          "youtube.com",
+          "youtu.be",
+          "reddit.com",
+          "facebook.com",
+          "instagram.com",
+          "tiktok.com",
+          "twitter.com",
+          "x.com",
+          "c-span.org",
+          "wikipedia.org",
+        ],
         ...(plan.includeDomains?.length ? { includeDomains: plan.includeDomains } : {}),
       });
 

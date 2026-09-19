@@ -49,6 +49,8 @@ describe("isIndividualListingUrl", () => {
       false
     );
     expect(isIndividualListingUrl("https://www.penskeusedtrucks.com/inventory/")).toBe(false);
+    expect(isIndividualListingUrl("https://www.youtube.com/watch?v=abc")).toBe(false);
+    expect(isIndividualListingUrl("https://www.reddit.com/r/trucks/comments/x")).toBe(false);
     expect(isIndividualListingUrl("")).toBe(false);
   });
 });

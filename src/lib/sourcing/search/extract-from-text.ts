@@ -20,10 +20,11 @@ function quoteAround(text: string, index: number, len = 80): string {
 }
 
 function findPhone(text: string): { phone: string; quote: string } | null {
-  const re = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+  // Require separators or parentheses so bare Facebook/post IDs are not treated as phones.
+  const re = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g;
   const m = re.exec(text);
   if (!m) return null;
-  return { phone: m[0], quote: quoteAround(text, m.index) };
+  return { phone: m[0].trim(), quote: quoteAround(text, m.index) };
 }
 
 function findVin(text: string): { vin: string; quote: string } | null {
