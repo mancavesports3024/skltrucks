@@ -62,34 +62,24 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
           error === "sourcing_forbidden_db" ||
           error === "sourcing_forbidden_schema") && (
           <div className="mb-6 border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            {error === "sourcing_forbidden_env" ? (
+            {error === "sourcing_forbidden_schema" ? (
               <>
-                Private sourcing is blocked because{" "}
-                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> is missing or empty
-                in this deployment. Set it in Vercel (Preview/Production) to the exact staff emails,
-                then also add those emails to{" "}
-                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> in the same
-                Supabase project.
-              </>
-            ) : error === "sourcing_forbidden_schema" ? (
-              <>
-                Sourcing tables/RPC are not available in this Supabase project yet. Apply{" "}
+                Sourcing tables are not available in this Supabase project yet. Apply{" "}
                 <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> in the SQL
-                Editor for a nonproduction project only — do not use a missing schema as a reason to
-                open access.
+                Editor (same project this site uses), then retry.
               </>
-            ) : error === "sourcing_forbidden_db" ? (
+            ) : error === "sourcing_forbidden_email" ? (
               <>
-                Your signed-in account passed the app allowlist, but it is not in{" "}
-                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> for this
-                Supabase project. Insert the exact email (lowercase) there.
+                This deployment has <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>{" "}
+                set, and your signed-in account is not on that list. Add the email or clear the
+                variable so all admin logins can use sourcing.
               </>
             ) : (
               <>
-                Your signed-in account is not authorized for private sourcing. Add the exact email
-                to both <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> (this
-                environment) and <code className="bg-amber-100 px-1">sourcing_authorized_staff</code>{" "}
-                (same Supabase project).
+                Private sourcing uses the same admin login as inventory. Sign in with a Supabase
+                Auth account that can open <code className="bg-amber-100 px-1">/admin</code>, and
+                ensure <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> is
+                applied to this project.
               </>
             )}
           </div>

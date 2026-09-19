@@ -1,11 +1,11 @@
 -- Private truck sourcing tool schema
 -- Run in Supabase SQL Editor AFTER production use (after schema.sql).
 -- Safe for existing DBs: uses IF NOT EXISTS / DROP IF EXISTS / additive ALTERs.
--- No public read policies. Access is limited to emails in sourcing_authorized_staff
--- (not every authenticated user).
+-- No public read policies. Access matches inventory admin: any authenticated
+-- Supabase Auth user (the same accounts that can manage trucks at /admin).
 
 -- ---------------------------------------------------------------------------
--- Authorized SKL staff (explicit allowlist — required for RLS + app checks)
+-- Optional staff directory (not required for access; kept for notes / future use)
 -- ---------------------------------------------------------------------------
 create table if not exists public.sourcing_authorized_staff (
   email text primary key,
@@ -15,22 +15,21 @@ create table if not exists public.sourcing_authorized_staff (
 
 alter table public.sourcing_authorized_staff enable row level security;
 
--- Staff may see their own allowlist row (optional UX); no public access
+-- Authenticated admins may read the directory
 drop policy if exists "Staff read own sourcing allowlist row"
   on public.sourcing_authorized_staff;
-create policy "Staff read own sourcing allowlist row"
+drop policy if exists "Authenticated read sourcing staff directory"
+  on public.sourcing_authorized_staff;
+create policy "Authenticated read sourcing staff directory"
   on public.sourcing_authorized_staff for select
-  using (
-    nullif(lower(coalesce(auth.email(), '')), '') is not null
-    and lower(email) = lower(auth.email())
-  );
+  using (auth.role() = 'authenticated');
 
--- Bootstrap SKL primary account (add more rows in SQL Editor as needed)
+-- Bootstrap SKL primary account (informational)
 insert into public.sourcing_authorized_staff (email, display_name)
 values ('skltrucksllc@gmail.com', 'SKL Trucks')
 on conflict (email) do nothing;
 
--- Staff authorization uses auth.email() (JWT email claim). Do not grant access when unset.
+-- Same bar as inventory: signed-in Auth user (auth.role() = authenticated).
 create or replace function public.is_sourcing_staff()
 returns boolean
 language sql
@@ -38,12 +37,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (
-    select 1
-    from public.sourcing_authorized_staff s
-    where nullif(lower(coalesce(auth.email(), '')), '') is not null
-      and lower(s.email) = lower(auth.email())
-  );
+  select coalesce(auth.role() = 'authenticated', false);
 $$;
 
 revoke all on function public.is_sourcing_staff() from public;

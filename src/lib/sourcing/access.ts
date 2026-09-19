@@ -8,9 +8,9 @@ export type SourcingAccess =
   | { ok: false; error: string; status: 401 | 403 };
 
 /**
- * Authorize sourcing access for the signed-in user.
- * Checks app allowlist (env / default) AND Supabase RPC is_sourcing_staff() when available.
- * Does not rely on /admin URL middleware alone.
+ * Authorize sourcing access for the signed-in admin user.
+ * Same bar as inventory: authenticated Supabase user.
+ * Optional SOURCING_STAFF_EMAILS can narrow further; RLS uses is_sourcing_staff().
  */
 export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isSupabaseConfigured()) {
@@ -29,20 +29,19 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isSourcingStaffEmail(user.email)) {
     return {
       ok: false,
-      error: "Forbidden — this account is not authorized for private sourcing.",
+      error: "Forbidden — this account is not on SOURCING_STAFF_EMAILS.",
       status: 403,
     };
   }
 
-  // Defense in depth: DB allowlist via security-definer RPC (same rule as RLS)
+  // Defense in depth: same rule as RLS (authenticated role after schema apply)
   const { data: isStaff, error } = await supabase.rpc("is_sourcing_staff");
   if (error) {
-    // Schema not applied yet — deny rather than open access
     console.error("[sourcing] is_sourcing_staff RPC:", error.message);
     return {
       ok: false,
       error:
-        "Sourcing authorization is not available. Apply supabase/sourcing-schema.sql and ensure your email is in sourcing_authorized_staff.",
+        "Sourcing authorization is not available. Apply supabase/sourcing-schema.sql to this Supabase project.",
       status: 403,
     };
   }
@@ -50,8 +49,7 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isStaff) {
     return {
       ok: false,
-      error:
-        "Forbidden — add this email to sourcing_authorized_staff before accessing sourcing data.",
+      error: "Forbidden — sign in with an admin account to use private sourcing.",
       status: 403,
     };
   }

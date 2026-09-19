@@ -1,9 +1,7 @@
-import { SITE } from "@/lib/constants";
-
 /**
- * Parse comma/whitespace-separated staff emails from SOURCING_STAFF_EMAILS.
- * Empty / missing env returns [] — missing configuration must not grant access.
- * Database `sourcing_authorized_staff` remains authoritative for RLS.
+ * Sourcing uses the same access bar as inventory admin: any signed-in
+ * Supabase Auth user. Optional SOURCING_STAFF_EMAILS can further restrict
+ * (comma-separated); when unset/empty, all authenticated admins are allowed.
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
@@ -16,14 +14,15 @@ export function getSourcingStaffAllowlist(
   return [...new Set(parsed)];
 }
 
+/**
+ * When SOURCING_STAFF_EMAILS is set, only those emails pass.
+ * When unset/empty, any signed-in account with an email passes (same as /admin).
+ */
 export function isSourcingStaffEmail(
   email: string | null | undefined,
   allowlist: string[] = getSourcingStaffAllowlist()
 ): boolean {
   if (!email) return false;
-  if (allowlist.length === 0) return false;
+  if (allowlist.length === 0) return true;
   return allowlist.includes(email.trim().toLowerCase());
 }
-
-/** Documented example seed email (must still be listed in env + DB to grant access). */
-export const EXAMPLE_SOURCING_STAFF_EMAIL = SITE.email.toLowerCase();

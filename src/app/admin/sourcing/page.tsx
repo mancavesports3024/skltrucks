@@ -36,9 +36,8 @@ export default async function SourcingOverviewPage() {
         {!dbReady && (
           <div className="border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
             <strong>Database not connected.</strong> Sourcing requires Supabase plus{" "}
-            <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code> and your email
-            in <code className="bg-amber-100 px-1">sourcing_authorized_staff</code>. No sourcing
-            data is exposed publicly.
+            <code className="bg-amber-100 px-1">supabase/sourcing-schema.sql</code>. Use the same
+            admin login as inventory. No sourcing data is exposed publicly.
           </div>
         )}
 

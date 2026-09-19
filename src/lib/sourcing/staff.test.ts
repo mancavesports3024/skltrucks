@@ -1,21 +1,18 @@
 import { describe, expect, it } from "vitest";
-import {
-  EXAMPLE_SOURCING_STAFF_EMAIL,
-  getSourcingStaffAllowlist,
-  isSourcingStaffEmail,
-} from "@/lib/sourcing/staff";
+import { getSourcingStaffAllowlist, isSourcingStaffEmail } from "@/lib/sourcing/staff";
 
 describe("sourcing staff allowlist", () => {
-  it("denies access when SOURCING_STAFF_EMAILS is missing or empty", () => {
+  it("allows any signed-in email when SOURCING_STAFF_EMAILS is missing or empty", () => {
     expect(getSourcingStaffAllowlist("")).toEqual([]);
     expect(getSourcingStaffAllowlist(undefined)).toEqual([]);
-    expect(isSourcingStaffEmail(EXAMPLE_SOURCING_STAFF_EMAIL, [])).toBe(false);
-    expect(isSourcingStaffEmail("skltrucksllc@gmail.com", getSourcingStaffAllowlist(""))).toBe(
-      false
+    expect(isSourcingStaffEmail("skltrucksllc@gmail.com", [])).toBe(true);
+    expect(isSourcingStaffEmail("coworker@example.com", getSourcingStaffAllowlist(""))).toBe(
+      true
     );
+    expect(isSourcingStaffEmail(null, [])).toBe(false);
   });
 
-  it("parses explicit SOURCING_STAFF_EMAILS and rejects unknown accounts", () => {
+  it("when set, only listed emails pass", () => {
     const list = getSourcingStaffAllowlist("a@skl.com, B@SKL.COM  c@skl.com");
     expect(list).toEqual(["a@skl.com", "b@skl.com", "c@skl.com"]);
     expect(isSourcingStaffEmail("b@skl.com", list)).toBe(true);

@@ -14,39 +14,17 @@ Modern rebuild of [skltrucks.com](https://skltrucks.com/) built with **Next.js**
 
 Staff-only buying workspace at **`/admin/sourcing`**. Leads and supplier contacts are **not** published to the public shop.
 
-Access requires:
-1. A signed-in Supabase user
-2. Their email in the **`sourcing_authorized_staff`** table (RLS + `is_sourcing_staff()`)
-3. **`SOURCING_STAFF_EMAILS`** set explicitly (comma-separated) for app/middleware checks — an empty/missing value grants no access
+**Access matches inventory admin:** any signed-in Supabase Auth user (the same accounts that manage trucks at `/admin`). For a small SKL team, create each person as an Auth user — they get inventory and sourcing together.
 
-Do not rely on the `/admin` URL alone: every authenticated user is **not** automatically a sourcing user.
-
-### How to update the approved staff list
-
-Access is **dual-gated**. Both must include the exact email (case-insensitive):
-
-| Layer | Where | What to change |
-| --- | --- | --- |
-| App / middleware | Vercel → Project → Settings → Environment Variables → `SOURCING_STAFF_EMAILS` (and `.env.local` for local) | Comma-separated emails, e.g. `skltrucksllc@gmail.com,other@example.com`. Empty/missing = **deny everyone**. Set separately for Preview vs Production if needed. Redeploy after changing. |
-| Database / RLS | Supabase project that deployment uses → SQL Editor | `insert into sourcing_authorized_staff (email, display_name) values ('skltrucksllc@gmail.com', 'SKL Trucks') on conflict (email) do nothing;` Remove with `delete from sourcing_authorized_staff where email = '…';` |
-
-Checklist when someone is blocked:
-1. Confirm which site they are on (local / Preview / Production) and which Supabase URL that site uses (`NEXT_PUBLIC_SUPABASE_URL`).
-2. Confirm their signed-in email (Supabase Auth → Users).
-3. Confirm that email is in `SOURCING_STAFF_EMAILS` **for that Vercel environment**.
-4. Confirm the same email exists in `sourcing_authorized_staff` **in that same Supabase project**.
-5. Confirm `supabase/sourcing-schema.sql` was applied to that project (creates the table + `is_sourcing_staff()`).
-
-Do **not** grant access by weakening RLS or allowing all authenticated users.
+Optional: set **`SOURCING_STAFF_EMAILS`** (comma-separated) to further restrict sourcing to a subset of admins. When unset/empty, all authenticated admins are allowed.
 
 ### Setup
 
 1. Ensure the base schema is applied (`supabase/schema.sql`)
-2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (idempotent / safe to re-run) — use a nonproduction project until you intentionally promote
-3. Confirm staff emails in `sourcing_authorized_staff` (seeded with `skltrucksllc@gmail.com`)
-4. Set **`SOURCING_STAFF_EMAILS`** in that environment
-5. Sign in at `/admin/login`, open **Sourcing**
-6. Optionally click **Import unverified seed research** or use **Intake** CSV
+2. Run **`supabase/sourcing-schema.sql`** in the Supabase SQL Editor (idempotent / safe to re-run)
+3. Create each teammate under Supabase → Authentication → Users (same as inventory admin)
+4. Sign in at `/admin/login`, open **Sourcing**
+5. Optionally use **Intake** CSV or **Import unverified seed research**
 
 ### What it includes
 

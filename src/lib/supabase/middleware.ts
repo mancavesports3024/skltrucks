@@ -43,16 +43,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Extra gate for sourcing UI (RLS + server actions still enforce DB allowlist)
+  // Optional extra gate: only when SOURCING_STAFF_EMAILS is explicitly set
   if (isSourcingRoute && user && !isSourcingStaffEmail(user.email)) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
-    // Distinguish empty/missing env vs email not on the list (still deny either way)
-    const allowlistConfigured = (process.env.SOURCING_STAFF_EMAILS ?? "").trim().length > 0;
-    url.searchParams.set(
-      "error",
-      allowlistConfigured ? "sourcing_forbidden_email" : "sourcing_forbidden_env"
-    );
+    url.searchParams.set("error", "sourcing_forbidden_email");
     return NextResponse.redirect(url);
   }
 
