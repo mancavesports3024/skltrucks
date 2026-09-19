@@ -1,7 +1,7 @@
 import type { SearchApiUsage, SearchModelPayload } from "@/lib/sourcing/search/types";
 
 /**
- * Deterministic mock for automated tests and dry runs without OPENAI_API_KEY.
+ * Deterministic mock for automated tests and dry runs without live API keys.
  * Mimics individual listings + seller phones (not category search links).
  */
 export const MOCK_SEARCH_PAYLOAD: SearchModelPayload = {
@@ -144,10 +144,35 @@ export const MOCK_SEARCH_PAYLOAD: SearchModelPayload = {
 };
 
 export const MOCK_SEARCH_USAGE: SearchApiUsage = {
+  provider: "mock",
   model: "mock",
   webSearchCalls: 0,
   inputTokens: 0,
   outputTokens: 0,
   estimatedCostUsd: 0,
   live: false,
+  creditsConsumed: 0,
+  searchesRun: 0,
+  extractsRun: 0,
 };
+
+/** Fixture shaped like Tavily search + extract responses (no network). */
+export const MOCK_TAVILY_SEARCH_PAGES = [
+  {
+    url: "https://www.debarytrucksales.com/inventory/used-2019-freightliner-m2-106-mock-intake-9001",
+    title: "2019 Freightliner M2 106 26 ft Box Truck",
+    content:
+      "Stock MOCK-9001. Cummins ISB 6.7 diesel. Allison automatic transmission. 26 ft dry van with liftgate. Manufacturer-rated GVWR 25,500 lbs. 142,000 miles. Asking price $42,900. Sanford, FL. Call (407) 321-4244. VIN 3ALACWDT0KDHV9001.",
+  },
+  {
+    url: "https://www.penskeusedtrucks.com/search-inventory/",
+    title: "Search inventory",
+    content: "Browse Penske used trucks.",
+  },
+  {
+    url: "https://www.millerusedtrucks.com/inventory/used-2018-freightliner-m2-mock-383999",
+    title: "2018 Freightliner M2",
+    content:
+      "Cummins engine, automatic, 26 ft box, GVW 26,000 lbs, 168,000 miles, $39,900, Lumberton, NJ. Phone (609) 555-0142.",
+  },
+];

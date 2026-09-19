@@ -356,9 +356,8 @@ export async function importCsvIntakeAction(formData: FormData) {
 }
 
 /**
- * Staff-only internet search pilot (no cron). Uses OpenAI web_search when
- * OPENAI_API_KEY is set; otherwise forceMock / missing key → deterministic mock.
- * API key never leaves the server.
+ * Staff-only internet search pilot (no cron). Resolves Tavily → OpenAI → mock.
+ * API keys never leave the server.
  */
 export async function runInternetSearchAction(forceMock = false) {
   const access = await requireSourcingStaff();

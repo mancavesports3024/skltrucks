@@ -1,6 +1,24 @@
 import type { BuyingProfile } from "@/types/sourcing";
 import { earliestAcceptedModelYear } from "@/lib/sourcing/match";
 
+/** Commercial truck marketplaces / fleet remarketers used for scoped discovery. */
+export const TRUCK_SALE_DOMAINS = [
+  "penskeusedtrucks.com",
+  "usedtrucks.ryder.com",
+  "trucksales.enterprise.com",
+  "commercialtrucktrader.com",
+  "truckpaper.com",
+  "mylittlesalesman.com",
+  "debarytrucksales.com",
+] as const;
+
+export interface SearchQueryPlan {
+  query: string;
+  /** When set, Tavily `includeDomains` scopes the request. */
+  includeDomains?: string[];
+  purpose: "truck_discovery" | "contact_discovery";
+}
+
 /**
  * Build web-search queries from the active buying profile (never hard-coded alone).
  */
@@ -8,6 +26,17 @@ export function buildSearchQueriesFromProfile(
   profile: BuyingProfile,
   asOf: Date = new Date()
 ): string[] {
+  return buildSearchQueryPlans(profile, asOf).map((p) => p.query);
+}
+
+/**
+ * Profile + domain combination plans for multi-source discovery.
+ * Kept small so a Tavily basic run stays well under the credit budget.
+ */
+export function buildSearchQueryPlans(
+  profile: BuyingProfile,
+  asOf: Date = new Date()
+): SearchQueryPlan[] {
   const earliest = earliestAcceptedModelYear(profile, asOf);
   const boxes = profile.requiredBoxLengthsFt.join(" OR ");
   const engine = profile.requireCummins ? "Cummins" : "diesel";
@@ -19,29 +48,55 @@ export function buildSearchQueriesFromProfile(
   const near = profile.originLabel || "Joplin, Missouri";
   const lift = profile.preferLiftgate ? "liftgate" : "";
 
-  const truckCore = [
-    `box truck for sale ${engine} ${trans} ${boxes} foot ${gvwr} ${miles} ${lift}`
-      .replace(/\s+/g, " ")
-      .trim(),
-    `Freightliner M2 box truck for sale ${engine} ${trans} ${boxes}' ${gvwr} since ${earliest}`
-      .replace(/\s+/g, " ")
-      .trim(),
-    `used commercial box truck fleet remarketing ${engine} ${boxes} ft ${near}`
-      .replace(/\s+/g, " ")
-      .trim(),
-    `Penske OR Ryder OR Enterprise used box truck ${boxes} foot ${engine} ${trans} for sale`
-      .replace(/\s+/g, " ")
-      .trim(),
+  const core = `${engine} ${trans} ${boxes} foot box truck for sale ${gvwr} ${miles} ${lift}`
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const plans: SearchQueryPlan[] = [
+    {
+      purpose: "truck_discovery",
+      query: core,
+    },
+    {
+      purpose: "truck_discovery",
+      query: `Freightliner M2 box truck ${engine} ${trans} ${boxes}' ${gvwr} since ${earliest}`
+        .replace(/\s+/g, " ")
+        .trim(),
+    },
+    {
+      purpose: "truck_discovery",
+      query: `used fleet remarketing box truck ${engine} ${boxes} ft ${near}`
+        .replace(/\s+/g, " ")
+        .trim(),
+      includeDomains: ["penskeusedtrucks.com", "usedtrucks.ryder.com", "trucksales.enterprise.com"],
+    },
+    {
+      purpose: "truck_discovery",
+      query: `${engine} automatic ${boxes} ft box truck for sale GVWR`
+        .replace(/\s+/g, " ")
+        .trim(),
+      includeDomains: ["commercialtrucktrader.com", "truckpaper.com", "mylittlesalesman.com"],
+    },
+    {
+      purpose: "truck_discovery",
+      query: `26 foot ${engine} ${trans} box truck for sale ${gvwr}`
+        .replace(/\s+/g, " ")
+        .trim(),
+      includeDomains: ["debarytrucksales.com"],
+    },
+    {
+      purpose: "contact_discovery",
+      query: `used box truck dealer sales phone near ${near}`,
+    },
+    {
+      purpose: "contact_discovery",
+      query: `fleet remarketing used truck sales contact phone ${engine} box truck`
+        .replace(/\s+/g, " ")
+        .trim(),
+    },
   ];
 
-  const contactCore = [
-    `used box truck dealer sales phone near ${near}`,
-    `fleet remarketing used truck sales contact phone ${engine} box truck`
-      .replace(/\s+/g, " ")
-      .trim(),
-  ];
-
-  return [...truckCore, ...contactCore];
+  return plans;
 }
 
 export function buyingProfilePromptBlock(profile: BuyingProfile, asOf: Date = new Date()): string {

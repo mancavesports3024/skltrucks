@@ -1,12 +1,19 @@
 import type { BuyingProfile, ListedWeightTerm, SpecEvidence } from "@/types/sourcing";
 
+export type SearchProviderId = "mock" | "tavily" | "openai";
+
 export interface SearchApiUsage {
+  provider: SearchProviderId;
   model: string;
   webSearchCalls: number;
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number;
   live: boolean;
+  /** Tavily API credits consumed this run (0 for mock / OpenAI). */
+  creditsConsumed: number;
+  searchesRun?: number;
+  extractsRun?: number;
 }
 
 export interface ExtractedTruckCandidate {
@@ -98,7 +105,7 @@ export interface SearchRunReport {
 }
 
 /** Rough cost model for gpt-4o-mini + web_search (OpenAI published rates). */
-export function estimateSearchCostUsd(usage: {
+export function estimateOpenAiSearchCostUsd(usage: {
   webSearchCalls: number;
   inputTokens: number;
   outputTokens: number;
@@ -109,6 +116,14 @@ export function estimateSearchCostUsd(usage: {
   return Math.round((search + input + output) * 10000) / 10000;
 }
 
+/** @deprecated Prefer estimateOpenAiSearchCostUsd — kept for older imports. */
+export const estimateSearchCostUsd = estimateOpenAiSearchCostUsd;
+
+/** Tavily credit estimate: ~$0.008/credit on pay-as-you-go. */
+export function estimateTavilyCostUsd(credits: number): number {
+  return Math.round(credits * 0.008 * 10000) / 10000;
+}
+
 export function emptySpecEvidenceFromCandidate(t: ExtractedTruckCandidate): SpecEvidence {
   return {
     engine: (t.engineEvidence || "").trim(),
@@ -116,4 +131,14 @@ export function emptySpecEvidenceFromCandidate(t: ExtractedTruckCandidate): Spec
     boxLength: (t.boxLengthEvidence || "").trim(),
     gvwr: (t.gvwrEvidence || "").trim(),
   };
+}
+
+/** Strip secrets from provider errors before UI / DB / logs. */
+export function sanitizeProviderError(err: unknown): string {
+  let msg = err instanceof Error ? err.message : "Search provider failed";
+  msg = msg.replace(/tvly-[A-Za-z0-9_-]+/gi, "[redacted]");
+  msg = msg.replace(/sk-[A-Za-z0-9._-]+/gi, "[redacted]");
+  msg = msg.replace(/Bearer\s+\S+/gi, "Bearer [redacted]");
+  msg = msg.replace(/api[_-]?key[=:"'\s]+\S+/gi, "api_key=[redacted]");
+  return msg;
 }

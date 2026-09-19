@@ -34,17 +34,19 @@ Optional: set **`SOURCING_STAFF_EMAILS`** (comma-separated) to further restrict 
 - Daily digest **preview** of new listings, listing-field changes, and unchanged listings **seen again** (staff notes / match recalcs excluded)
 - Scoped listing-ID uniqueness per seller/source; global VIN uniqueness
 - **Staff-reviewed CSV intake** at `/admin/sourcing/intake` (pilot until a dealer feed/email/API is authorized) — see `docs/sourcing-intake-sources.md`
-- **Internet search pilot** at `/admin/sourcing/search` — staff “Run search now” (no cron) via OpenAI Responses `web_search`; see `docs/sourcing-internet-search-pilot.md`
+- **Internet search pilot** at `/admin/sourcing/search` — staff “Run search now” (no cron). Preferred live provider: **Tavily**; OpenAI optional; mock for tests. See `docs/sourcing-internet-search-pilot.md`.
 
 ### Internet search pilot credentials
 
 | Variable | Notes |
 |---|---|
-| `OPENAI_API_KEY` | Server-only. Required for live search. |
+| `TAVILY_API_KEY` | **Server-only.** Required for the initial live pilot. |
+| `OPENAI_API_KEY` | Optional later / fallback if Tavily unset. |
+| `SOURCING_SEARCH_PROVIDER` | Optional: `tavily` \| `openai` \| `mock` |
 | `OPENAI_SEARCH_MODEL` | Optional; default `gpt-4o-mini` |
 | `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional; default `6` |
 
-No other web-search provider is configured in this repo. Estimated live cost ≈ **$0.04–$0.08 per run** (≈ $0.01 per web_search call + tokens). Without the key, use **Run mock search**.
+Tavily basic search ≈ 1 credit/request; basic extract ≈ 1 credit per 5 URLs. Each staff run is capped at **≤20 credits**. Without a live key, use **Run mock search**.
 
 ## Admin Inventory Management
 
@@ -82,7 +84,9 @@ Your client can manage trucks at **`/admin`** — similar to the WordPress produ
    SUPABASE_SERVICE_ROLE_KEY=eyJ...
    NEXT_PUBLIC_SITE_URL=https://www.skltrucks.com
    # Optional — internet search pilot (server-only, never NEXT_PUBLIC_)
+   # TAVILY_API_KEY=tvly-...
    # OPENAI_API_KEY=sk-...
+   # SOURCING_SEARCH_PROVIDER=tavily
    # OPENAI_SEARCH_MODEL=gpt-4o-mini
    # OPENAI_SEARCH_MAX_TOOL_CALLS=6
    ```

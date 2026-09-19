@@ -2,36 +2,42 @@
 
 Staff-only “Run search now” at `/admin/sourcing/search`. **Not scheduled.** Results write into private truck leads and supplier contacts.
 
+## Provider abstraction
+
+| Provider | When used | Notes |
+|---|---|---|
+| **Tavily** (preferred live) | `TAVILY_API_KEY` set | Basic search + selective basic extract |
+| **OpenAI** (optional) | Tavily unset and `OPENAI_API_KEY` set, or `SOURCING_SEARCH_PROVIDER=openai` | Responses API `web_search` |
+| **Mock** | No live keys, or **Run mock search** / tests | Deterministic fixtures |
+
+Code entry: `src/lib/sourcing/search/providers/` — `runInternetSearch()` resolves the provider. Persist / classify / dedupe / reporting in `run.ts` are provider-agnostic.
+
 ## Credentials required (server-only)
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `OPENAI_API_KEY` | For live runs | OpenAI Responses API + hosted `web_search` tool |
+| **`TAVILY_API_KEY`** | For the initial live pilot | Tavily Search + Extract |
+| `OPENAI_API_KEY` | Optional later | OpenAI Responses + `web_search` |
 | `OPENAI_SEARCH_MODEL` | Optional | Default `gpt-4o-mini` |
 | `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional | Default `6` |
+| `SOURCING_SEARCH_PROVIDER` | Optional | Force `tavily` \| `openai` \| `mock` when that provider is configured |
 
-Never put these in `NEXT_PUBLIC_*` or client code. Without `OPENAI_API_KEY`, the UI still offers **Run mock search** (deterministic fixtures).
+Never put these in `NEXT_PUBLIC_*`, client components, logs, test output, or error messages.
 
-## Existing providers in this repository
+## Tavily credit budget (per staff run)
 
-- **OpenAI** — newly wired for this pilot (`openai` npm package + Responses `web_search`).
-- **No** Brave / SerpAPI / Tavily / Bing search keys were already configured.
-- **Nodemailer / Gmail** exist for site forms only — **not** used by search (no email on this pilot).
-- **Supabase** — stores buying profile, leads, contacts, and `sourcing_search_runs` reports.
+Hard-capped at **20 credits**:
 
-## Estimated API cost per search run
+- Basic search = **1 credit** each (max 10 searches)
+- Basic extract = **1 credit per 5 successful URLs** (max 25 URLs → ≤5 credits)
+- Typical run ≈ **10–15 credits**
 
-Using OpenAI published list rates (subject to change):
-
-- Hosted **web_search**: about **$0.01 per search call** ($10 / 1,000).
-- Model tokens (`gpt-4o-mini`): about **$0.15 / 1M input**, **$0.60 / 1M output**.
-
-With default max 6 tool calls and a few thousand tokens, expect roughly **$0.04–$0.08 USD per live run** (often closer to **~$0.05**). The run report records `webSearchCalls`, token counts, and `estimatedCostUsd`.
+The search-run report shows **provider** and **credits consumed**.
 
 ## Schema
 
-Re-apply `supabase/sourcing-schema.sql` so `sourcing_search_runs` exists (idempotent). Do **not** treat this as a production migration / deploy step for the pilot itself.
+Re-apply `supabase/sourcing-schema.sql` so `sourcing_search_runs` exists (idempotent). Do **not** treat that as a production migration / deploy step for the pilot itself.
 
 ## Success criteria
 
-A successful run saves **individual listing URLs** plus a **usable published seller/supplier phone** — not category/search-result links.
+A successful run saves **individual listing URLs** plus a **usable published seller/supplier phone** — not category/search-result links. Missing required evidence → **Needs verification**. Never invent contacts, phones, VINs, prices, or specs.

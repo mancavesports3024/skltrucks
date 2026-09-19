@@ -5,7 +5,10 @@ import SourcingNav from "@/components/admin/sourcing/SourcingNav";
 import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { getBuyingProfile } from "@/lib/sourcing/db";
 import { earliestAcceptedModelYear } from "@/lib/sourcing/match";
-import { isLiveSearchConfigured } from "@/lib/sourcing/search/openai-client";
+import {
+  getConfiguredSearchProviderLabel,
+  isLiveSearchConfigured,
+} from "@/lib/sourcing/search/providers";
 import { listRecentSearchRuns } from "@/lib/sourcing/search/run";
 
 export default async function SourcingSearchPage() {
@@ -25,6 +28,7 @@ export default async function SourcingSearchPage() {
   ]);
   const earliest = earliestAcceptedModelYear(profile);
   const liveConfigured = isLiveSearchConfigured();
+  const configuredProviderLabel = getConfiguredSearchProviderLabel();
 
   return (
     <div>
@@ -33,9 +37,13 @@ export default async function SourcingSearchPage() {
         <div>
           <h2 className="text-lg font-bold">Internet search pilot</h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Staff-only “Run search now” uses the OpenAI Responses API web_search tool against the{" "}
-            <strong>active buying profile</strong> in the database. Results land in Truck leads /
-            Suppliers. No cron, no email, keys stay on the server.
+            Staff-only “Run search now” discovers individual listings and seller call routes from the{" "}
+            <strong>active buying profile</strong>. Default live provider is{" "}
+            <strong>Tavily</strong> (OpenAI optional). Results land in Truck leads / Suppliers. No
+            cron, no email, keys stay on the server.
+          </p>
+          <p className="mt-2 text-xs text-neutral-500">
+            Configured provider: <strong>{configuredProviderLabel}</strong>
           </p>
         </div>
 
@@ -52,7 +60,10 @@ export default async function SourcingSearchPage() {
           </p>
         </section>
 
-        <RunSearchButton liveConfigured={liveConfigured} />
+        <RunSearchButton
+          liveConfigured={liveConfigured}
+          configuredProviderLabel={configuredProviderLabel}
+        />
 
         {recent.length > 0 && (
           <section className="space-y-4">

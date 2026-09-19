@@ -6,15 +6,16 @@ import {
   candidateToContactInput,
   candidateToTruckLeadInput,
 } from "@/lib/sourcing/search/map-candidates";
-import { runOpenAiWebSearch } from "@/lib/sourcing/search/openai-client";
+import { runInternetSearch } from "@/lib/sourcing/search/providers";
 import type { SearchRunReport } from "@/lib/sourcing/search/types";
+import { sanitizeProviderError } from "@/lib/sourcing/search/types";
 import { getBuyingProfile, getTruckLeads, upsertSupplierContact } from "@/lib/sourcing/db";
 import { truckLeadInputToRow } from "@/lib/sourcing/mappers";
 import type { TruckLead } from "@/types/sourcing";
 
 /**
  * Execute one internet search pilot run (no cron).
- * Uses DB buying profile + OpenAI web_search (or mock when no API key).
+ * Uses DB buying profile + resolved provider (Tavily → OpenAI → mock).
  */
 export async function executeInternetSearchPilot(options?: {
   forceMock?: boolean;
@@ -27,9 +28,9 @@ export async function executeInternetSearchPilot(options?: {
 
   let search;
   try {
-    search = await runOpenAiWebSearch(profile, { forceMock: options?.forceMock });
+    search = await runInternetSearch(profile, { forceMock: options?.forceMock });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "OpenAI search failed";
+    const message = sanitizeProviderError(e);
     const report: SearchRunReport = {
       status: "failed",
       generatedAt: new Date().toISOString(),
@@ -43,12 +44,14 @@ export async function executeInternetSearchPilot(options?: {
       duplicatesOrRejected: 0,
       contactsSaved: 0,
       apiUsage: {
-        model: process.env.OPENAI_SEARCH_MODEL || "gpt-4o-mini",
+        provider: "mock",
+        model: "none",
         webSearchCalls: 0,
         inputTokens: 0,
         outputTokens: 0,
         estimatedCostUsd: 0,
         live: false,
+        creditsConsumed: 0,
       },
       errors: [message],
       trucksSaved: [],

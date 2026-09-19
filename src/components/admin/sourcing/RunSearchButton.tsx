@@ -6,9 +6,10 @@ import type { SearchRunReport } from "@/lib/sourcing/search/types";
 
 interface Props {
   liveConfigured: boolean;
+  configuredProviderLabel: string;
 }
 
-export default function RunSearchButton({ liveConfigured }: Props) {
+export default function RunSearchButton({ liveConfigured, configuredProviderLabel }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<SearchRunReport | null>(null);
@@ -48,9 +49,9 @@ export default function RunSearchButton({ liveConfigured }: Props) {
         </button>
       </div>
       <p className="text-xs text-neutral-500">
-        {liveConfigured
-          ? "Live mode uses OPENAI_API_KEY on the server (never sent to the browser). No cron — staff only."
-          : "OPENAI_API_KEY is not set — use Run mock search for a dry run, or add the key to .env.local for a live pilot."}
+        Live provider when configured: <strong>{configuredProviderLabel}</strong>. Keys stay on the
+        server (never sent to the browser). Prefer <code>TAVILY_API_KEY</code>; OpenAI is optional.
+        No cron — staff only.
       </p>
 
       {error && (
@@ -63,13 +64,17 @@ export default function RunSearchButton({ liveConfigured }: Props) {
 }
 
 export function SearchReportPanel({ report }: { report: SearchRunReport }) {
+  const usage = report.apiUsage;
   return (
     <div className="space-y-4 border border-neutral-200 bg-white p-6 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-bold">Search-run report</h3>
         <span className="text-xs uppercase text-neutral-500">
-          {report.status} · {report.apiUsage.live ? "live API" : "mock"} · est. $
-          {report.apiUsage.estimatedCostUsd.toFixed(4)}
+          {report.status} · {usage.provider}
+          {usage.live ? " · live" : " · mock"} ·{" "}
+          {usage.provider === "tavily"
+            ? `${usage.creditsConsumed} credit${usage.creditsConsumed === 1 ? "" : "s"}`
+            : `est. $${usage.estimatedCostUsd.toFixed(4)}`}
         </span>
       </div>
 
@@ -95,6 +100,16 @@ export function SearchReportPanel({ report }: { report: SearchRunReport }) {
       </ul>
 
       <div>
+        <p className="font-semibold">Provider & usage</p>
+        <p className="mt-1 text-neutral-700">
+          Provider <strong>{usage.provider}</strong>
+          {usage.model ? ` · ${usage.model}` : ""} · searches {usage.searchesRun ?? usage.webSearchCalls}
+          {usage.extractsRun != null ? ` · extracts ${usage.extractsRun}` : ""} · credits{" "}
+          {usage.creditsConsumed} · est. ${usage.estimatedCostUsd.toFixed(4)}
+        </p>
+      </div>
+
+      <div>
         <p className="font-semibold">Queries executed</p>
         <ul className="mt-1 list-disc space-y-1 pl-5 text-neutral-700">
           {report.queriesExecuted.map((q) => (
@@ -106,18 +121,7 @@ export function SearchReportPanel({ report }: { report: SearchRunReport }) {
       <div>
         <p className="font-semibold">Sources searched</p>
         <p className="mt-1 text-neutral-700">
-          {report.sourcesSearched.length
-            ? report.sourcesSearched.join(", ")
-            : "—"}
-        </p>
-      </div>
-
-      <div>
-        <p className="font-semibold">API usage</p>
-        <p className="mt-1 text-neutral-700">
-          model {report.apiUsage.model} · web_search calls{" "}
-          {report.apiUsage.webSearchCalls} · tokens in/out{" "}
-          {report.apiUsage.inputTokens}/{report.apiUsage.outputTokens}
+          {report.sourcesSearched.length ? report.sourcesSearched.join(", ") : "—"}
         </p>
       </div>
 
