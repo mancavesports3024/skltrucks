@@ -13,6 +13,8 @@ SKL needs **repeatable individual listings**, not category search pages. A publi
 
 **Pilot path today:** staff paste or upload the weekly email/spreadsheet into **Staff-reviewed CSV import**.
 
+Optional (flagged off): staff may paste up to 10 public `/unit-{id}/` URLs into Search for inspect-only enrichment — see `docs/sourcing-penske-url-inspection.md`. Not a substitute for Excel bulk intake; requires written Penske authorization before enabling.
+
 **Needed for automation:** written OK from Penske for a recurring CSV/email attachment, plus a stable column mapping (stock #, VIN, URL, price, mileage, location).
 
 ## 2. Ryder (and similar national fleet remarketers)

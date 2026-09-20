@@ -143,6 +143,30 @@ export async function executeInternetSearchPilot(options?: {
     contactsFound: [],
   };
 
+  return applySearchProviderResult({
+    access,
+    profile,
+    existingLeads,
+    existingContacts,
+    search,
+    report,
+  });
+}
+
+/**
+ * Persist contacts + truck leads from a provider result (shared by internet search
+ * and Penske inspect-only). Testable without live providers.
+ */
+export async function applySearchProviderResult(options: {
+  access: Extract<Awaited<ReturnType<typeof requireSourcingStaff>>, { ok: true }>;
+  profile: BuyingProfile;
+  existingLeads: TruckLead[];
+  existingContacts: Awaited<ReturnType<typeof getSupplierContacts>>;
+  search: SearchProviderResult;
+  report: SearchRunReport;
+}): Promise<{ report: SearchRunReport }> {
+  const { access, profile, existingLeads, existingContacts, search, report } = options;
+
   const contactPool: LinkableContact[] = existingContacts.map((c) => ({
     id: c.id,
     company: c.company,

@@ -1,3 +1,4 @@
+import PenskeUrlInspectionPanel from "@/components/admin/sourcing/PenskeUrlInspectionPanel";
 import RunSearchButton, {
   SearchReportPanel,
 } from "@/components/admin/sourcing/RunSearchButton";
@@ -5,6 +6,7 @@ import SourcingNav from "@/components/admin/sourcing/SourcingNav";
 import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { getBuyingProfile } from "@/lib/sourcing/db";
 import { earliestAcceptedModelYear } from "@/lib/sourcing/match";
+import { isPenskeUrlInspectionEnabled } from "@/lib/sourcing/search/penske-url-inspection";
 import {
   getConfiguredSearchProviderLabel,
   isLiveSearchConfigured,
@@ -29,6 +31,7 @@ export default async function SourcingSearchPage() {
   const earliest = earliestAcceptedModelYear(profile);
   const liveConfigured = isLiveSearchConfigured();
   const configuredProviderLabel = getConfiguredSearchProviderLabel();
+  const penskeInspectionEnabled = isPenskeUrlInspectionEnabled();
 
   return (
     <div>
@@ -64,6 +67,8 @@ export default async function SourcingSearchPage() {
           liveConfigured={liveConfigured}
           configuredProviderLabel={configuredProviderLabel}
         />
+
+        {penskeInspectionEnabled && <PenskeUrlInspectionPanel enabled />}
 
         {recent.length > 0 && (
           <section className="space-y-4">

@@ -46,8 +46,11 @@ Optional: set **`SOURCING_STAFF_EMAILS`** (comma-separated) to further restrict 
 | `SOURCING_SEARCH_PROVIDER` | Optional: `tavily` \| `openai` \| `mock` |
 | `OPENAI_SEARCH_MODEL` | Optional; default `gpt-4o-mini` |
 | `OPENAI_SEARCH_MAX_TOOL_CALLS` | Optional; default `6` |
+| `SOURCING_PENSKE_URL_INSPECTION_ENABLED` | Optional; default **off**. Staff Penske unit URL inspect-only (see `docs/sourcing-penske-url-inspection.md`). Requires written Penske authorization before enabling. |
 
 Tavily basic search ≈ 1 credit/request; basic extract ≈ 1 credit per 5 URLs. Each staff run is capped at **≤20 credits**. Without a live key, use **Run mock search**.
+
+Optional **Inspect Penske listings** (flagged off by default) accepts up to 10 public `/unit-{id}/` URLs only — see `docs/sourcing-penske-url-inspection.md`. Excel intake remains the approved bulk Penske workflow.
 
 ## Admin Inventory Management
 

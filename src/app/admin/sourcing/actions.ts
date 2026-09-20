@@ -368,3 +368,19 @@ export async function runInternetSearchAction(forceMock = false) {
   if (result.report) revalidateSourcing();
   return result;
 }
+
+/**
+ * Staff-only Penske unit URL inspection (feature-flagged, inspect-only, no discovery).
+ * Disabled by default (SOURCING_PENSKE_URL_INSPECTION_ENABLED).
+ */
+export async function runPenskeUrlInspectionAction(urlsText: string) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null };
+
+  const { executePenskeUrlInspection } = await import(
+    "@/lib/sourcing/search/penske-url-inspection/run"
+  );
+  const result = await executePenskeUrlInspection({ urlsText });
+  if (result.report) revalidateSourcing();
+  return result;
+}
