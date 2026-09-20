@@ -213,7 +213,13 @@ describe("Penske Used Trucks export intake (no hand-edit)", () => {
     expect(first.stockNumber).toBe("592841");
     expect(first.sourceListingId).toBe("592841");
     expect(first.sourceScope).toBe("penske-used-trucks");
+    expect(first.sourceUrl).toContain("unit=592841");
     expect(first.sourceUrl).toContain("/vehicle/592841");
+    expect(first.canonicalListingUrl).toContain("unit=592841");
+    // Hash-only URLs would collide after canonicalize — query keeps each unit unique
+    expect(first.canonicalListingUrl).not.toBe(
+      batch.plans[1].input.canonicalListingUrl
+    );
     expect(first.engineIsCummins).toBe(true);
     expect(first.transmissionIsAutomatic).toBe(true);
     expect(first.price).toBe(42900);
@@ -286,6 +292,7 @@ describe("Penske Used Trucks export intake (no hand-edit)", () => {
     expect(batch.usableLeads).toBe(1);
     expect(batch.skippedInvalid).toBe(0);
     expect(batch.plans[0].input.stockNumber).toBe("700001");
+    expect(batch.plans[0].input.sourceUrl).toContain("unit=700001");
     expect(batch.plans[0].input.sourceUrl).toContain("/vehicle/700001");
     expect(batch.plans[0].input.engineIsCummins).toBe(true);
   });

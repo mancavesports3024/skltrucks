@@ -23,11 +23,14 @@ export function isPenskeExportRow(row: Record<string, string>): boolean {
 
 /**
  * Stable per-unit URL for dedupe / staff follow-up.
- * Penske’s SPA does not expose a simple public path in the export; we encode Unit.
+ * Unit must live in the query string (not only the hash): canonicalizeListingUrl
+ * strips hashes, and sourcing_truck_leads enforces unique canonical_listing_url —
+ * hash-only URLs would collapse every Penske row onto one URL and block inserts.
  */
 export function buildPenskeUnitListingUrl(unitNumber: string): string {
   const unit = String(unitNumber || "").trim();
-  return `https://www.penskeusedtrucks.com/search-inventory.html#/vehicle/${encodeURIComponent(unit)}`;
+  const encoded = encodeURIComponent(unit);
+  return `https://www.penskeusedtrucks.com/search-inventory.html?unit=${encoded}#/vehicle/${encoded}`;
 }
 
 function isCummins(engMfr: string, engModel: string): boolean | null {

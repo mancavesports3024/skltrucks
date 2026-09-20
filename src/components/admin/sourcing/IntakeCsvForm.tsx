@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { importCsvIntakeAction } from "@/app/admin/sourcing/actions";
 import type { IntakeBatchReport } from "@/lib/sourcing/intake/import";
@@ -31,6 +32,10 @@ export default function IntakeCsvForm({
       setBusy(false);
     }
   }
+
+  const savedCount = report
+    ? report.inserted + report.listingChanges + report.seenAgain
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -99,9 +104,28 @@ export default function IntakeCsvForm({
               Source/parse failure ({report.parseError.code}): {report.parseError.error}
             </p>
           )}
+          {savedCount > 0 && !report.parseError && (
+            <div className="border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 space-y-2">
+              <p>
+                <strong>{savedCount}</strong> lead
+                {savedCount === 1 ? "" : "s"} saved to the database
+                {report.inserted > 0 ? ` (${report.inserted} new)` : ""}.
+              </p>
+              <p>
+                Open{" "}
+                <Link
+                  href="/admin/sourcing/leads"
+                  className="font-semibold text-[#fc0527] underline hover:no-underline"
+                >
+                  Truck leads
+                </Link>{" "}
+                to review them. Intake stays on this page; it does not auto-navigate.
+              </p>
+            </div>
+          )}
           <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <li>
-              <strong>{report.usableLeads}</strong> usable leads
+              <strong>{report.usableLeads}</strong> saved leads
             </li>
             <li>
               <strong>{report.inserted}</strong> new

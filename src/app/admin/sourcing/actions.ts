@@ -371,7 +371,7 @@ export async function importCsvIntakeAction(formData: FormData) {
     filename,
   });
 
-  if (error) return { error, report: null };
+  if (error) return { error, report: report ?? null };
   revalidateSourcing();
   return { success: true, report };
 }
