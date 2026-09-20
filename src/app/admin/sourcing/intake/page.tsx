@@ -55,16 +55,21 @@ export default async function SourcingIntakePage() {
         </section>
 
         <section className="space-y-3">
-          <h3 className="font-bold">Import CSV</h3>
+          <h3 className="font-bold">Import CSV / Excel</h3>
           <p className="text-sm text-neutral-600">
-            Required columns (aliases accepted):{" "}
+            Accepts <code className="text-xs">.csv</code>, <code className="text-xs">.xls</code>, and{" "}
+            <code className="text-xs">.xlsx</code>. Staff template columns (aliases accepted):{" "}
             <code className="text-xs">seller</code>, <code className="text-xs">source_scope</code>,{" "}
             <code className="text-xs">source_listing_id</code> or <code className="text-xs">stock_number</code>,{" "}
-            <code className="text-xs">listing_url</code>. Include evidence columns (
+            <code className="text-xs">listing_url</code>. Penske Used Trucks downloads map automatically (
+            <code className="text-xs">Unit</code> → stock, synthetic unit URL, engine/trans/GVW evidence).
+            Box length is not on the Penske export — those rows stay Needs verification for box. Include
+            evidence columns (
             <code className="text-xs">engine_evidence</code>,{" "}
             <code className="text-xs">transmission_evidence</code>,{" "}
             <code className="text-xs">box_length_evidence</code>,{" "}
-            <code className="text-xs">gvwr_evidence</code>) or those specs stay Needs verification.
+            <code className="text-xs">gvwr_evidence</code>) on hand-built CSVs or those specs stay Needs
+            verification.
           </p>
           <IntakeCsvForm />
         </section>

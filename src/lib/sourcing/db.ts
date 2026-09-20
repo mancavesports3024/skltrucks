@@ -14,6 +14,7 @@ import {
 } from "@/lib/sourcing/mappers";
 import {
   buildIntakeBatchFromCsv,
+  buildIntakeBatchFromSpreadsheet,
   type IntakeBatchReport,
 } from "@/lib/sourcing/intake/import";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -236,22 +237,36 @@ export async function reclassifyAllLeads(): Promise<{ error?: string; updated?: 
 }
 
 /**
- * Apply a staff-reviewed CSV intake batch. Persists first/last seen and listing changes.
+ * Apply a staff-reviewed CSV / spreadsheet intake batch. Persists first/last seen and listing changes.
  * Does not schedule email or scrape remote sites.
  */
 export async function applyCsvIntake(
   csvText: string | null | undefined,
-  options?: { sourceLabel?: string; defaultSourceScope?: string }
+  options?: {
+    sourceLabel?: string;
+    defaultSourceScope?: string;
+    /** When set (e.g. .xls/.xlsx upload), preferred over csvText. */
+    fileBuffer?: ArrayBuffer | Buffer | null;
+    filename?: string;
+  }
 ): Promise<{ error?: string; report?: IntakeBatchReport }> {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
 
   const profile = await getBuyingProfile();
   const existing = await getTruckLeads();
-  const report = buildIntakeBatchFromCsv(csvText, existing, profile, {
-    sourceLabel: options?.sourceLabel,
-    defaultSourceScope: options?.defaultSourceScope,
-  });
+
+  const report =
+    options?.fileBuffer != null
+      ? buildIntakeBatchFromSpreadsheet(options.fileBuffer, existing, profile, {
+          sourceLabel: options?.sourceLabel,
+          defaultSourceScope: options?.defaultSourceScope,
+          filename: options?.filename,
+        })
+      : buildIntakeBatchFromCsv(csvText, existing, profile, {
+          sourceLabel: options?.sourceLabel,
+          defaultSourceScope: options?.defaultSourceScope,
+        });
 
   if (report.parseError) {
     return { report };

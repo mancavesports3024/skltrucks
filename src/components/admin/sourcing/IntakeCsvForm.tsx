@@ -56,13 +56,16 @@ export default function IntakeCsvForm({
         </div>
 
         <label className="block text-sm">
-          <span className="font-semibold text-neutral-800">Upload CSV file</span>
+          <span className="font-semibold text-neutral-800">Upload CSV / Excel file</span>
           <input
             name="csvFile"
             type="file"
-            accept=".csv,text/csv,text/plain"
+            accept=".csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="mt-1 block w-full text-sm"
           />
+          <span className="mt-1 block text-xs text-neutral-500">
+            Penske Used Trucks Excel/CSV exports can be uploaded as downloaded — no column remapping needed.
+          </span>
         </label>
 
         <label className="block text-sm">
@@ -80,7 +83,7 @@ export default function IntakeCsvForm({
           disabled={busy}
           className="min-h-12 bg-[#fc0527] px-6 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:opacity-60"
         >
-          {busy ? "Importing…" : "Import staff-reviewed CSV"}
+          {busy ? "Importing…" : "Import staff-reviewed file"}
         </button>
       </form>
 

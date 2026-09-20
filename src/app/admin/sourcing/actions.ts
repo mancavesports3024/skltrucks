@@ -320,7 +320,8 @@ export async function importSeedResearchAction() {
 }
 
 /**
- * Staff-reviewed CSV intake (nonprod pilot). No scraping, no scheduled job, no email.
+ * Staff-reviewed CSV / Excel intake (nonprod pilot). No scraping, no scheduled job, no email.
+ * Accepts pasted CSV, .csv, .xls, or .xlsx (including raw Penske Used Trucks exports).
  */
 export async function importCsvIntakeAction(formData: FormData) {
   const access = await requireSourcingStaff();
@@ -331,23 +332,43 @@ export async function importCsvIntakeAction(formData: FormData) {
   const pasted = String(formData.get("csvText") ?? "");
   const file = formData.get("csvFile");
 
+  let fileBuffer: ArrayBuffer | null = null;
+  let filename = "upload.csv";
   let csvText: string | null = pasted.trim() ? pasted : null;
-  if ((!csvText || !csvText.trim()) && file && typeof file === "object" && "text" in file) {
-    try {
-      csvText = await (file as File).text();
-    } catch {
-      return {
-        error: "Source failure: could not read the uploaded file.",
-        report: null,
-      };
+
+  if (file && typeof file === "object" && "arrayBuffer" in file) {
+    const upload = file as File;
+    const name = (upload.name || "").trim();
+    if (name) filename = name;
+    const size = typeof upload.size === "number" ? upload.size : 0;
+    if (size > 0) {
+      try {
+        fileBuffer = await upload.arrayBuffer();
+        // Prefer spreadsheet path whenever a non-empty file is present
+        csvText = null;
+      } catch {
+        return {
+          error: "Source failure: could not read the uploaded file.",
+          report: null,
+        };
+      }
     }
   }
 
   if (csvText != null && !csvText.trim()) csvText = null;
 
+  if (fileBuffer == null && csvText == null) {
+    return {
+      error: "Upload a .csv / .xls / .xlsx file or paste CSV text.",
+      report: null,
+    };
+  }
+
   const { error, report } = await applyCsvIntake(csvText, {
     sourceLabel: sourceLabel || "Staff-reviewed CSV",
     defaultSourceScope: defaultSourceScope || undefined,
+    fileBuffer,
+    filename,
   });
 
   if (error) return { error, report: null };

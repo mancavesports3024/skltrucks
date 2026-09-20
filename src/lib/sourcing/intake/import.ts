@@ -6,6 +6,7 @@ import {
   parseCsv,
   type CsvParseFailure,
 } from "@/lib/sourcing/intake/csv";
+import { parseSpreadsheetBuffer } from "@/lib/sourcing/intake/spreadsheet";
 import { normalizeVin } from "@/lib/sourcing/duplicates";
 
 export type IntakeApplyKind = "inserted" | "listing_change" | "seen_again";
@@ -144,11 +145,31 @@ export function planIntakeRow(
   };
 }
 
+function emptyParseFailureReport(
+  sourceLabel: string,
+  parseError: CsvParseFailure,
+  staffMessage: string
+): IntakeBatchReport {
+  return {
+    sourceLabel,
+    usableLeads: 0,
+    inserted: 0,
+    listingChanges: 0,
+    seenAgain: 0,
+    skippedInvalid: 0,
+    needsVerification: 0,
+    staffMustVerify: [staffMessage],
+    errors: [parseError.error],
+    plans: [],
+    parseError,
+  };
+}
+
 /**
- * Parse CSV and build an intake batch report (pure).
+ * Build an intake batch from already-parsed row records (pure).
  */
-export function buildIntakeBatchFromCsv(
-  csvText: string | null | undefined,
+export function buildIntakeBatchFromRows(
+  rows: Record<string, string>[],
   existingLeads: TruckLead[],
   profile: BuyingProfile,
   options?: {
@@ -160,43 +181,6 @@ export function buildIntakeBatchFromCsv(
   const sourceLabel = options?.sourceLabel ?? "Staff-reviewed CSV";
   const now = options?.now ?? new Date();
 
-  if (csvText == null) {
-    return {
-      sourceLabel,
-      usableLeads: 0,
-      inserted: 0,
-      listingChanges: 0,
-      seenAgain: 0,
-      skippedInvalid: 0,
-      needsVerification: 0,
-      staffMustVerify: ["Source failure: no CSV payload received."],
-      errors: ["Source failure: no CSV payload received."],
-      plans: [],
-      parseError: {
-        ok: false,
-        error: "Source returned no data.",
-        code: "source_failure",
-      },
-    };
-  }
-
-  const parsed = parseCsv(csvText);
-  if (!parsed.ok) {
-    return {
-      sourceLabel,
-      usableLeads: 0,
-      inserted: 0,
-      listingChanges: 0,
-      seenAgain: 0,
-      skippedInvalid: 0,
-      needsVerification: 0,
-      staffMustVerify: [`Source/parse failure: ${parsed.error}`],
-      errors: [parsed.error],
-      plans: [],
-      parseError: parsed,
-    };
-  }
-
   const plans: IntakeApplyPlan[] = [];
   const errors: string[] = [];
   const staffMustVerify = new Set<string>();
@@ -204,7 +188,7 @@ export function buildIntakeBatchFromCsv(
   // Track within-batch inserts for subsequent row dedupe
   const batchLeads: TruckLead[] = [...existingLeads];
 
-  parsed.rows.forEach((row, idx) => {
+  rows.forEach((row, idx) => {
     const prepared = csvRowToIntakeLead(row, {
       sourceScope: options?.defaultSourceScope,
       seedSource: sourceLabel,
@@ -268,4 +252,80 @@ export function buildIntakeBatchFromCsv(
     errors,
     plans,
   };
+}
+
+/**
+ * Parse CSV text and build an intake batch report (pure).
+ */
+export function buildIntakeBatchFromCsv(
+  csvText: string | null | undefined,
+  existingLeads: TruckLead[],
+  profile: BuyingProfile,
+  options?: {
+    sourceLabel?: string;
+    defaultSourceScope?: string;
+    now?: Date;
+  }
+): IntakeBatchReport {
+  const sourceLabel = options?.sourceLabel ?? "Staff-reviewed CSV";
+
+  if (csvText == null) {
+    return emptyParseFailureReport(
+      sourceLabel,
+      { ok: false, error: "Source returned no data.", code: "source_failure" },
+      "Source failure: no CSV payload received."
+    );
+  }
+
+  const parsed = parseCsv(csvText);
+  if (!parsed.ok) {
+    return emptyParseFailureReport(
+      sourceLabel,
+      parsed,
+      `Source/parse failure: ${parsed.error}`
+    );
+  }
+
+  return buildIntakeBatchFromRows(parsed.rows, existingLeads, profile, options);
+}
+
+/**
+ * Parse .csv / .xls / .xlsx (or sniff binary) and build an intake batch (pure).
+ */
+export function buildIntakeBatchFromSpreadsheet(
+  buffer: ArrayBuffer | Buffer | null | undefined,
+  existingLeads: TruckLead[],
+  profile: BuyingProfile,
+  options?: {
+    sourceLabel?: string;
+    defaultSourceScope?: string;
+    filename?: string;
+    now?: Date;
+  }
+): IntakeBatchReport {
+  const sourceLabel = options?.sourceLabel ?? "Staff-reviewed spreadsheet";
+  const filename = options?.filename ?? "upload.csv";
+
+  if (buffer == null) {
+    return emptyParseFailureReport(
+      sourceLabel,
+      { ok: false, error: "Source returned no data.", code: "source_failure" },
+      "Source failure: no spreadsheet payload received."
+    );
+  }
+
+  const parsed = parseSpreadsheetBuffer(buffer, filename);
+  if (!parsed.ok) {
+    return emptyParseFailureReport(
+      sourceLabel,
+      parsed,
+      `Source/parse failure: ${parsed.error}`
+    );
+  }
+
+  return buildIntakeBatchFromRows(parsed.rows, existingLeads, profile, {
+    sourceLabel,
+    defaultSourceScope: options?.defaultSourceScope,
+    now: options?.now,
+  });
 }
