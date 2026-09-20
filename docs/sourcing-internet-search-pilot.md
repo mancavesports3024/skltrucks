@@ -44,3 +44,7 @@ Re-apply `supabase/sourcing-schema.sql` so `sourcing_search_runs`, admin-aligned
 ## Success criteria
 
 A successful run saves **individual listing URLs** plus a **usable published seller/supplier phone** — not category/search-result links. Missing required evidence → **Needs verification**. Never invent contacts, phones, VINs, prices, or specs.
+
+## Penske unit URL inspection (optional, flagged)
+
+See **`docs/sourcing-penske-url-inspection.md`**. Disabled unless `SOURCING_PENSKE_URL_INSPECTION_ENABLED=true`. Production enablement requires **written Penske authorization**. Staff paste up to 10 public `/unit-{digits}/` URLs; inspect-only; no SPA/API credentials. Excel intake remains the approved bulk path.

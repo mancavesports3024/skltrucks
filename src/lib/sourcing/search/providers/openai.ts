@@ -455,3 +455,183 @@ export async function runOpenAiProviderSearch(
 
 export const runOpenAiProvider: SearchProviderFn = async (profile) =>
   runOpenAiProviderSearch(profile);
+
+/**
+ * Inspect-only OpenAI path for staff-submitted listing URLs.
+ * No discovery stage, no profile-wide web search queries — only the supplied URLs.
+ * listingUrl on each result must equal the supplied URL (enforced by parseInspectPayloadJson).
+ */
+export async function runOpenAiInspectOnlyUrls(
+  profile: BuyingProfile,
+  listingUrls: string[],
+  options?: {
+    client?: OpenAiResponsesClient;
+    maxToolCalls?: number;
+  }
+): Promise<SearchProviderResult> {
+  if (!options?.client && !isOpenAiSearchConfigured()) {
+    throw new Error("OpenAI search is not configured.");
+  }
+
+  const urls = listingUrls.filter((u) => Boolean(u?.trim()));
+  if (urls.length === 0) {
+    throw new Error("No listing URLs to inspect.");
+  }
+
+  const client: OpenAiResponsesClient =
+    options?.client ?? new OpenAI({ apiKey: getOpenAiApiKey() });
+  const profileBlock = buyingProfilePromptBlock(profile);
+  const budget = Math.max(
+    1,
+    Math.min(options?.maxToolCalls ?? urls.length, urls.length)
+  );
+
+  const acc = { webSearchCalls: 0, inputTokens: 0, outputTokens: 0 };
+  let formatRetries = 0;
+  const rawParts: string[] = [];
+  const notes: string[] = [
+    `Inspect-only mode: ${urls.length} staff-submitted URL(s); no discovery.`,
+  ];
+  const stageErrors: string[] = [];
+  const trucks: ExtractedTruckCandidate[] = [];
+  const contacts: ExtractedContactCandidate[] = [];
+  const queriesUsed = urls.map((u) => `inspect:${u}`);
+
+  const usageSnapshot = (extracts = trucks.length) =>
+    buildUsage(acc, { formatRetries, extractsRun: extracts });
+
+  for (const suppliedUrl of urls) {
+    if (acc.webSearchCalls >= budget) {
+      stageErrors.push(
+        `Skipped remaining URLs: tool budget ${budget} exhausted after ${acc.webSearchCalls} web_search call(s).`
+      );
+      break;
+    }
+
+    const inspectBudget = 1;
+    let inspectRaw = "";
+    try {
+      const inspectResponse = await createLiveResponse(
+        client,
+        [
+          {
+            role: "system",
+            content:
+              "You inspect ONE truck listing page. Return ONLY JSON. Never invent phones, VINs, prices, or specs. GVW is not GVWR. listingUrl MUST be copied verbatim from the supplied URL. Do not discover or follow other URLs.",
+          },
+          {
+            role: "user",
+            content: [
+              profileBlock,
+              "",
+              `Inspect this exact listing URL (use web_search / browse as needed for THIS URL ONLY):`,
+              suppliedUrl,
+              "",
+              "Return structured JSON with truck (listingUrl must equal the supplied URL), optional contact, or rejectReason.",
+              "Rules:",
+              `- truck.listingUrl MUST equal exactly: ${suppliedUrl}`,
+              "- Do not return a different listing URL. Do not search for other inventory.",
+              "- Evidence fields must quote text from that page only.",
+              "- If the page is not a usable individual listing, set truck null and rejectReason.",
+              "- contact requires companyName, phone, and sourceUrl — omit contact (null) if any are missing.",
+              "- Never invent values.",
+            ].join("\n"),
+          },
+        ],
+        inspectBudget,
+        inspectTextFormat()
+      );
+
+      addUsage(acc, inspectResponse);
+      inspectRaw = extractOutputText(inspectResponse);
+      rawParts.push(`--- inspect-only ${suppliedUrl} ---\n` + inspectRaw);
+
+      let inspected;
+      try {
+        inspected = tryParseInspect(inspectRaw, suppliedUrl);
+      } catch (parseErr) {
+        logParseFailure(
+          "inspection",
+          parseErr instanceof Error ? parseErr.message : String(parseErr),
+          inspectRaw,
+          suppliedUrl
+        );
+        formatRetries += 1;
+        const retryResponse = await createFormatRetryResponse(
+          client,
+          "inspection",
+          inspectRaw,
+          inspectTextFormat(),
+          suppliedUrl
+        );
+        addUsage(acc, retryResponse);
+        inspectRaw = extractOutputText(retryResponse);
+        rawParts.push(`--- inspect-only format-retry ${suppliedUrl} ---\n` + inspectRaw);
+        try {
+          inspected = tryParseInspect(inspectRaw, suppliedUrl);
+        } catch (retryErr) {
+          logParseFailure(
+            "inspection-retry",
+            retryErr instanceof Error ? retryErr.message : String(retryErr),
+            inspectRaw,
+            suppliedUrl
+          );
+          const msg = staffMessageForStage("inspection", suppliedUrl);
+          stageErrors.push(msg);
+          notes.push(`Rejected ${suppliedUrl}: invalid structured data after format retry`);
+          continue;
+        }
+      }
+
+      if (!inspected.truck) {
+        notes.push(
+          `Rejected ${suppliedUrl}: ${inspected.rejectReason || "inspect produced no bound truck"}`
+        );
+        continue;
+      }
+      // Defense in depth: never accept a rewritten listing URL
+      if (inspected.truck.listingUrl !== suppliedUrl) {
+        stageErrors.push(
+          `Rejected ${suppliedUrl}: model returned a different listingUrl (no rewrite allowed).`
+        );
+        continue;
+      }
+      trucks.push(inspected.truck);
+      if (inspected.contact) contacts.push(inspected.contact);
+    } catch (e) {
+      const msg = sanitizeProviderError(e);
+      stageErrors.push(`Inspection failed for ${suppliedUrl}: ${msg}`);
+      notes.push(`Rejected ${suppliedUrl}: ${msg}`);
+      console.error(
+        `[sourcing:openai] inspect-only provider error url=${suppliedUrl} detail=${msg}`
+      );
+    }
+  }
+
+  const contactKey = new Set<string>();
+  const uniqueContacts: ExtractedContactCandidate[] = [];
+  for (const c of contacts) {
+    const key = `${c.company.toLowerCase()}|${c.phone}`;
+    if (contactKey.has(key)) continue;
+    contactKey.add(key);
+    uniqueContacts.push(c);
+  }
+
+  const payload: SearchModelPayload = {
+    trucks,
+    contacts: uniqueContacts,
+    sourcesConsulted: [...urls],
+    queriesUsed,
+    notes: [...notes, ...stageErrors].filter(Boolean).join(" | "),
+  };
+
+  return {
+    provider: "openai",
+    payload,
+    usage: usageSnapshot(trucks.length),
+    rawText: rawParts.join("\n\n"),
+    queriesPlanned: queriesUsed,
+    stageErrors,
+  };
+}
+
