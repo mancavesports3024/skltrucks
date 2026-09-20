@@ -1,6 +1,7 @@
 import IntakeCsvForm from "@/components/admin/sourcing/IntakeCsvForm";
 import SourcingNav from "@/components/admin/sourcing/SourcingNav";
 import { requireSourcingStaff } from "@/lib/sourcing/access";
+import { getBuyingProfile } from "@/lib/sourcing/db";
 import { INTAKE_SOURCES } from "@/lib/sourcing/intake/sources";
 
 export default async function SourcingIntakePage() {
@@ -13,6 +14,8 @@ export default async function SourcingIntakePage() {
       </div>
     );
   }
+
+  const profile = await getBuyingProfile();
 
   return (
     <div>
@@ -63,15 +66,15 @@ export default async function SourcingIntakePage() {
             <code className="text-xs">source_listing_id</code> or <code className="text-xs">stock_number</code>,{" "}
             <code className="text-xs">listing_url</code>. Penske Used Trucks downloads map automatically (
             <code className="text-xs">Unit</code> → stock, synthetic unit URL, engine/trans/GVW evidence).
-            Box length is not on the Penske export — those rows stay Needs verification for box. Include
-            evidence columns (
+            Penske Excel has no load length — check the box-length filter attestation when you already
+            filtered to {profile.requiredBoxLengthsFt.join("/")}′. Include evidence columns (
             <code className="text-xs">engine_evidence</code>,{" "}
             <code className="text-xs">transmission_evidence</code>,{" "}
             <code className="text-xs">box_length_evidence</code>,{" "}
             <code className="text-xs">gvwr_evidence</code>) on hand-built CSVs or those specs stay Needs
             verification.
           </p>
-          <IntakeCsvForm />
+          <IntakeCsvForm allowedBoxLengthsFt={profile.requiredBoxLengthsFt} />
         </section>
       </div>
     </div>

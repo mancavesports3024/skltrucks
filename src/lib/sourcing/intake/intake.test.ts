@@ -14,6 +14,7 @@ import {
 } from "@/lib/sourcing/intake/penske-export";
 import { parseSpreadsheetBuffer } from "@/lib/sourcing/intake/spreadsheet";
 import { selectDigestLeadEvents } from "@/lib/sourcing/listing-content";
+import { classifyLead } from "@/lib/sourcing/match";
 import { DEFAULT_BUYING_PROFILE, type TruckLead } from "@/types/sourcing";
 
 const day1 = readFileSync(
@@ -224,13 +225,35 @@ describe("Penske Used Trucks export intake (no hand-edit)", () => {
     expect(first.transmissionIsAutomatic).toBe(true);
     expect(first.price).toBe(42900);
     expect(first.mileage).toBe(142000);
-    // Box length absent on Penske export → needs verification
+    // Box length absent on Penske export → needs verification unless attested
     expect(first.boxLengthFt).toBeNull();
     expect(first.researchUncertaintyLabels).toContain("missing_box_length_evidence");
 
     const second = batch.plans[1].input;
     expect(second.engineIsCummins).toBe(false);
     expect(second.transmissionIsAutomatic).toBe(false);
+  });
+
+  it("passes box-length match when staff attests the export was pre-filtered", () => {
+    const batch = buildIntakeBatchFromCsv(penskeCsv, [], DEFAULT_BUYING_PROFILE, {
+      sourceLabel: "Penske filtered export",
+      attestedBoxLengthFilter: true,
+    });
+    expect(batch.skippedInvalid).toBe(0);
+    expect(batch.usableLeads).toBe(2);
+
+    const first = batch.plans[0];
+    expect(first.input.boxLengthFt).toBeNull();
+    expect(first.input.researchUncertaintyLabels).toContain("box_length_filter_attested");
+    expect(first.input.researchUncertaintyLabels).not.toContain("missing_box_length_evidence");
+    expect(first.input.specEvidence.boxLength).toMatch(/Staff attestation/i);
+    expect(first.missingEvidence).not.toContain("box_length");
+
+    // Box constraint should pass via attestation even without exact ft
+    const match = classifyLead(first.input, DEFAULT_BUYING_PROFILE);
+    const box = match.reasons.find((r) => r.code === "box_length");
+    expect(box?.outcome).toBe("pass");
+    expect(box?.label).toMatch(/attested/i);
   });
 
   it("parses the same Penske rows from an .xlsx buffer", () => {

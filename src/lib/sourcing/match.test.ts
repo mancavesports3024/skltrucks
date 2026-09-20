@@ -195,4 +195,18 @@ describe("required versus preferred", () => {
     expect(result.reasons.find((r) => r.code === "box_length")?.outcome).toBe("fail");
     expect(result.status).toBe("does_not_match");
   });
+
+  it("passes box length when staff attested a pre-filtered upload", () => {
+    const result = classifyLead(
+      baseLead({
+        boxLengthFt: null,
+        researchUncertaintyLabels: ["box_length_filter_attested"],
+      }),
+      DEFAULT_BUYING_PROFILE,
+      asOf
+    );
+    const box = result.reasons.find((r) => r.code === "box_length");
+    expect(box?.outcome).toBe("pass");
+    expect(box?.label).toMatch(/attested/i);
+  });
 });

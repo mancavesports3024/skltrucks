@@ -329,6 +329,10 @@ export async function importCsvIntakeAction(formData: FormData) {
 
   const sourceLabel = String(formData.get("sourceLabel") ?? "Staff-reviewed CSV").trim();
   const defaultSourceScope = String(formData.get("defaultSourceScope") ?? "").trim();
+  const attestedBoxLengthFilter =
+    String(formData.get("attestedBoxLengthFilter") ?? "") === "on" ||
+    String(formData.get("attestedBoxLengthFilter") ?? "") === "true" ||
+    String(formData.get("attestedBoxLengthFilter") ?? "") === "1";
   const pasted = String(formData.get("csvText") ?? "");
   const file = formData.get("csvFile");
 
@@ -369,6 +373,7 @@ export async function importCsvIntakeAction(formData: FormData) {
     defaultSourceScope: defaultSourceScope || undefined,
     fileBuffer,
     filename,
+    attestedBoxLengthFilter,
   });
 
   if (error) return { error, report: report ?? null };

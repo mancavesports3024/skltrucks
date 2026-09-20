@@ -8,15 +8,19 @@ import type { IntakeBatchReport } from "@/lib/sourcing/intake/import";
 interface IntakeCsvFormProps {
   defaultSourceScope?: string;
   defaultSourceLabel?: string;
+  /** Buying-profile allowed box lengths shown on the attestation checkbox. */
+  allowedBoxLengthsFt?: number[];
 }
 
 export default function IntakeCsvForm({
   defaultSourceScope = "staff-csv",
   defaultSourceLabel = "Staff-reviewed CSV (pilot)",
+  allowedBoxLengthsFt = [24, 26, 28],
 }: IntakeCsvFormProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<IntakeBatchReport | null>(null);
+  const lengthList = allowedBoxLengthsFt.join("/");
 
   async function onSubmit(formData: FormData) {
     setBusy(true);
@@ -70,6 +74,26 @@ export default function IntakeCsvForm({
           />
           <span className="mt-1 block text-xs text-neutral-500">
             Penske Used Trucks Excel/CSV exports can be uploaded as downloaded — no column remapping needed.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            name="attestedBoxLengthFilter"
+            type="checkbox"
+            value="on"
+            defaultChecked
+            className="mt-1 h-4 w-4"
+          />
+          <span>
+            <span className="font-semibold text-neutral-800">
+              This file was already filtered to {lengthList}′ box
+            </span>
+            <span className="mt-1 block text-xs text-neutral-500">
+              Penske Excel has no load-length column. Check this so intake treats box length as
+              passing for this upload (staff attestation). Uncheck if the file may include other
+              lengths.
+            </span>
           </span>
         </label>
 

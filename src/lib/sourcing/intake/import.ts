@@ -176,6 +176,7 @@ export function buildIntakeBatchFromRows(
     sourceLabel?: string;
     defaultSourceScope?: string;
     now?: Date;
+    attestedBoxLengthFilter?: boolean;
   }
 ): IntakeBatchReport {
   const sourceLabel = options?.sourceLabel ?? "Staff-reviewed CSV";
@@ -192,6 +193,8 @@ export function buildIntakeBatchFromRows(
     const prepared = csvRowToIntakeLead(row, {
       sourceScope: options?.defaultSourceScope,
       seedSource: sourceLabel,
+      attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
+      allowedBoxLengthsFt: profile.requiredBoxLengthsFt,
     });
 
     if (prepared.rowErrors.length) {
@@ -265,6 +268,7 @@ export function buildIntakeBatchFromCsv(
     sourceLabel?: string;
     defaultSourceScope?: string;
     now?: Date;
+    attestedBoxLengthFilter?: boolean;
   }
 ): IntakeBatchReport {
   const sourceLabel = options?.sourceLabel ?? "Staff-reviewed CSV";
@@ -301,6 +305,7 @@ export function buildIntakeBatchFromSpreadsheet(
     defaultSourceScope?: string;
     filename?: string;
     now?: Date;
+    attestedBoxLengthFilter?: boolean;
   }
 ): IntakeBatchReport {
   const sourceLabel = options?.sourceLabel ?? "Staff-reviewed spreadsheet";
@@ -327,5 +332,6 @@ export function buildIntakeBatchFromSpreadsheet(
     sourceLabel,
     defaultSourceScope: options?.defaultSourceScope,
     now: options?.now,
+    attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
   });
 }

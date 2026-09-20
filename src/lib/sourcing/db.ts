@@ -248,6 +248,7 @@ export async function applyCsvIntake(
     /** When set (e.g. .xls/.xlsx upload), preferred over csvText. */
     fileBuffer?: ArrayBuffer | Buffer | null;
     filename?: string;
+    attestedBoxLengthFilter?: boolean;
   }
 ): Promise<{ error?: string; report?: IntakeBatchReport }> {
   const access = await requireSourcingStaff();
@@ -262,10 +263,12 @@ export async function applyCsvIntake(
           sourceLabel: options?.sourceLabel,
           defaultSourceScope: options?.defaultSourceScope,
           filename: options?.filename,
+          attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
         })
       : buildIntakeBatchFromCsv(csvText, existing, profile, {
           sourceLabel: options?.sourceLabel,
           defaultSourceScope: options?.defaultSourceScope,
+          attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
         });
 
   if (report.parseError) {
