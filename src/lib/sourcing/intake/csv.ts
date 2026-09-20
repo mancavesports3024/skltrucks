@@ -5,6 +5,7 @@ import {
   canonicalizeListingUrl,
   normalizeVin,
 } from "@/lib/sourcing/duplicates";
+import { normalizePenskeExportRow } from "@/lib/sourcing/intake/penske-export";
 import { emptySpecEvidence, normalizeSpecEvidence } from "@/lib/sourcing/intake/sources";
 
 export interface CsvParseResult {
@@ -226,15 +227,30 @@ export interface IntakeRowResult {
 
 export function csvRowToIntakeLead(
   row: Record<string, string>,
-  defaults?: { sourceScope?: string; seedSource?: string }
+  defaults?: {
+    sourceScope?: string;
+    seedSource?: string;
+    /** Staff attest this batch was pre-filtered to buying-profile box lengths. */
+    attestedBoxLengthFilter?: boolean;
+    allowedBoxLengthsFt?: number[];
+  }
 ): IntakeRowResult {
   const rowErrors: string[] = [];
-  const seller = get(row, "seller", "source_name", "dealer", "company");
-  const sourceUrl = get(row, "listing_url", "source_url", "url");
-  const stockNumber = get(row, "stock_number", "stock", "stock_no");
-  const sourceListingIdRaw = get(row, "source_listing_id", "listing_id", "stock_number", "stock");
+  // Penske Used Trucks Excel/CSV exports use Unit + Eng/Trans/GVW columns — map first.
+  const normalized = normalizePenskeExportRow(row);
+  const seller = get(normalized, "seller", "source_name", "dealer", "company");
+  const sourceUrl = get(normalized, "listing_url", "source_url", "url");
+  const stockNumber = get(normalized, "stock_number", "stock", "stock_no", "unit");
+  const sourceListingIdRaw = get(
+    normalized,
+    "source_listing_id",
+    "listing_id",
+    "stock_number",
+    "stock",
+    "unit"
+  );
   const sourceScope = buildSourceScope({
-    sourceScope: get(row, "source_scope") || defaults?.sourceScope || "",
+    sourceScope: get(normalized, "source_scope") || defaults?.sourceScope || "",
     seller,
     sourceUrl,
   });
@@ -250,23 +266,40 @@ export function csvRowToIntakeLead(
     rowErrors.push("listing_url / source_url is required to preserve the original listing link.");
   }
 
+  const allowedBoxLengths =
+    defaults?.allowedBoxLengthsFt?.length
+      ? defaults.allowedBoxLengthsFt
+      : [24, 26, 28];
+  const lengthList = allowedBoxLengths.join("/");
+  const attestedBoxFilter = defaults?.attestedBoxLengthFilter === true;
+  const claimedBox = parseOptionalNumber(
+    get(normalized, "box_length_ft", "box_length", "box_ft")
+  );
+  const existingBoxEvidence = get(normalized, "box_length_evidence", "box_evidence");
+  const boxEvidence =
+    existingBoxEvidence ||
+    (attestedBoxFilter && claimedBox == null
+      ? `Staff attestation: export pre-filtered to ${lengthList} ft box before upload (exact length not in file).`
+      : "");
+
   const evidence: SpecEvidence = normalizeSpecEvidence({
-    engine: get(row, "engine_evidence", "cummins_evidence"),
-    transmission: get(row, "transmission_evidence", "automatic_evidence"),
-    boxLength: get(row, "box_length_evidence", "box_evidence"),
-    gvwr: get(row, "gvwr_evidence", "manufacturer_gvwr_evidence"),
+    engine: get(normalized, "engine_evidence", "cummins_evidence"),
+    transmission: get(normalized, "transmission_evidence", "automatic_evidence"),
+    boxLength: boxEvidence,
+    gvwr: get(normalized, "gvwr_evidence", "manufacturer_gvwr_evidence"),
   });
 
-  const claimedEngineIsCummins = parseOptionalBool(get(row, "engine_is_cummins", "is_cummins"));
+  const claimedEngineIsCummins = parseOptionalBool(
+    get(normalized, "engine_is_cummins", "is_cummins")
+  );
   const claimedAuto = parseOptionalBool(
-    get(row, "transmission_is_automatic", "is_automatic", "automatic")
+    get(normalized, "transmission_is_automatic", "is_automatic", "automatic")
   );
-  const claimedBox = parseOptionalNumber(get(row, "box_length_ft", "box_length", "box_ft"));
   const claimedGvwr = parseOptionalInt(
-    get(row, "manufacturer_gvwr_lbs", "gvwr_lbs", "manufacturer_gvwr")
+    get(normalized, "manufacturer_gvwr_lbs", "gvwr_lbs", "manufacturer_gvwr")
   );
-  const listedWeightLbs = parseOptionalInt(get(row, "listed_weight_lbs", "weight_lbs"));
-  const weightTermRaw = get(row, "listed_weight_term", "weight_term").toLowerCase();
+  const listedWeightLbs = parseOptionalInt(get(normalized, "listed_weight_lbs", "weight_lbs"));
+  const weightTermRaw = get(normalized, "listed_weight_term", "weight_term").toLowerCase();
   const listedWeightTerm: ListedWeightTerm =
     weightTermRaw === "gvwr" || weightTermRaw === "gvw" || weightTermRaw === "other"
       ? weightTermRaw
@@ -279,28 +312,49 @@ export function csvRowToIntakeLead(
     manufacturerGvwrLbs: claimedGvwr,
     listedWeightLbs,
     listedWeightTerm,
-    gvwrDoorPlateVerified: parseOptionalBool(get(row, "gvwr_door_plate_verified")) === true,
+    gvwrDoorPlateVerified: parseOptionalBool(get(normalized, "gvwr_door_plate_verified")) === true,
     evidence,
   });
 
+  const uncertaintyLabels = gated.uncertaintyLabels.filter(
+    (l) => !(attestedBoxFilter && claimedBox == null && l === "missing_box_length_evidence")
+  );
+  if (attestedBoxFilter && claimedBox == null) {
+    uncertaintyLabels.push("box_length_filter_attested");
+  }
+
   const dateObserved =
-    get(row, "date_observed", "observed_at", "date_last_checked") ||
+    get(normalized, "date_observed", "observed_at", "date_last_checked") ||
     new Date().toISOString().slice(0, 10);
 
   const notesParts: string[] = [];
-  const notes = get(row, "notes", "verification_notes");
+  const notes = get(normalized, "notes", "verification_notes");
   if (notes) notesParts.push(notes);
-  if (gated.missingEvidence.length) {
+  if (attestedBoxFilter && claimedBox == null) {
     notesParts.push(
-      `Missing evidence for: ${gated.missingEvidence.join(", ")} (claimed values not used for match until evidenced).`
+      `Staff attested this upload was filtered to ${lengthList} ft box lengths before import.`
     );
+  }
+  if (gated.missingEvidence.filter((e) => !(attestedBoxFilter && e === "box_length")).length) {
+    const stillMissing = gated.missingEvidence.filter(
+      (e) => !(attestedBoxFilter && claimedBox == null && e === "box_length")
+    );
+    if (stillMissing.length) {
+      notesParts.push(
+        `Missing evidence for: ${stillMissing.join(", ")} (claimed values not used for match until evidenced).`
+      );
+    }
   }
   // Preserve claimed GVWR text when evidence missing
   if (gated.uncertaintyLabels.includes("missing_gvwr_evidence") && claimedGvwr != null) {
     notesParts.push(`CSV claimed manufacturer GVWR ${claimedGvwr} lbs without evidence.`);
   }
 
-  const vin = normalizeVin(get(row, "vin"));
+  const missingEvidence = gated.missingEvidence.filter(
+    (e) => !(attestedBoxFilter && claimedBox == null && e === "box_length")
+  );
+
+  const vin = normalizeVin(get(normalized, "vin"));
   const input: TruckLeadInput = {
     seller: seller || sourceScope,
     supplierContactId: null,
@@ -310,32 +364,43 @@ export function csvRowToIntakeLead(
     canonicalListingUrl: canonicalizeListingUrl(sourceUrl),
     stockNumber: stockNumber || sourceListingId,
     vin,
-    year: parseOptionalInt(get(row, "year")),
-    makeModel: get(row, "make_model", "make_and_model", "model"),
+    year: parseOptionalInt(get(normalized, "year")),
+    makeModel: get(normalized, "make_model", "make_and_model", "model"),
     boxLengthFt: gated.boxLengthFt,
-    boxLengthRaw: get(row, "box_length_raw") || (claimedBox != null ? `${claimedBox}'` : ""),
-    engine: get(row, "engine"),
+    boxLengthRaw:
+      get(normalized, "box_length_raw") ||
+      (claimedBox != null
+        ? `${claimedBox}'`
+        : attestedBoxFilter
+          ? `${lengthList}′ (staff-filtered export)`
+          : ""),
+    engine: get(normalized, "engine"),
     engineIsCummins: gated.engineIsCummins,
-    transmission: get(row, "transmission"),
+    transmission: get(normalized, "transmission"),
     transmissionIsAutomatic: gated.transmissionIsAutomatic,
     listedWeightLbs: gated.listedWeightLbs,
     listedWeightTerm: gated.listedWeightTerm,
     manufacturerGvwrLbs: gated.manufacturerGvwrLbs,
     gvwrDoorPlateVerified: gated.gvwrDoorPlateVerified,
-    mileage: parseOptionalInt(get(row, "mileage", "odometer")),
-    hasLiftgate: parseOptionalBool(get(row, "has_liftgate", "liftgate")),
-    liftgateNotes: get(row, "liftgate_notes"),
-    price: parseOptionalNumber(get(row, "price", "asking_price")),
-    location: get(row, "location", "city_state"),
-    drivingDistanceMiles: parseOptionalNumber(get(row, "driving_distance_miles", "distance_miles")),
-    distanceIsEstimate: parseOptionalBool(get(row, "distance_is_estimate")) ?? true,
+    mileage: parseOptionalInt(get(normalized, "mileage", "odometer")),
+    hasLiftgate: parseOptionalBool(get(normalized, "has_liftgate", "liftgate")),
+    liftgateNotes: get(normalized, "liftgate_notes"),
+    price: parseOptionalNumber(get(normalized, "price", "asking_price")),
+    location: get(normalized, "location", "city_state"),
+    drivingDistanceMiles: parseOptionalNumber(
+      get(normalized, "driving_distance_miles", "distance_miles")
+    ),
+    distanceIsEstimate: parseOptionalBool(get(normalized, "distance_is_estimate")) ?? true,
     dateLastChecked: dateObserved.slice(0, 10),
     verificationNotes: notesParts.join("\n"),
     workflowStatus: "new",
     sklCallNotes: "",
-    researchUncertaintyLabels: gated.uncertaintyLabels,
+    researchUncertaintyLabels: [...new Set(uncertaintyLabels)],
     isSeedResearch: false,
-    seedSource: defaults?.seedSource || get(row, "feed_label", "seed_source") || "Staff-reviewed CSV intake",
+    seedSource:
+      defaults?.seedSource ||
+      get(normalized, "feed_label", "seed_source") ||
+      "Staff-reviewed CSV intake",
     specEvidence: {
       ...emptySpecEvidence(),
       ...evidence,
@@ -345,7 +410,7 @@ export function csvRowToIntakeLead(
   return {
     input,
     dateObserved: dateObserved.slice(0, 10),
-    missingEvidence: gated.missingEvidence,
+    missingEvidence,
     rowErrors,
   };
 }

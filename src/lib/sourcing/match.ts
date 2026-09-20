@@ -22,6 +22,8 @@ export interface LeadMatchInput {
   hasLiftgate: boolean | null;
   drivingDistanceMiles: number | null;
   price: number | null;
+  /** Intake staff attested the batch was pre-filtered to profile box lengths. */
+  researchUncertaintyLabels?: string[];
 }
 
 export function earliestAcceptedModelYear(
@@ -154,15 +156,27 @@ export function classifyLead(
 
   // --- Required: Box length ---
   {
-    const outcome = boxLengthOutcome(lead.boxLengthFt, profile.requiredBoxLengthsFt);
-    reasons.push({
-      code: "box_length",
-      label:
+    const filterAttested = (lead.researchUncertaintyLabels ?? []).includes(
+      "box_length_filter_attested"
+    );
+    let outcome: ConstraintOutcome;
+    let label: string;
+    if (filterAttested && lead.boxLengthFt == null) {
+      // Exact ft not in file; staff swears the upload was filtered to allowed lengths.
+      outcome = "pass";
+      label = `Staff attested export filtered to ${profile.requiredBoxLengthsFt.join("/")}′`;
+    } else {
+      outcome = boxLengthOutcome(lead.boxLengthFt, profile.requiredBoxLengthsFt);
+      label =
         outcome === "fail"
           ? `Box length ${lead.boxLengthFt}' is not one of ${profile.requiredBoxLengthsFt.join("/")}'`
           : outcome === "pass"
             ? `Box length ${lead.boxLengthFt}' accepted`
-            : "Box length unknown",
+            : "Box length unknown";
+    }
+    reasons.push({
+      code: "box_length",
+      label,
       outcome,
       required: true,
     });

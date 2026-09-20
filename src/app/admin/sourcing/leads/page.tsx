@@ -85,7 +85,10 @@ export default async function SourcingLeadsPage({ searchParams }: PageProps) {
                       {lead.isSeedResearch && (
                         <span className="ml-2 text-amber-700">seed</span>
                       )}
-                      {lead.seedSource?.includes("CSV") && (
+                      {(lead.seedSource?.includes("CSV") ||
+                        lead.seedSource?.toLowerCase().includes("intake") ||
+                        lead.seedSource?.toLowerCase().includes("penske") ||
+                        lead.seedSource?.toLowerCase().includes("export")) && (
                         <span className="ml-2 text-sky-700">intake</span>
                       )}
                     </div>

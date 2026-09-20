@@ -1,0 +1,3 @@
+Unit,Year,Make,Model,Type,Eng Mfr,Eng Model,Horse Power,Trans Type,Trans Make,Trans Model,GVW (lbs),LTD Miles,Sale Price,Liftgate,Liftgate Model,Liftgate Cap,State,Area Name,Vin#,Comments
+592841,2019,Freightliner,M2 106,Box Truck,Cummins,ISB 6.7,260,Automatic,Allison,2500 RDS,25999,142000,42900,Yes,Maxon,3000,TX,Dallas,1FVACWDT8HHJA1001,Sample Penske export row
+592842,2018,Freightliner,M2 106,Box Truck,PACCAR,PX-7,240,Manual,,,26000,168000,39900,No,,,GA,Atlanta,1FVACWDT8HHJA1002,

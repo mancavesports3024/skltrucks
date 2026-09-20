@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { importCsvIntakeAction } from "@/app/admin/sourcing/actions";
 import type { IntakeBatchReport } from "@/lib/sourcing/intake/import";
@@ -7,15 +8,19 @@ import type { IntakeBatchReport } from "@/lib/sourcing/intake/import";
 interface IntakeCsvFormProps {
   defaultSourceScope?: string;
   defaultSourceLabel?: string;
+  /** Buying-profile allowed box lengths shown on the attestation checkbox. */
+  allowedBoxLengthsFt?: number[];
 }
 
 export default function IntakeCsvForm({
   defaultSourceScope = "staff-csv",
   defaultSourceLabel = "Staff-reviewed CSV (pilot)",
+  allowedBoxLengthsFt = [24, 26, 28],
 }: IntakeCsvFormProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<IntakeBatchReport | null>(null);
+  const lengthList = allowedBoxLengthsFt.join("/");
 
   async function onSubmit(formData: FormData) {
     setBusy(true);
@@ -31,6 +36,10 @@ export default function IntakeCsvForm({
       setBusy(false);
     }
   }
+
+  const savedCount = report
+    ? report.inserted + report.listingChanges + report.seenAgain
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -56,13 +65,36 @@ export default function IntakeCsvForm({
         </div>
 
         <label className="block text-sm">
-          <span className="font-semibold text-neutral-800">Upload CSV file</span>
+          <span className="font-semibold text-neutral-800">Upload CSV / Excel file</span>
           <input
             name="csvFile"
             type="file"
-            accept=".csv,text/csv,text/plain"
+            accept=".csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="mt-1 block w-full text-sm"
           />
+          <span className="mt-1 block text-xs text-neutral-500">
+            Penske Used Trucks Excel/CSV exports can be uploaded as downloaded — no column remapping needed.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            name="attestedBoxLengthFilter"
+            type="checkbox"
+            value="on"
+            defaultChecked
+            className="mt-1 h-4 w-4"
+          />
+          <span>
+            <span className="font-semibold text-neutral-800">
+              This file was already filtered to {lengthList}′ box
+            </span>
+            <span className="mt-1 block text-xs text-neutral-500">
+              Penske Excel has no load-length column. Check this so intake treats box length as
+              passing for this upload (staff attestation). Uncheck if the file may include other
+              lengths.
+            </span>
+          </span>
         </label>
 
         <label className="block text-sm">
@@ -80,7 +112,7 @@ export default function IntakeCsvForm({
           disabled={busy}
           className="min-h-12 bg-[#fc0527] px-6 py-3 text-sm font-semibold uppercase text-white hover:bg-[#d90422] disabled:opacity-60"
         >
-          {busy ? "Importing…" : "Import staff-reviewed CSV"}
+          {busy ? "Importing…" : "Import staff-reviewed file"}
         </button>
       </form>
 
@@ -96,9 +128,28 @@ export default function IntakeCsvForm({
               Source/parse failure ({report.parseError.code}): {report.parseError.error}
             </p>
           )}
+          {savedCount > 0 && !report.parseError && (
+            <div className="border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 space-y-2">
+              <p>
+                <strong>{savedCount}</strong> lead
+                {savedCount === 1 ? "" : "s"} saved to the database
+                {report.inserted > 0 ? ` (${report.inserted} new)` : ""}.
+              </p>
+              <p>
+                Open{" "}
+                <Link
+                  href="/admin/sourcing/leads"
+                  className="font-semibold text-[#fc0527] underline hover:no-underline"
+                >
+                  Truck leads
+                </Link>{" "}
+                to review them. Intake stays on this page; it does not auto-navigate.
+              </p>
+            </div>
+          )}
           <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <li>
-              <strong>{report.usableLeads}</strong> usable leads
+              <strong>{report.usableLeads}</strong> saved leads
             </li>
             <li>
               <strong>{report.inserted}</strong> new

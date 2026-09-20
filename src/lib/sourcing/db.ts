@@ -14,6 +14,7 @@ import {
 } from "@/lib/sourcing/mappers";
 import {
   buildIntakeBatchFromCsv,
+  buildIntakeBatchFromSpreadsheet,
   type IntakeBatchReport,
 } from "@/lib/sourcing/intake/import";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -236,26 +237,48 @@ export async function reclassifyAllLeads(): Promise<{ error?: string; updated?: 
 }
 
 /**
- * Apply a staff-reviewed CSV intake batch. Persists first/last seen and listing changes.
+ * Apply a staff-reviewed CSV / spreadsheet intake batch. Persists first/last seen and listing changes.
  * Does not schedule email or scrape remote sites.
  */
 export async function applyCsvIntake(
   csvText: string | null | undefined,
-  options?: { sourceLabel?: string; defaultSourceScope?: string }
+  options?: {
+    sourceLabel?: string;
+    defaultSourceScope?: string;
+    /** When set (e.g. .xls/.xlsx upload), preferred over csvText. */
+    fileBuffer?: ArrayBuffer | Buffer | null;
+    filename?: string;
+    attestedBoxLengthFilter?: boolean;
+  }
 ): Promise<{ error?: string; report?: IntakeBatchReport }> {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
 
   const profile = await getBuyingProfile();
   const existing = await getTruckLeads();
-  const report = buildIntakeBatchFromCsv(csvText, existing, profile, {
-    sourceLabel: options?.sourceLabel,
-    defaultSourceScope: options?.defaultSourceScope,
-  });
+
+  const report =
+    options?.fileBuffer != null
+      ? buildIntakeBatchFromSpreadsheet(options.fileBuffer, existing, profile, {
+          sourceLabel: options?.sourceLabel,
+          defaultSourceScope: options?.defaultSourceScope,
+          filename: options?.filename,
+          attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
+        })
+      : buildIntakeBatchFromCsv(csvText, existing, profile, {
+          sourceLabel: options?.sourceLabel,
+          defaultSourceScope: options?.defaultSourceScope,
+          attestedBoxLengthFilter: options?.attestedBoxLengthFilter,
+        });
 
   if (report.parseError) {
     return { report };
   }
+
+  let persistedInserted = 0;
+  let persistedListingChanges = 0;
+  let persistedSeenAgain = 0;
+  const persistErrors: string[] = [];
 
   for (const plan of report.plans) {
     const match = classifyLead(plan.input, profile);
@@ -271,7 +294,11 @@ export async function applyCsvIntake(
     if (plan.kind === "inserted") {
       const { error } = await access.supabase.from("sourcing_truck_leads").insert(row);
       if (error) {
-        report.errors.push(error.message);
+        persistErrors.push(
+          `Save failed for #${plan.input.stockNumber || plan.input.sourceListingId}: ${error.message}`
+        );
+      } else {
+        persistedInserted += 1;
       }
       continue;
     }
@@ -280,7 +307,31 @@ export async function applyCsvIntake(
       .from("sourcing_truck_leads")
       .update(row)
       .eq("id", plan.existingId!);
-    if (error) report.errors.push(error.message);
+    if (error) {
+      persistErrors.push(
+        `Update failed for #${plan.input.stockNumber || plan.input.sourceListingId}: ${error.message}`
+      );
+    } else if (plan.kind === "listing_change") {
+      persistedListingChanges += 1;
+    } else {
+      persistedSeenAgain += 1;
+    }
+  }
+
+  // Report counts reflect what actually landed in the DB, not just parse plans.
+  report.inserted = persistedInserted;
+  report.listingChanges = persistedListingChanges;
+  report.seenAgain = persistedSeenAgain;
+  report.usableLeads = persistedInserted + persistedListingChanges + persistedSeenAgain;
+  if (persistErrors.length) {
+    report.errors = [...report.errors, ...persistErrors];
+  }
+
+  if (report.plans.length > 0 && report.usableLeads === 0) {
+    return {
+      error: `Import parsed ${report.plans.length} row(s) but none were saved. ${persistErrors[0] || "Check intake errors."}`,
+      report,
+    };
   }
 
   return { report };
