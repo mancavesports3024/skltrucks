@@ -21,14 +21,14 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "@tavily/core": "^0.7.13",
-    "next": "^15.3.8",
-    "nodemailer": "^9.0.3",
+    "next": "15.5.26",
+    "nodemailer": "9.1.1",
     "openai": "^7.19.0",
     "puppeteer-core": "^25.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
-    "sharp": "^0.34.2",
+    "sharp": "0.35.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
@@ -40,10 +40,10 @@
     "@types/react-dom": "^19",
     "@types/sharp": "^0.31.1",
     "eslint": "^9",
-    "eslint-config-next": "^15.3.8",
+    "eslint-config-next": "15.5.26",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "3.2.7"
   }
 }

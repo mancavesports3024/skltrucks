@@ -1,7 +1,39 @@
 import nodemailer from "nodemailer";
 import { SITE } from "@/lib/constants";
 
-const TO_EMAIL = process.env.RECIPIENT_EMAIL || process.env.CONTACT_EMAIL_TO || SITE.email;
+function recipientEmail(): string {
+  return process.env.RECIPIENT_EMAIL || process.env.CONTACT_EMAIL_TO || SITE.email;
+}
+
+/** RFC 5321 practical mailbox length; also bounds addressparser work. */
+export const MAX_REPLY_TO_EMAIL_LENGTH = 254;
+
+/**
+ * Strict single-address Reply-To sanitizer.
+ * Rejects malformed, multi-recipient, control-character, and overlong values
+ * before they reach Nodemailer.
+ */
+export function sanitizeReplyToEmail(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const email = value.trim();
+  if (!email) return undefined;
+  if (email.length > MAX_REPLY_TO_EMAIL_LENGTH) return undefined;
+  // One mailbox only — no lists, comments-as-separators, or header injection.
+  if (/[\r\n\0,;<>()[\]\\]/.test(email)) return undefined;
+  if (/\s/.test(email)) return undefined;
+
+  const at = email.lastIndexOf("@");
+  if (at <= 0 || at !== email.indexOf("@")) return undefined;
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  if (!local || !domain || local.length > 64 || domain.length > 253) return undefined;
+  if (local.startsWith(".") || local.endsWith(".") || local.includes("..")) return undefined;
+  if (!/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)) return undefined;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/.test(domain)) {
+    return undefined;
+  }
+  return email;
+}
 
 function formatBody(data: Record<string, unknown>): string {
   const rows = Object.entries(data)
@@ -23,7 +55,7 @@ export async function sendFormEmail(
   const emailPassword = process.env.EMAIL_PASSWORD;
 
   if (!emailUser || !emailPassword) {
-    console.log(`[email] Gmail not configured — would send to ${TO_EMAIL}:`, subject, data);
+    console.log(`[email] Gmail not configured — would send to ${recipientEmail()}:`, subject, data);
     return { sent: false, error: "Email service not configured" };
   }
 
@@ -36,12 +68,12 @@ export async function sendFormEmail(
       },
     });
 
-    const replyTo = typeof data.email === "string" ? data.email : undefined;
+    const replyTo = sanitizeReplyToEmail(data.email);
 
     await transporter.sendMail({
       from: `"SKL Trucks LLC" <${emailUser}>`,
-      to: TO_EMAIL,
-      replyTo,
+      to: recipientEmail(),
+      ...(replyTo ? { replyTo } : {}),
       subject: `[SKL Trucks] ${subject}`,
       html: `
         <h2>${subject}</h2>
