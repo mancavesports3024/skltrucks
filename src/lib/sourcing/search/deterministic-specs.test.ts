@@ -126,12 +126,12 @@ describe("deterministic engine inference", () => {
     const match = classifyLead(mapped.input, DEFAULT_BUYING_PROFILE, asOf);
     expect(match.status).toBe("does_not_match");
     expect(match.reasons.find((r) => r.code === "cummins")?.outcome).toBe("fail");
-    expect(match.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("fail");
+    expect(match.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("pass");
   });
 });
 
 describe("deterministic GVWR rules", () => {
-  it("GVWR 26,000 → Rejected when profile requires strictly below 26,000", () => {
+  it("GVWR 26,000 → accepted when profile allows ≤ 26,000", () => {
     const result = classifyLead(
       baseLead({
         listedWeightLbs: 26000,
@@ -141,16 +141,16 @@ describe("deterministic GVWR rules", () => {
       DEFAULT_BUYING_PROFILE,
       asOf
     );
-    expect(result.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("fail");
-    expect(result.status).toBe("does_not_match");
+    expect(result.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("pass");
+    expect(result.status).toBe("confirmed_match");
   });
 
-  it("manufacturerGvwrLbs 26000 without listedWeightLbs still rejects", () => {
+  it("manufacturerGvwrLbs 26001 rejects", () => {
     const result = classifyLead(
       baseLead({
         listedWeightLbs: null,
         listedWeightTerm: "gvwr",
-        manufacturerGvwrLbs: 26000,
+        manufacturerGvwrLbs: 26001,
         gvwrDoorPlateVerified: false,
       }),
       DEFAULT_BUYING_PROFILE,

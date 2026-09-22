@@ -9,6 +9,8 @@ import {
   deleteTruckLead,
   getBuyingProfile,
   applyCsvIntake,
+  applyWorkbookIntake,
+  previewWorkbookIntake,
   reclassifyAllLeads,
   saveBuyingProfile,
   upsertSupplierContact,
@@ -350,6 +352,66 @@ export async function importCsvIntakeAction(formData: FormData) {
     defaultSourceScope: defaultSourceScope || undefined,
   });
 
+  if (error) return { error, report: null };
+  revalidateSourcing();
+  return { success: true, report };
+}
+
+async function readUploadBuffer(formData: FormData): Promise<
+  | { ok: true; buffer: Buffer; filename: string }
+  | { ok: false; error: string }
+> {
+  const file = formData.get("workbookFile") ?? formData.get("csvFile");
+  if (!file || typeof file !== "object" || !("arrayBuffer" in file)) {
+    return { ok: false, error: "Choose a .csv, .xls, or .xlsx file." };
+  }
+  const f = file as File;
+  const filename = (f.name || "upload.csv").trim();
+  try {
+    const ab = await f.arrayBuffer();
+    return { ok: true, buffer: Buffer.from(ab), filename };
+  } catch {
+    return { ok: false, error: "Source failure: could not read the uploaded file." };
+  }
+}
+
+/**
+ * Preview authorized dealer workbook — parse + classify only (no persist).
+ */
+export async function previewWorkbookIntakeAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null };
+
+  const sourceLabel = String(formData.get("sourceLabel") ?? "").trim();
+  const uploaded = await readUploadBuffer(formData);
+  if (!uploaded.ok) return { error: uploaded.error, report: null };
+
+  const { error, report } = await previewWorkbookIntake(uploaded.buffer, uploaded.filename, {
+    sourceLabel: sourceLabel || undefined,
+  });
+  if (error) return { error, report: null };
+  return { success: true, report };
+}
+
+/**
+ * Import authorized dealer workbook after staff preview confirmation.
+ */
+export async function importWorkbookIntakeAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null };
+
+  const sourceLabel = String(formData.get("sourceLabel") ?? "").trim();
+  const confirm = String(formData.get("confirmImport") ?? "") === "1";
+  if (!confirm) {
+    return { error: "Import requires explicit confirmation after preview.", report: null };
+  }
+
+  const uploaded = await readUploadBuffer(formData);
+  if (!uploaded.ok) return { error: uploaded.error, report: null };
+
+  const { error, report } = await applyWorkbookIntake(uploaded.buffer, uploaded.filename, {
+    sourceLabel: sourceLabel || undefined,
+  });
   if (error) return { error, report: null };
   revalidateSourcing();
   return { success: true, report };

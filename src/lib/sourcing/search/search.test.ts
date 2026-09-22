@@ -21,7 +21,7 @@ describe("buildSearchQueriesFromProfile", () => {
     expect(blob).toMatch(/Cummins/i);
     expect(blob).toMatch(/automatic/i);
     expect(blob).toMatch(/24|26|28/);
-    expect(blob).toMatch(/GVWR under 26000|GVWR under 26,000/i);
+    expect(blob).toMatch(/GVWR 26000 or less|GVWR under 26000|GVWR under 26,000/i);
     expect(blob).toMatch(/275,?000/);
     expect(blob).toMatch(/Joplin/i);
     expect(blob).toMatch(/liftgate/i);

@@ -45,7 +45,7 @@ describe("earliestAcceptedModelYear", () => {
 });
 
 describe("GVWR rules", () => {
-  it("treats exactly 26,000 lbs manufacturer GVWR as a failure when strictly-below is required", () => {
+  it("accepts exactly 26,000 lbs manufacturer GVWR when ≤ max is allowed (default)", () => {
     const result = classifyLead(
       baseLead({
         listedWeightLbs: 26000,
@@ -54,8 +54,26 @@ describe("GVWR rules", () => {
       DEFAULT_BUYING_PROFILE,
       asOf
     );
-    expect(result.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("fail");
-    expect(result.status).toBe("does_not_match");
+    expect(result.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("pass");
+    expect(result.status).toBe("confirmed_match");
+  });
+
+  it("rejects 26,001 lbs and still fails at 26,000 when strictly-below is enabled", () => {
+    const over = classifyLead(
+      baseLead({ listedWeightLbs: 26001, listedWeightTerm: "gvwr" }),
+      DEFAULT_BUYING_PROFILE,
+      asOf
+    );
+    expect(over.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("fail");
+    expect(over.status).toBe("does_not_match");
+
+    const strict: BuyingProfile = { ...DEFAULT_BUYING_PROFILE, gvwrMustBeStrictlyBelow: true };
+    const atMaxStrict = classifyLead(
+      baseLead({ listedWeightLbs: 26000, listedWeightTerm: "gvwr" }),
+      strict,
+      asOf
+    );
+    expect(atMaxStrict.reasons.find((r) => r.code === "gvwr")?.outcome).toBe("fail");
   });
 
   it("treats missing / GVW-labeled weight as unknown — never confirmed match", () => {
@@ -86,7 +104,7 @@ describe("GVWR rules", () => {
     expect(gvwOnly.status).toBe("needs_verification");
   });
 
-  it("accepts door-plate verified manufacturer GVWR below 26,000", () => {
+  it("accepts door-plate verified manufacturer GVWR at or below 26,000", () => {
     const result = classifyLead(
       baseLead({
         listedWeightLbs: 25999,
@@ -115,33 +133,32 @@ describe("mileage boundary", () => {
 });
 
 describe("required versus preferred", () => {
-  it("does not hard-fail for missing liftgate or unknown distance", () => {
+  it("does not hard-fail for missing liftgate; unknown distance needs verification", () => {
     const noLiftgate = classifyLead(
       baseLead({ hasLiftgate: false, drivingDistanceMiles: null }),
       DEFAULT_BUYING_PROFILE,
       asOf
     );
-    expect(noLiftgate.status).toBe("confirmed_match");
+    expect(noLiftgate.status).toBe("needs_verification");
     expect(noLiftgate.reasons.find((r) => r.code === "liftgate")?.outcome).toBe("preferred_fail");
-    expect(noLiftgate.reasons.find((r) => r.code === "distance")?.outcome).toBe(
-      "preferred_unknown"
-    );
+    expect(noLiftgate.reasons.find((r) => r.code === "distance")?.outcome).toBe("unknown");
     expect(noLiftgate.reasons.find((r) => r.code === "distance")?.label).toMatch(/not invented/i);
   });
 
-  it("marks known over-distance trucks as out-of-range opportunity when required specs pass", () => {
+  it("rejects known over-distance trucks when required specs otherwise pass", () => {
     const result = classifyLead(
       baseLead({ drivingDistanceMiles: 1392 }),
       DEFAULT_BUYING_PROFILE,
       asOf
     );
-    expect(result.status).toBe("out_of_range_opportunity");
+    expect(result.status).toBe("does_not_match");
+    expect(result.reasons.find((r) => r.code === "distance")?.outcome).toBe("fail");
   });
 
   it("does not use out-of-range when a required spec is still unknown", () => {
     const result = classifyLead(
       baseLead({
-        drivingDistanceMiles: 1392,
+        drivingDistanceMiles: null,
         listedWeightLbs: 25999,
         listedWeightTerm: "gvw",
         manufacturerGvwrLbs: null,
@@ -158,7 +175,7 @@ describe("required versus preferred", () => {
     const result = classifyLead(
       baseLead({
         drivingDistanceMiles: 1392,
-        listedWeightLbs: 26000,
+        listedWeightLbs: 26001,
         listedWeightTerm: "gvwr",
       }),
       DEFAULT_BUYING_PROFILE,

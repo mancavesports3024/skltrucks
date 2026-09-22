@@ -226,7 +226,12 @@ export interface IntakeRowResult {
 
 export function csvRowToIntakeLead(
   row: Record<string, string>,
-  defaults?: { sourceScope?: string; seedSource?: string }
+  defaults?: {
+    sourceScope?: string;
+    seedSource?: string;
+    /** Authorized workbook / dealer sheet rows may omit a public listing URL. */
+    allowMissingListingUrl?: boolean;
+  }
 ): IntakeRowResult {
   const rowErrors: string[] = [];
   const seller = get(row, "seller", "source_name", "dealer", "company");
@@ -242,12 +247,18 @@ export function csvRowToIntakeLead(
     sourceListingId: sourceListingIdRaw,
     stockNumber,
   });
+  const vin = normalizeVin(get(row, "vin"));
 
   if (!sourceScope || !sourceListingId) {
     rowErrors.push("Each row needs source_scope (or seller) and source_listing_id (or stock_number).");
   }
+  const allowMissingUrl = defaults?.allowMissingListingUrl === true;
   if (!sourceUrl) {
-    rowErrors.push("listing_url / source_url is required to preserve the original listing link.");
+    if (allowMissingUrl && (vin || sourceListingId)) {
+      // Authorized workbook inventory — identity without public sale URL is OK.
+    } else {
+      rowErrors.push("listing_url / source_url is required to preserve the original listing link.");
+    }
   }
 
   const evidence: SpecEvidence = normalizeSpecEvidence({
@@ -300,7 +311,6 @@ export function csvRowToIntakeLead(
     notesParts.push(`CSV claimed manufacturer GVWR ${claimedGvwr} lbs without evidence.`);
   }
 
-  const vin = normalizeVin(get(row, "vin"));
   const input: TruckLeadInput = {
     seller: seller || sourceScope,
     supplierContactId: null,

@@ -27,6 +27,11 @@
 # local performance / image optimization artifacts (not for deploy)
 /artifacts/
 
+# Authorized dealer workbooks (never commit real inventory / VIN / inspection URLs)
+/tmp-workbooks/
+**/Pre-Auction*.xls
+**/Wholesale List*.xlsx
+
 # debug
 npm-debug.log*
 yarn-debug.log*

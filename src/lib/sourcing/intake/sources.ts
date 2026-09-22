@@ -2,6 +2,8 @@ import type { SpecEvidence } from "@/types/sourcing";
 
 export const INTAKE_SOURCE_IDS = [
   "penske-used-trucks",
+  "penske-preauction",
+  "hogan-wholesale",
   "ryder-fleet-remarketing",
   "regional-dealer-csv",
   "staff-reviewed-csv",
@@ -67,6 +69,46 @@ export const INTAKE_SOURCES: IntakeSourceProfile[] = [
     ],
     automationReady: false,
     defaultSourceScope: "penske-used-trucks",
+  },
+  {
+    id: "penske-preauction",
+    name: "Penske Pre-Auction (Medium Duty workbook)",
+    summary:
+      "Authorized dealer pre-auction Excel (.xls). Staff upload Medium Duty sheet only — no invented listing URLs, no scraping.",
+    accessMethods: [
+      {
+        method: "csv_export",
+        available: true,
+        notes: "Staff-reviewed .xls intake via /admin/sourcing/intake (preview then import).",
+      },
+      {
+        method: "supplier_email",
+        available: true,
+        notes: "Weekly pre-auction list from Penske dealer sales after license registration.",
+      },
+    ],
+    automationReady: false,
+    defaultSourceScope: "penske-preauction",
+  },
+  {
+    id: "hogan-wholesale",
+    name: "Hogan Wholesale List",
+    summary:
+      "Authorized Hogan wholesale .xlsx. Unit # identity (no VIN in main table). Inspection HTTPS links stored in evidence only.",
+    accessMethods: [
+      {
+        method: "csv_export",
+        available: true,
+        notes: "Staff-reviewed .xlsx intake via /admin/sourcing/intake (preview then import).",
+      },
+      {
+        method: "supplier_email",
+        available: true,
+        notes: "Wholesale list emailed to licensed dealers.",
+      },
+    ],
+    automationReady: false,
+    defaultSourceScope: "hogan-wholesale",
   },
   {
     id: "ryder-fleet-remarketing",
@@ -141,6 +183,11 @@ export function emptySpecEvidence(): SpecEvidence {
     transmission: "",
     boxLength: "",
     gvwr: "",
+    inspectionUrl: "",
+    workbookStatus: "",
+    salesTerms: "",
+    penskeStatus: "",
+    titleStatus: "",
   };
 }
 
@@ -153,5 +200,10 @@ export function normalizeSpecEvidence(raw: unknown): SpecEvidence {
     transmission: String(obj.transmission ?? obj.transmission_evidence ?? "").trim(),
     boxLength: String(obj.boxLength ?? obj.box_length ?? obj.box_length_evidence ?? "").trim(),
     gvwr: String(obj.gvwr ?? obj.gvwr_evidence ?? "").trim(),
+    inspectionUrl: String(obj.inspectionUrl ?? obj.inspection_url ?? "").trim(),
+    workbookStatus: String(obj.workbookStatus ?? obj.workbook_status ?? "").trim(),
+    salesTerms: String(obj.salesTerms ?? obj.sales_terms ?? "").trim(),
+    penskeStatus: String(obj.penskeStatus ?? obj.penske_status ?? "").trim(),
+    titleStatus: String(obj.titleStatus ?? obj.title_status ?? "").trim(),
   };
 }
