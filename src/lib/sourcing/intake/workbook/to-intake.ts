@@ -1,10 +1,11 @@
 import { canonicalizeListingUrl, normalizeVin } from "@/lib/sourcing/duplicates";
+import { estimateDistanceFromLocation } from "@/lib/sourcing/distance/estimate-from-location";
 import { emptySpecEvidence } from "@/lib/sourcing/intake/sources";
 import type { WorkbookParseSuccess } from "@/lib/sourcing/intake/workbook/parse";
 import { mapPenskePreauctionRow } from "@/lib/sourcing/intake/workbook/penske-preauction";
 import { mapHoganWholesaleRow } from "@/lib/sourcing/intake/workbook/hogan-wholesale";
 import { csvRowToIntakeLead, type IntakeRowResult } from "@/lib/sourcing/intake/csv";
-import type { ListedWeightTerm, TruckLeadInput } from "@/types/sourcing";
+import type { ListedWeightTerm, SpecEvidence, TruckLeadInput } from "@/types/sourcing";
 
 function weightFields(gvwLbs: number | null, gvwRaw: string): {
   listedWeightLbs: number | null;
@@ -23,6 +24,43 @@ function weightFields(gvwLbs: number | null, gvwRaw: string): {
     listedWeightLbs: gvwLbs,
     listedWeightTerm: "gvw",
     manufacturerGvwrLbs: gvwLbs,
+  };
+}
+
+/** Apply offline Joplin straight-line distance when city+state resolve in the Census gazetteer. */
+export function applyOfflineWorkbookDistance(
+  location: string,
+  evidence: SpecEvidence,
+  uncertaintyLabels: string[]
+): {
+  drivingDistanceMiles: number | null;
+  distanceIsEstimate: true;
+  evidence: SpecEvidence;
+  researchUncertaintyLabels: string[];
+  missingDistance: boolean;
+  distanceSummary: string;
+} {
+  const estimate = estimateDistanceFromLocation(location);
+  const labels = uncertaintyLabels.filter((l) => l !== "distance_not_geocoded");
+
+  if (estimate.ok) {
+    return {
+      drivingDistanceMiles: estimate.miles,
+      distanceIsEstimate: true,
+      evidence: { ...evidence, distance: estimate.evidenceText },
+      researchUncertaintyLabels: labels,
+      missingDistance: false,
+      distanceSummary: `${estimate.methodLabel}: ${estimate.miles} mi (${estimate.resolved.display})`,
+    };
+  }
+
+  return {
+    drivingDistanceMiles: null,
+    distanceIsEstimate: true,
+    evidence: { ...evidence, distance: estimate.evidenceText },
+    researchUncertaintyLabels: [...labels, "distance_not_geocoded"],
+    missingDistance: true,
+    distanceSummary: `Distance unknown (${estimate.reason})`,
   };
 }
 
@@ -57,6 +95,14 @@ export function workbookRowsToIntake(
         };
       }
       const weights = weightFields(mapped.gvwLbs, mapped.gvwRaw);
+      const distance = applyOfflineWorkbookDistance(
+        mapped.location,
+        { ...emptySpecEvidence(), ...mapped.evidence },
+        [
+          ...(mapped.gvwLbs != null ? ["workbook_gvw_not_door_plate"] : ["missing_or_ambiguous_gvw"]),
+          ...(mapped.bodyRejectReason ? ["non_dry_van_body"] : []),
+        ]
+      );
       const input: TruckLeadInput = {
         seller: "Penske Pre-Auction",
         supplierContactId: null,
@@ -83,20 +129,16 @@ export function workbookRowsToIntake(
         liftgateNotes: mapped.liftgateNotes,
         price: mapped.price,
         location: mapped.location,
-        drivingDistanceMiles: null,
-        distanceIsEstimate: true,
+        drivingDistanceMiles: distance.drivingDistanceMiles,
+        distanceIsEstimate: distance.distanceIsEstimate,
         dateLastChecked: dateObserved,
         verificationNotes: mapped.notes.join("\n"),
         workflowStatus: "new",
         sklCallNotes: "",
-        researchUncertaintyLabels: [
-          ...(mapped.gvwLbs != null ? ["workbook_gvw_not_door_plate"] : ["missing_or_ambiguous_gvw"]),
-          ...(mapped.bodyRejectReason ? ["non_dry_van_body"] : []),
-          "distance_not_geocoded",
-        ],
+        researchUncertaintyLabels: distance.researchUncertaintyLabels,
         isSeedResearch: false,
         seedSource: `Penske pre-auction workbook (${parsed.filename})`,
-        specEvidence: { ...emptySpecEvidence(), ...mapped.evidence },
+        specEvidence: distance.evidence,
       };
 
       const rowErrors: string[] = [];
@@ -111,7 +153,7 @@ export function workbookRowsToIntake(
         if (!mapped.bodyRejectReason) missingEvidence.push("box_length");
       }
       if (!mapped.evidence.gvwr?.trim() || mapped.gvwLbs == null) missingEvidence.push("gvwr");
-      missingEvidence.push("distance");
+      if (distance.missingDistance) missingEvidence.push("distance");
 
       return { input, dateObserved, missingEvidence, rowErrors };
     });
@@ -129,6 +171,17 @@ export function workbookRowsToIntake(
       };
     }
     const weights = weightFields(mapped.gvwLbs, mapped.gvwRaw);
+    const distance = applyOfflineWorkbookDistance(
+      mapped.location,
+      { ...emptySpecEvidence(), ...mapped.evidence },
+      [
+        ...(mapped.gvwLbs != null ? ["workbook_gvw_not_door_plate"] : ["missing_or_ambiguous_gvw"]),
+        ...(mapped.bodyRejectReason ? ["non_dry_van_body"] : []),
+        ...(mapped.looksCanadian ? ["canadian_location"] : []),
+        ...(mapped.inspectionUrlError ? ["inspection_url_rejected"] : []),
+        "availability_not_proven_by_completion_status",
+      ]
+    );
     const input: TruckLeadInput = {
       seller: "Hogan Wholesale",
       supplierContactId: null,
@@ -155,23 +208,16 @@ export function workbookRowsToIntake(
       liftgateNotes: mapped.liftgateNotes,
       price: mapped.price,
       location: mapped.location,
-      drivingDistanceMiles: null,
-      distanceIsEstimate: true,
+      drivingDistanceMiles: distance.drivingDistanceMiles,
+      distanceIsEstimate: distance.distanceIsEstimate,
       dateLastChecked: dateObserved,
       verificationNotes: mapped.notes.join("\n"),
       workflowStatus: "new",
       sklCallNotes: "",
-      researchUncertaintyLabels: [
-        ...(mapped.gvwLbs != null ? ["workbook_gvw_not_door_plate"] : ["missing_or_ambiguous_gvw"]),
-        ...(mapped.bodyRejectReason ? ["non_dry_van_body"] : []),
-        ...(mapped.looksCanadian ? ["canadian_location"] : []),
-        ...(mapped.inspectionUrlError ? ["inspection_url_rejected"] : []),
-        "distance_not_geocoded",
-        "availability_not_proven_by_completion_status",
-      ],
+      researchUncertaintyLabels: distance.researchUncertaintyLabels,
       isSeedResearch: false,
       seedSource: `Hogan wholesale workbook (${parsed.filename})`,
-      specEvidence: { ...emptySpecEvidence(), ...mapped.evidence },
+      specEvidence: distance.evidence,
     };
 
     const rowErrors: string[] = [];
@@ -184,7 +230,7 @@ export function workbookRowsToIntake(
       if (!mapped.bodyRejectReason) missingEvidence.push("box_length");
     }
     if (!mapped.evidence.gvwr?.trim() || mapped.gvwLbs == null) missingEvidence.push("gvwr");
-    missingEvidence.push("distance");
+    if (distance.missingDistance) missingEvidence.push("distance");
 
     return { input, dateObserved, missingEvidence, rowErrors };
   });

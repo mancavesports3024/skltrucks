@@ -78,6 +78,11 @@ export interface SpecEvidence {
   salesTerms?: string;
   penskeStatus?: string;
   titleStatus?: string;
+  /**
+   * Offline estimated straight-line distance provenance (Census gazetteer + haversine).
+   * Never describes driving distance. Stored in jsonb — no migration.
+   */
+  distance?: string;
 }
 
 export interface TruckLead {

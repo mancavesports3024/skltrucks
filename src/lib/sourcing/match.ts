@@ -21,6 +21,8 @@ export interface LeadMatchInput {
   mileage: number | null;
   hasLiftgate: boolean | null;
   drivingDistanceMiles: number | null;
+  /** When true (workbook offline estimate), labels say straight-line — never driving. */
+  distanceIsEstimate?: boolean;
   price: number | null;
 }
 
@@ -254,17 +256,26 @@ export function classifyLead(
     });
   }
 
-  // --- Required: Driving distance (within preferred max miles of origin) ---
+  // --- Required: Distance from origin (within preferred max miles) ---
   {
     let outcome: ConstraintOutcome = "unknown";
-    let label = "Driving distance unknown — not invented";
+    const isEstimate = lead.distanceIsEstimate !== false;
+    const milesNoun = isEstimate
+      ? "Estimated straight-line distance"
+      : "Driving distance";
+    let label = `${milesNoun} unknown — not invented`;
     if (lead.drivingDistanceMiles != null) {
-      if (lead.drivingDistanceMiles <= profile.preferredMaxDrivingMiles) {
+      const miles = lead.drivingDistanceMiles;
+      if (miles <= profile.preferredMaxDrivingMiles) {
         outcome = "pass";
-        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (within ${profile.preferredMaxDrivingMiles})`;
+        label = isEstimate
+          ? `Estimated straight-line distance ~${miles} mi from ${profile.originLabel} (within ${profile.preferredMaxDrivingMiles})`
+          : `~${miles} driving miles from ${profile.originLabel} (within ${profile.preferredMaxDrivingMiles})`;
       } else {
         outcome = "fail";
-        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (outside ${profile.preferredMaxDrivingMiles}-mile radius)`;
+        label = isEstimate
+          ? `Estimated straight-line distance ~${miles} mi from ${profile.originLabel} (outside ${profile.preferredMaxDrivingMiles}-mile radius)`
+          : `~${miles} driving miles from ${profile.originLabel} (outside ${profile.preferredMaxDrivingMiles}-mile radius)`;
       }
     }
     reasons.push({

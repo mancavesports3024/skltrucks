@@ -188,6 +188,7 @@ export function emptySpecEvidence(): SpecEvidence {
     salesTerms: "",
     penskeStatus: "",
     titleStatus: "",
+    distance: "",
   };
 }
 
@@ -205,5 +206,6 @@ export function normalizeSpecEvidence(raw: unknown): SpecEvidence {
     salesTerms: String(obj.salesTerms ?? obj.sales_terms ?? "").trim(),
     penskeStatus: String(obj.penskeStatus ?? obj.penske_status ?? "").trim(),
     titleStatus: String(obj.titleStatus ?? obj.title_status ?? "").trim(),
+    distance: String(obj.distance ?? obj.distance_evidence ?? "").trim(),
   };
 }
