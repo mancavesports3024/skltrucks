@@ -1,4 +1,5 @@
 import { classifyLead } from "@/lib/sourcing/match";
+import { estimateDistanceFromLocation } from "@/lib/sourcing/distance/estimate-from-location";
 import {
   findExistingLead,
   planIntakeRow,
@@ -18,6 +19,12 @@ export type WorkbookPreviewRow = {
   mileage: number | null;
   price: number | null;
   location: string;
+  /** Resolved city/state from offline gazetteer, when known. */
+  resolvedLocation: string | null;
+  /** Estimated straight-line miles from Joplin, or null when unresolved. */
+  estimatedDistanceMiles: number | null;
+  /** Human-readable distance method / failure. */
+  distanceNote: string;
   gvwLbs: number | null;
   matchStatus: MatchStatus;
   applyKind: IntakeApplyPlan["kind"] | "invalid";
@@ -95,6 +102,9 @@ export function buildWorkbookPreview(
         mileage: null,
         price: null,
         location: "",
+        resolvedLocation: null,
+        estimatedDistanceMiles: null,
+        distanceNote: "Distance unknown",
         gvwLbs: null,
         matchStatus: "does_not_match",
         applyKind: "invalid",
@@ -125,6 +135,11 @@ export function buildWorkbookPreview(
       );
     }
 
+    const distanceEstimate = estimateDistanceFromLocation(plan.input.location);
+    const distanceNote = distanceEstimate.ok
+      ? `${distanceEstimate.methodLabel}: ${distanceEstimate.miles} mi → ${distanceEstimate.resolved.display}`
+      : `Distance unknown (${distanceEstimate.reason})`;
+
     previewRows.push({
       rowNumber: idx + 1,
       unit: plan.input.sourceListingId || plan.input.stockNumber,
@@ -134,6 +149,9 @@ export function buildWorkbookPreview(
       mileage: plan.input.mileage,
       price: plan.input.price,
       location: plan.input.location,
+      resolvedLocation: distanceEstimate.ok ? distanceEstimate.resolved.display : null,
+      estimatedDistanceMiles: plan.input.drivingDistanceMiles,
+      distanceNote,
       gvwLbs: plan.input.manufacturerGvwrLbs ?? plan.input.listedWeightLbs,
       matchStatus: plan.matchStatus,
       applyKind: plan.kind,

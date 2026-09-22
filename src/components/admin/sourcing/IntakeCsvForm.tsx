@@ -243,6 +243,8 @@ export default function IntakeCsvForm() {
                     <th className="py-2 pr-3">Unit</th>
                     <th className="py-2 pr-3">Year / unit</th>
                     <th className="py-2 pr-3">GVW</th>
+                    <th className="py-2 pr-3">Location</th>
+                    <th className="py-2 pr-3">Est. mi</th>
                     <th className="py-2 pr-3">Status</th>
                     <th className="py-2 pr-3">Apply</th>
                     <th className="py-2">Notes</th>
@@ -258,6 +260,18 @@ export default function IntakeCsvForm() {
                       </td>
                       <td className="py-2 pr-3">
                         {row.gvwLbs != null ? row.gvwLbs.toLocaleString() : "—"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div>{row.location || "—"}</div>
+                        {row.resolvedLocation && row.resolvedLocation !== row.location ? (
+                          <div className="text-neutral-500">→ {row.resolvedLocation}</div>
+                        ) : null}
+                        <div className="text-neutral-500">{row.distanceNote}</div>
+                      </td>
+                      <td className="py-2 pr-3">
+                        {row.estimatedDistanceMiles != null
+                          ? row.estimatedDistanceMiles.toLocaleString()
+                          : "—"}
                       </td>
                       <td className="py-2 pr-3">{row.summary}</td>
                       <td className="py-2 pr-3">{row.applyKind}</td>

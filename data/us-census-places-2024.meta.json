@@ -1,0 +1,32 @@
+{
+  "name": "U.S. Census Bureau National Places Gazetteer Files",
+  "year": 2024,
+  "file": "2024_Gaz_place_national.txt",
+  "url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteer/2024_Gaz_place_national.zip",
+  "license": "U.S. Government work — public domain (no copyright)",
+  "downloadedNote": "Coordinates are Census internal points (INTPTLAT/INTPTLONG). Parentheticals like (balance) stripped; New England 'X Town city' also keyed as 'X'.",
+  "zipSha256": "cf262fc92b2326f7a8c62a89d156a60eb17d64d6d35f7a62310c43bb08972c06",
+  "txtSha256": "ba197a3c0cef828d47981ed7435d820d040d3199bf39a719cd9b11412c59afa6",
+  "placeCount": 32141,
+  "outputBytes": 1164809,
+  "generatedAt": "2026-09-22T21:23:42.522Z",
+  "joplinMoKey": "joplin|mo",
+  "joplinMo": [
+    37.07522,
+    -94.50126
+  ],
+  "sampleKeys": {
+    "indianapolisIn": [
+      39.77666,
+      -86.14593
+    ],
+    "braintreeMa": [
+      42.20619,
+      -71.00232
+    ],
+    "kansasCityMo": [
+      39.12515,
+      -94.55031
+    ]
+  }
+}

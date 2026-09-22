@@ -335,10 +335,59 @@ describe("workbook preview / dedupe / change detection", () => {
     const tavily = vi.fn();
     (globalThis as { __openai?: unknown }).__openai = openAi;
     (globalThis as { __tavily?: unknown }).__tavily = tavily;
+    const fetchSpy = vi.spyOn(globalThis, "fetch" as never).mockImplementation(() => {
+      throw new Error("network should not be called");
+    });
     const buf = readFileSync(hoganPath);
     buildWorkbookPreview(buf, "hogan.xlsx", [], DEFAULT_BUYING_PROFILE);
     expect(openAi).not.toHaveBeenCalled();
     expect(tavily).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("applies offline estimated distance on Penske/Hogan preview and keeps evidence for import", () => {
+    const penske = buildWorkbookPreview(
+      readFileSync(penskePath),
+      "penske.xls",
+      [],
+      DEFAULT_BUYING_PROFILE
+    );
+    const withDistance = penske.plans.filter((p) => p.input.drivingDistanceMiles != null);
+    expect(withDistance.length).toBeGreaterThan(0);
+    for (const plan of withDistance) {
+      expect(plan.input.distanceIsEstimate).toBe(true);
+      expect(plan.input.specEvidence.distance).toMatch(/Estimated straight-line distance/);
+      expect(plan.input.specEvidence.distance).not.toMatch(/driving distance/i);
+      expect(plan.input.researchUncertaintyLabels).not.toContain("distance_not_geocoded");
+    }
+    expect(penske.previewRows.some((r) => r.estimatedDistanceMiles != null)).toBe(true);
+
+    const hogan = buildWorkbookPreview(
+      readFileSync(hoganPath),
+      "hogan.xlsx",
+      [],
+      DEFAULT_BUYING_PROFILE
+    );
+    const kc = hogan.plans.find((p) => /kansas city/i.test(p.input.location));
+    expect(kc).toBeTruthy();
+    expect(kc!.input.drivingDistanceMiles).not.toBeNull();
+    expect(kc!.input.drivingDistanceMiles!).toBeLessThanOrEqual(1200);
+    expect(kc!.input.specEvidence.distance).toMatch(/Kansas City/i);
+
+    // Preview → “import plan” preserves distance without inventing listing URL
+    const again = buildWorkbookPreview(
+      readFileSync(hoganPath),
+      "hogan.xlsx",
+      [],
+      DEFAULT_BUYING_PROFILE
+    );
+    const againKc = again.plans.find((p) => p.input.sourceListingId === kc!.input.sourceListingId);
+    expect(againKc!.input.drivingDistanceMiles).toBe(kc!.input.drivingDistanceMiles);
+    expect(againKc!.input.specEvidence.distance).toBe(kc!.input.specEvidence.distance);
+    expect(againKc!.input.makeModel).toBe(kc!.input.makeModel);
+    expect(againKc!.input.mileage).toBe(kc!.input.mileage);
+    expect(againKc!.input.sourceUrl).toBe("");
   });
 });
 
