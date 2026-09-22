@@ -16,6 +16,8 @@ import {
   resizeSiteImageToWidth,
 } from "@/lib/images/optimize-site-image";
 import {
+  ALLOWED_SITE_IMAGE_CONTENT_TYPES,
+  isAllowedSiteImageContentType,
   normalizeImageContentType,
   parseSiteImageQualityParam,
   parseSiteImageWidthParam,
@@ -149,6 +151,19 @@ describe("site-image request params", () => {
     expect(normalizeImageContentType("text/html")).toBe("text/html");
     expect(normalizeImageContentType(null)).toBeNull();
   });
+
+  it("allows jpeg/png/webp/gif and rejects avif before Sharp", () => {
+    expect(ALLOWED_SITE_IMAGE_CONTENT_TYPES.has("image/avif")).toBe(false);
+    expect(isAllowedSiteImageContentType("image/avif")).toBe(false);
+    expect(isAllowedSiteImageContentType("image/avif; codecs=av01")).toBe(false);
+    expect(isAllowedSiteImageContentType("image/heif")).toBe(false);
+    expect(isAllowedSiteImageContentType("image/jpeg")).toBe(true);
+    expect(isAllowedSiteImageContentType("image/jpg")).toBe(true);
+    expect(isAllowedSiteImageContentType("image/png")).toBe(true);
+    expect(isAllowedSiteImageContentType("image/webp")).toBe(true);
+    expect(isAllowedSiteImageContentType("image/gif")).toBe(true);
+    expect(isAllowedSiteImageContentType("text/html")).toBe(false);
+  });
 });
 
 describe("optimize-site-image safeguards", () => {
@@ -189,6 +204,38 @@ describe("optimize-site-image safeguards", () => {
     const meta = await sharp(resized).metadata();
     expect(meta.width).toBe(400);
     expect(meta.format).toBe("webp");
+  });
+
+  it("processes jpeg, png, and webp inputs into webp output", async () => {
+    const makers: Array<() => Promise<Buffer>> = [
+      () =>
+        sharp({
+          create: { width: 640, height: 360, channels: 3, background: { r: 10, g: 20, b: 30 } },
+        })
+          .jpeg()
+          .toBuffer(),
+      () =>
+        sharp({
+          create: { width: 640, height: 360, channels: 3, background: { r: 40, g: 50, b: 60 } },
+        })
+          .png()
+          .toBuffer(),
+      () =>
+        sharp({
+          create: { width: 640, height: 360, channels: 3, background: { r: 70, g: 80, b: 90 } },
+        })
+          .webp()
+          .toBuffer(),
+    ];
+
+    for (const make of makers) {
+      const input = await make();
+      const out = await resizeSiteImageToWidth(input, 640, 75);
+      const meta = await sharp(out).metadata();
+      expect(meta.format).toBe("webp");
+      expect(meta.width).toBe(640);
+      expect(out.byteLength).toBeGreaterThan(100);
+    }
   });
 
   it("rejects images that exceed safe input dimensions", async () => {
