@@ -43,11 +43,12 @@ describe("place normalization", () => {
   });
 
   it("requires city and state together", () => {
-    expect(parseCityStateLocation("Kansas City").ok).toBe(false);
-    expect(parseCityStateLocation("Kansas City").ok === false && parseCityStateLocation("Kansas City").reason).toBe(
-      "missing_state"
-    );
-    expect(parseCityStateLocation("").ok === false && parseCityStateLocation("").reason).toBe("empty");
+    const cityOnly = parseCityStateLocation("Kansas City");
+    expect(cityOnly.ok).toBe(false);
+    if (!cityOnly.ok) expect(cityOnly.reason).toBe("missing_state");
+    const empty = parseCityStateLocation("");
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(empty.reason).toBe("empty");
     expect(parseCityStateLocation("Kansas City, MO").ok).toBe(true);
     expect(parseCityStateLocation("31 - Kansas City, MO").ok).toBe(true);
   });
@@ -93,6 +94,15 @@ describe("offline estimate from Joplin", () => {
       if (!r.ok) continue;
       expect(r.miles, loc).toBeGreaterThan(1200);
     }
+  });
+
+  it("resolves Census balance / New England Town city forms", () => {
+    const indy = estimateDistanceFromLocation("Indianapolis, IN");
+    expect(indy.ok).toBe(true);
+    if (indy.ok) expect(indy.miles).toBeLessThanOrEqual(1200);
+    const braintree = estimateDistanceFromLocation("Braintree, MA");
+    expect(braintree.ok).toBe(true);
+    if (braintree.ok) expect(braintree.miles).toBeGreaterThan(1200);
   });
 
   it("leaves missing state, unknown city, malformed, and empty unresolved", () => {

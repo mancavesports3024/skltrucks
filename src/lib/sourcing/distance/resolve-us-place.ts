@@ -18,7 +18,7 @@ type PlacesPayload = {
   places: Record<string, [number, number]>;
 };
 
-const dataset = placesDataset as PlacesPayload;
+const dataset = placesDataset as unknown as PlacesPayload;
 
 /** Bundled Census 2024 places lookup — no network access. */
 export function getUsPlacesLookup(): Readonly<Record<string, [number, number]>> {

@@ -43,10 +43,15 @@ npx tsx scripts/generate-us-places-lookup.mts ./2024_Gaz_place_national.txt
 
 The generator:
 
-1. Normalizes place names (strip city/town/CDP suffixes; collapse `St.`/`Saint`, `Ft.`/`Fort`; lowercase).
-2. Keys as `normalizedCity|st` (e.g. `kansas city|mo`).
-3. On duplicate keys within a state, prefers FUNCSTAT `A`, then largest `ALAND`.
-4. Rounds coordinates to five decimal degrees.
+1. Removes parentheticals such as `(balance)` (e.g. Indianapolis city (balance)).
+2. Strips one Census legal-type suffix (city / town / village / CDP / …).
+3. For New England-style remainders ending in `Town` (e.g. Braintree Town city → Braintree Town), also registers an alias without `Town` so staff can enter `Braintree, MA`.
+4. Normalizes place names (collapse `St.`/`Saint`, `Ft.`/`Fort`; lowercase).
+5. Keys as `normalizedCity|st` (e.g. `kansas city|mo`). Does **not** strip a second bare `City`, so Kansas City stays intact.
+6. On duplicate keys within a state, prefers FUNCSTAT `A`, then largest `ALAND`.
+7. Rounds coordinates to five decimal degrees.
+
+Places absent from the Census Places file (some townships / unincorporated areas such as Earth City, MO or North Bergen, NJ) stay unresolved — no guessing.
 
 Runtime code **never** downloads this file and makes **no** geocoding / Maps / OpenAI / Tavily network calls for distance.
 
