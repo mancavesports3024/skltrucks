@@ -1,6 +1,6 @@
 import Link from "next/link";
-import MatchStatusBadge from "@/components/admin/sourcing/MatchStatusBadge";
 import SourcingNav from "@/components/admin/sourcing/SourcingNav";
+import TruckLeadsList from "@/components/admin/sourcing/TruckLeadsList";
 import { getTruckLeads } from "@/lib/sourcing/db";
 import { MATCH_STATUS_LABELS, type MatchStatus } from "@/types/sourcing";
 
@@ -57,64 +57,7 @@ export default async function SourcingLeadsPage({ searchParams }: PageProps) {
           ))}
         </div>
 
-        <div className="overflow-x-auto border border-neutral-200 bg-white">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs uppercase text-neutral-500">
-              <tr>
-                <th className="px-4 py-3">Truck</th>
-                <th className="px-4 py-3">Seller</th>
-                <th className="px-4 py-3">Match</th>
-                <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3">Distance</th>
-                <th className="px-4 py-3">Checked</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((lead) => (
-                <tr key={lead.id} className="border-t border-neutral-100 hover:bg-neutral-50">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/sourcing/leads/${lead.id}`}
-                      className="font-semibold text-neutral-900 hover:text-[#fc0527]"
-                    >
-                      {[lead.year, lead.makeModel].filter(Boolean).join(" ") || "Untitled lead"}
-                    </Link>
-                    <div className="text-xs text-neutral-500">
-                      {lead.stockNumber && <span>#{lead.stockNumber} · </span>}
-                      {lead.boxLengthFt != null ? `${lead.boxLengthFt}' box` : lead.boxLengthRaw || "box ?"}
-                      {lead.isSeedResearch && (
-                        <span className="ml-2 text-amber-700">seed</span>
-                      )}
-                      {lead.seedSource?.includes("CSV") && (
-                        <span className="ml-2 text-sky-700">intake</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">{lead.seller || "—"}</td>
-                  <td className="px-4 py-3">
-                    <MatchStatusBadge status={lead.matchStatus} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {lead.price != null ? `$${lead.price.toLocaleString()}` : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {lead.drivingDistanceMiles != null
-                      ? `~${lead.drivingDistanceMiles} mi`
-                      : "unknown"}
-                  </td>
-                  <td className="px-4 py-3">{lead.dateLastChecked || "—"}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
-                    No leads yet. Add one or import unverified seed research from Overview.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TruckLeadsList leads={filtered} />
       </div>
     </div>
   );
