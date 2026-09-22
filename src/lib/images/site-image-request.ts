@@ -27,11 +27,21 @@ export function normalizeImageContentType(value: string | null): string | null {
   return value.split(";")[0]?.trim().toLowerCase() || null;
 }
 
+/**
+ * Media types accepted by `/api/site-image` before Sharp runs.
+ * AVIF is intentionally excluded: inventory delivery does not require it, and
+ * AVIF decoding has historically been a high-risk path in image libraries.
+ */
 export const ALLOWED_SITE_IMAGE_CONTENT_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
   "image/png",
   "image/webp",
   "image/gif",
-  "image/avif",
 ]);
+
+export function isAllowedSiteImageContentType(value: string | null): boolean {
+  const normalized = normalizeImageContentType(value);
+  if (!normalized) return false;
+  return ALLOWED_SITE_IMAGE_CONTENT_TYPES.has(normalized);
+}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseApprovedSiteImageUrl } from "@/lib/images/site-image-delivery";
 import { resizeSiteImageToWidth } from "@/lib/images/optimize-site-image";
 import {
-  ALLOWED_SITE_IMAGE_CONTENT_TYPES,
+  isAllowedSiteImageContentType,
   normalizeImageContentType,
   parseSiteImageQualityParam,
   parseSiteImageWidthParam,
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     }
 
     const contentType = normalizeImageContentType(upstream.headers.get("content-type"));
-    if (!contentType || !ALLOWED_SITE_IMAGE_CONTENT_TYPES.has(contentType)) {
+    if (!isAllowedSiteImageContentType(contentType)) {
       return errorJson(415, "Unsupported media type");
     }
 
