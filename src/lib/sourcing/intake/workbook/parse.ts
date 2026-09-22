@@ -1,7 +1,8 @@
 /**
  * Safe server-side spreadsheet read for staff intake.
- * - Uses SheetJS stored values only (raw: false / cellDates false)
- * - Does not execute macros, external links, or formulas
+ * - SheetJS CE (`xlsx@0.20.3` via official cdn.sheetjs.com tarball)
+ * - Uses stored values only (raw: false / cellDates false)
+ * - Does not execute macros, external links, or formulas (bookVBA: false)
  * - Enforces size / row limits and file signatures
  */
 import * as XLSX from "xlsx";
