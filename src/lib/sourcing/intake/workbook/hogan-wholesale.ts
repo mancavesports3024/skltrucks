@@ -19,6 +19,9 @@ export const HOGAN_WHOLESALE_SCOPE = "hogan-wholesale";
 /** Only HTTPS inspection-report hosts accepted for Hogan 3rd-party insp links. */
 export const HOGAN_INSPECTION_ALLOWED_HOSTS = [
   "inspection-reports.example.test", // synthetic fixtures
+  "reports.nationalinspect.com",
+  "nationalinspect.com",
+  "www.nationalinspect.com",
   "www.fleetinspect.com",
   "fleetinspect.com",
   "app.fleetinspect.com",
@@ -149,7 +152,7 @@ export function mapHoganWholesaleRow(row: Record<string, string>): HoganWholesal
   const lift = parseLiftgate(liftRaw);
   const insp = validateInspectionUrl(hyperlink);
 
-  const completionStatus = thirdPartyInspLabel || osStatus;
+  const completionStatus = osStatus || thirdPartyInspLabel;
   const evidence: SpecEvidence = {
     engine: engine || "",
     transmission: transmission || "",

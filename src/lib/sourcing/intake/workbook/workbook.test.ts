@@ -13,6 +13,7 @@ import {
   isPenskePreauctionHeaders,
   parseLiftgate,
   parseOsLocation,
+  parseMileage,
   parseWeightLbs,
   parseWorkbookBuffer,
   validateInspectionUrl,
@@ -84,6 +85,11 @@ describe("workbook normalize helpers", () => {
     expect(parseWeightLbs("31k")).toBe(31000);
     expect(parseWeightLbs("25,999")).toBe(25999);
     expect(parseWeightLbs("not a weight")).toBeNull();
+  });
+
+  it("parses comma-grouped mileage", () => {
+    expect(parseMileage("136,242")).toBe(136242);
+    expect(parseMileage("122,035")).toBe(122035);
   });
 
   it("normalizes Cummins and Allison", () => {
@@ -273,6 +279,7 @@ describe("Hogan .xlsx fixture", () => {
     expect(validateInspectionUrl("http://inspection-reports.example.test/x").ok).toBe(false);
     expect(validateInspectionUrl("https://evil.example/x").ok).toBe(false);
     expect(validateInspectionUrl("https://inspection-reports.example.test/x").ok).toBe(true);
+    expect(validateInspectionUrl("https://reports.nationalinspect.com/report/x").ok).toBe(true);
   });
 });
 

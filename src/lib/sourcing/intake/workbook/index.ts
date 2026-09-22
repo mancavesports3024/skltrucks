@@ -14,6 +14,7 @@ export { PENSKE_PREAUCTION_SCOPE } from "@/lib/sourcing/intake/workbook/penske-p
 export { HOGAN_WHOLESALE_SCOPE } from "@/lib/sourcing/intake/workbook/hogan-wholesale";
 export {
   parseWeightLbs,
+  parseMileage,
   extractBoxLengthFt,
   isCumminsEngine,
   isAutomaticTransmission,

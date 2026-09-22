@@ -49,7 +49,12 @@ export function parseWeightLbs(raw: string | null | undefined): number | null {
 
 export function parseMileage(raw: string | null | undefined): number | null {
   if (raw == null) return null;
-  const text = String(raw).replace(/,/g, " ").replace(/miles?|hrs?\.?/gi, " ");
+  // Strip thousands separators so "136,242" → 136242 (not 136).
+  const text = String(raw)
+    .replace(/,/g, "")
+    .replace(/miles?|hrs?\.?/gi, " ")
+    .trim();
+  if (!text) return null;
   const m = text.match(/(\d+(?:\.\d+)?)/);
   if (!m) return null;
   const n = Number(m[1]);
