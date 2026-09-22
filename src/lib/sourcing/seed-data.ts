@@ -517,7 +517,7 @@ export const SEED_TRUCK_LEADS: SeedLead[] = [
       "weight_discrepancy_youtube_vs_listing",
     ],
     verificationNotes:
-      "Current listing weight field is 26,000 GVW (YouTube said 25,999). Does not evidence sub-26,000 manufacturer GVWR. Unverified seed.",
+      "Current listing weight field is 26,000 GVW (YouTube said 25,999). Within ≤26,000 ceiling if manufacturer-rated, but door-plate confirmation still required. Unverified seed.",
   }),
   leadBase({
     seedKey: "drs-593",
@@ -542,7 +542,7 @@ export const SEED_TRUCK_LEADS: SeedLead[] = [
     location: "OH area",
     drivingDistanceMiles: 703,
     researchUncertaintyLabels: ["unverified_seed_research", "weight_field_26000"],
-    verificationNotes: "Listing weight field is 26,000 — fails strictly-below-26,000 GVWR profile.",
+    verificationNotes: "Listing weight field is 26,000 GVW — within ≤26,000 max when treated as manufacturer GVWR, but door-plate confirmation still required. Unverified seed.",
   }),
   // Part 5 — needs verification, individual URLs
   leadBase({

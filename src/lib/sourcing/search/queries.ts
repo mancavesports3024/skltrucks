@@ -43,7 +43,7 @@ export function buildSearchQueryPlans(
   const trans = profile.requireAutomatic ? "automatic" : "";
   const gvwr = profile.gvwrMustBeStrictlyBelow
     ? `GVWR under ${profile.maxGvwrLbs}`
-    : `GVWR ${profile.maxGvwrLbs}`;
+    : `GVWR ${profile.maxGvwrLbs} or less`;
   const miles = `under ${profile.maxMileage.toLocaleString()} miles`;
   const near = profile.originLabel || "Joplin, Missouri";
   const lift = profile.preferLiftgate ? "liftgate" : "";
@@ -106,7 +106,7 @@ export function buyingProfilePromptBlock(profile: BuyingProfile, asOf: Date = ne
     `- Cummins engine required: ${profile.requireCummins}`,
     `- Automatic transmission required: ${profile.requireAutomatic}`,
     `- Box length required (exact feet): ${profile.requiredBoxLengthsFt.join(", ")}`,
-    `- Manufacturer-rated GVWR: ${profile.gvwrMustBeStrictlyBelow ? "strictly below" : "≤"} ${profile.maxGvwrLbs} lbs`,
+    `- Manufacturer-rated GVWR: ${profile.gvwrMustBeStrictlyBelow ? "strictly below" : "≤"} ${profile.maxGvwrLbs} lbs (reject when ≥ ${profile.maxGvwrLbs + 1})`,
     `- Max mileage: ${profile.maxMileage}`,
     `- Earliest model year: ${earliest} (max age ${profile.maxAgeYears} years)`,
     `- Liftgate preferred: ${profile.preferLiftgate}`,

@@ -16,6 +16,10 @@ import {
   buildIntakeBatchFromCsv,
   type IntakeBatchReport,
 } from "@/lib/sourcing/intake/import";
+import {
+  buildWorkbookPreview,
+  type WorkbookPreviewReport,
+} from "@/lib/sourcing/intake/workbook";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type {
   BuyingProfile,
@@ -283,5 +287,76 @@ export async function applyCsvIntake(
     if (error) report.errors.push(error.message);
   }
 
+  return { report };
+}
+
+/**
+ * Staff preview for authorized dealer workbooks (.xls / .xlsx / .csv).
+ * Parse + classify only — no persistence, no OpenAI/Tavily.
+ */
+export async function previewWorkbookIntake(
+  buffer: ArrayBuffer | Buffer,
+  filename: string,
+  options?: { sourceLabel?: string }
+): Promise<{ error?: string; report?: WorkbookPreviewReport }> {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
+  const profile = await getBuyingProfile();
+  const existing = await getTruckLeads();
+  const report = buildWorkbookPreview(buffer, filename, existing, profile, {
+    sourceLabel: options?.sourceLabel,
+  });
+  return { report };
+}
+
+/**
+ * Persist a staff-confirmed workbook intake after preview.
+ */
+export async function applyWorkbookIntake(
+  buffer: ArrayBuffer | Buffer,
+  filename: string,
+  options?: { sourceLabel?: string }
+): Promise<{ error?: string; report?: WorkbookPreviewReport }> {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error };
+
+  const profile = await getBuyingProfile();
+  const existing = await getTruckLeads();
+  const report = buildWorkbookPreview(buffer, filename, existing, profile, {
+    sourceLabel: options?.sourceLabel,
+  });
+
+  if (report.workbookParseError) {
+    return { report };
+  }
+
+  for (const plan of report.plans) {
+    const match = classifyLead(plan.input, profile);
+    const row = truckLeadInputToRow({
+      ...plan.input,
+      matchStatus: match.status,
+      matchReasons: match.reasons,
+      listingFirstSeenAt: plan.listingFirstSeenAt,
+      listingLastSeenAt: plan.listingLastSeenAt,
+      listingLastChangedAt: plan.listingLastChangedAt,
+    });
+
+    if (plan.kind === "inserted") {
+      const { error } = await access.supabase.from("sourcing_truck_leads").insert(row);
+      if (error) {
+        report.errors.push(error.message);
+      }
+      continue;
+    }
+
+    const { error } = await access.supabase
+      .from("sourcing_truck_leads")
+      .update(row)
+      .eq("id", plan.existingId!);
+    if (error) report.errors.push(error.message);
+  }
+
+  // Refresh counts from plans after persist attempts
   return { report };
 }

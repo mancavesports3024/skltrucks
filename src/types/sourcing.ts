@@ -68,6 +68,16 @@ export interface SpecEvidence {
   transmission?: string;
   boxLength?: string;
   gvwr?: string;
+  /**
+   * HTTPS third-party inspection report URL from an authorized workbook.
+   * Not a public sale/listing URL — stored in jsonb evidence only (no migration).
+   */
+  inspectionUrl?: string;
+  /** Dealer workbook status / completion text (e.g. Not Started, 75% COMPLETE). */
+  workbookStatus?: string;
+  salesTerms?: string;
+  penskeStatus?: string;
+  titleStatus?: string;
 }
 
 export interface TruckLead {
@@ -167,7 +177,8 @@ export const DEFAULT_BUYING_PROFILE: BuyingProfile = {
   requireAutomatic: true,
   requiredBoxLengthsFt: [24, 26, 28],
   maxGvwrLbs: 26000,
-  gvwrMustBeStrictlyBelow: true,
+  /** Accept GVWR ≤ 26,000 lb; reject only when ≥ 26,001 lb. */
+  gvwrMustBeStrictlyBelow: false,
   maxMileage: 275000,
   maxAgeYears: 9,
   preferLiftgate: true,
@@ -175,5 +186,5 @@ export const DEFAULT_BUYING_PROFILE: BuyingProfile = {
   maxPrice: null,
   originLabel: "Joplin, Missouri",
   notes:
-    "Manufacturer-rated GVWR must be confirmed from the door plate. A listing field labeled GVW is not proof of GVWR.",
+    "Maximum manufacturer-rated GVWR is 26,000 lb (≤ 26,000 accepted; ≥ 26,001 rejected). Confirm from the door plate when possible. A listing field labeled GVW is not proof of GVWR unless taken from an authorized dealer workbook with retained evidence.",
 };

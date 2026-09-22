@@ -45,14 +45,28 @@ function norm(value: unknown): string {
 export function listingContentFingerprint(
   lead: Partial<ListingContentSnapshot> & {
     listedWeightTerm?: ListedWeightTerm;
+    specEvidence?: {
+      workbookStatus?: string;
+      salesTerms?: string;
+      penskeStatus?: string;
+      titleStatus?: string;
+    };
   }
 ): string {
-  return LISTING_CONTENT_FIELDS.map((key) => `${key}=${norm(lead[key])}`).join("|");
+  const base = LISTING_CONTENT_FIELDS.map((key) => `${key}=${norm(lead[key])}`).join("|");
+  const ev = lead.specEvidence ?? {};
+  const statusPart = [
+    `wbStatus=${norm(ev.workbookStatus)}`,
+    `salesTerms=${norm(ev.salesTerms)}`,
+    `penskeStatus=${norm(ev.penskeStatus)}`,
+    `titleStatus=${norm(ev.titleStatus)}`,
+  ].join("|");
+  return `${base}|${statusPart}`;
 }
 
 export function listingContentChanged(
-  before: Partial<ListingContentSnapshot>,
-  after: Partial<ListingContentSnapshot>
+  before: Parameters<typeof listingContentFingerprint>[0],
+  after: Parameters<typeof listingContentFingerprint>[0]
 ): boolean {
   return listingContentFingerprint(before) !== listingContentFingerprint(after);
 }

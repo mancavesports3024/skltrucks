@@ -2,58 +2,68 @@
 
 SKL needs **repeatable individual listings**, not category search pages. A public inventory search URL is **not** treated as a dependable daily feed (layout changes, login walls, ToS, and incomplete specs).
 
-## 1. Penske Used Trucks (fleet / wholesale)
+## Buying profile — GVWR
+
+| Rule | Value |
+| --- | --- |
+| Maximum manufacturer-rated GVWR | **26,000 lb** |
+| Acceptable | **GVWR ≤ 26,000** |
+| Rejected | **GVWR ≥ 26,001** |
+
+Missing or non-numeric / ambiguous GVWR → **Needs verification** (not confirmed). Door-plate confirmation remains best practice. A retail listing field labeled only “GVW” (without authorized workbook evidence) is still not treated as confirmed manufacturer GVWR.
+
+Other unchanged requirements: Cummins; automatic; box 24/26/28 ft; mileage ≤ 275,000; age ≤ 9 years; within 1,200 miles of Joplin, Missouri; liftgate preferred; price open.
+
+## 1. Penske Pre-Auction workbook (authorized dealer Excel)
 
 | Channel | Status for SKL |
 | --- | --- |
-| Public search page (`penskeusedtrucks.com/search-inventory`) | **Not** a permitted automated daily feed |
-| Weekly inventory email via Penske dealer sales rep | **Permitted** once SKL registers as a dealer/buyer and asks the assigned rep to email inventory |
-| Wholesale / auction dealer account | Permitted after dealer license verification; still not a documented public API |
-| CSV / API download | **Not publicly documented** — ask rep whether a spreadsheet export can be emailed |
+| Public search page | **Not** a permitted automated daily feed |
+| Pre-auction `.xls` emailed to licensed dealers | **Permitted** — staff-reviewed upload at `/admin/sourcing/intake` |
+| Medium Duty sheet only | Used for this buying profile |
 
-**Pilot path today:** staff paste or upload the weekly email/spreadsheet into **Staff-reviewed CSV import**.
+**Pilot path today:** Preview → Import. Format detected by sheet/header signature (not filename). `source_scope = penske-preauction`, `source_listing_id = Unit`. VIN preferred for dedupe. **No public listing URL is invented**; missing URL does not block import when Unit/VIN exists. Workbook GVW is retained as evidence and used for ≤26,000 classification; door-plate still recommended at purchase.
 
-Optional (flagged off): staff may paste up to 10 public `/unit-{id}/` URLs into Search for inspect-only enrichment — see `docs/sourcing-penske-url-inspection.md`. Not a substitute for Excel bulk intake; requires written Penske authorization before enabling.
+Optional (flagged off): paste ≤10 public `/unit-{id}/` URLs for inspect-only enrichment — see `docs/sourcing-penske-url-inspection.md`. Requires written Penske authorization before enabling.
 
-**Needed for automation:** written OK from Penske for a recurring CSV/email attachment, plus a stable column mapping (stock #, VIN, URL, price, mileage, location).
-
-## 2. Ryder (and similar national fleet remarketers)
+## 2. Hogan Wholesale workbook
 
 | Channel | Status for SKL |
 | --- | --- |
-| Public used-truck / remarketing pages | **Not** assumed as a scrapeable daily feed |
-| Account manager / wholesale email lists | **Permitted** when Ryder (or SOARR-style partners) send SKL individual units |
-| Dealer portal export | Only if SKL has an account and export is explicitly allowed |
-| Public API | **Not identified** for general use |
+| Wholesale `.xlsx` emailed to dealers | **Permitted** — staff-reviewed upload |
+| Public scrape | **Not** permitted here |
 
-**Pilot path today:** same staff-reviewed CSV when an email or export arrives.
+**Pilot path today:** Preview → Import. `source_scope = hogan-wholesale`, `source_listing_id = Unit #` (VIN absent from main table). Third-party inspection HTTPS links are stored in `spec_evidence.inspectionUrl` only when the host is allowlisted — **never** used as the vehicle sale/listing URL. Completion labels (Not Started / 75% / 100%) are preserved but **not** treated as proof of availability.
 
-**Needed for automation:** named contact who will send CSV/email of individual box trucks (URL + stock/VIN), on a set cadence.
-
-## 3. Regional box-truck dealers (e.g. DeBary Truck Sales, Miller Used Trucks)
+## 3. Penske Used Trucks (fleet / weekly email)
 
 | Channel | Status for SKL |
 | --- | --- |
-| Individual listing URLs shared by phone/email | **Permitted** — staff already records these as leads |
-| Dealer-provided CSV / price sheet | **Permitted** when the dealer agrees to send inventory periodically |
-| Public dealer search / marketplace aggregate pages | **Not** treated as a reliable automated feed without written access |
+| Weekly inventory email via Penske dealer sales rep | **Permitted** once SKL registers as a dealer/buyer |
+| CSV / API download | Ask rep — no public API |
 
-**Pilot path today:** CSV import with `source_scope` = dealer slug and the dealer’s stock number as `source_listing_id`.
+## 4. Ryder (and similar national fleet remarketers)
 
-**Needed for automation:** a dealer who emails a CSV (or grants a feed) with stock #, listing URL, and as many specs as they publish.
+Account manager / wholesale email lists → staff CSV when a stable sheet arrives.
+
+## 5. Regional box-truck dealers
+
+Dealer-agreed CSV or emailed individual listing URLs → staff CSV.
 
 ---
 
 ## What this pilot implements
 
-Because none of the three sources yet provide a dependable, already-authorized machine feed in this environment, the nonprod pilot ships a **staff-reviewed CSV importer**:
+1. Staff obtains listings via a permitted channel (email workbook, CSV export, dealer sheet).
+2. Staff uploads at `/admin/sourcing/intake` (.csv / .xls / .xlsx).
+3. Server validates signature, size, and structure; UI shows **preview** with counts and rows.
+4. **Nothing is persisted until Import.**
+5. Importer preserves identity, evidence, first/last seen, and listing changes; dedupes by VIN then `(source_scope, source_listing_id)`.
+6. Missing required evidence (including distance when not locally known) → **Needs verification**.
+7. Digest labels **New listing**, **Listing change**, and **Seen again**.
 
-1. Staff obtains listings via a permitted channel (email, CSV export, dealer sheet).
-2. Staff uploads CSV at `/admin/sourcing/intake`.
-3. Importer preserves listing URL, source scope, stock/listing id, date observed, and per-spec evidence.
-4. Missing Cummins / automatic / box length / manufacturer GVWR **evidence** → **Needs verification**.
-5. Dedupes by VIN (when present) else `(source_scope, source_listing_id)`.
-6. Tracks **first seen**, **last seen**, and **listing changes** separately from SKL call notes.
-7. Digest preview labels **New listing**, **Listing change**, and **Seen again**.
+No scraping, no scheduled job, no email send, and **no OpenAI/Tavily** during spreadsheet parse/import.
 
-No scraping, no scheduled job, and no email send in this pass.
+### Migration
+
+**None required.** Empty `source_url` / `canonical_listing_url` is already allowed by the unique index (empty URLs excluded). Inspection links and workbook status live in existing `spec_evidence` jsonb.

@@ -17,13 +17,14 @@ export default async function SourcingIntakePage() {
   return (
     <div>
       <SourcingNav active="intake" />
-      <div className="mx-auto max-w-4xl space-y-8 px-4 py-6 sm:py-8">
+      <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:py-8">
         <div>
-          <h2 className="text-lg font-bold">Listing intake (nonprod pilot)</h2>
+          <h2 className="text-lg font-bold">Listing intake (staff-reviewed)</h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Staff-reviewed CSV import for listings obtained via a permitted channel (dealer email,
-            CSV export, or agreed feed). Public search pages are not treated as daily feeds. No
-            scraping, scheduled job, or email send in this pass. Source notes:{" "}
+            Upload authorized dealer workbooks (.csv / .xls / .xlsx). Preview classifies rows; nothing
+            is persisted until Import. Penske pre-auction uses the Medium Duty sheet only; Hogan
+            wholesale uses Unit # identity. No scraping, cron, email, or OpenAI parsing. GVWR rule: ≤
+            26,000 lb accepted; ≥ 26,001 lb rejected. Source notes:{" "}
             <code className="text-xs">docs/sourcing-intake-sources.md</code>.
           </p>
         </div>
@@ -47,7 +48,7 @@ export default async function SourcingIntakePage() {
                   ))}
                 </ul>
                 <p className="mt-1 text-xs text-amber-800">
-                  Automation ready: {source.automationReady ? "yes" : "no — use staff CSV until authorized"}
+                  Automation ready: {source.automationReady ? "yes" : "no — use staff upload until authorized"}
                 </p>
               </li>
             ))}
@@ -55,17 +56,7 @@ export default async function SourcingIntakePage() {
         </section>
 
         <section className="space-y-3">
-          <h3 className="font-bold">Import CSV</h3>
-          <p className="text-sm text-neutral-600">
-            Required columns (aliases accepted):{" "}
-            <code className="text-xs">seller</code>, <code className="text-xs">source_scope</code>,{" "}
-            <code className="text-xs">source_listing_id</code> or <code className="text-xs">stock_number</code>,{" "}
-            <code className="text-xs">listing_url</code>. Include evidence columns (
-            <code className="text-xs">engine_evidence</code>,{" "}
-            <code className="text-xs">transmission_evidence</code>,{" "}
-            <code className="text-xs">box_length_evidence</code>,{" "}
-            <code className="text-xs">gvwr_evidence</code>) or those specs stay Needs verification.
-          </p>
+          <h3 className="font-bold">Preview &amp; import workbook</h3>
           <IntakeCsvForm />
         </section>
       </div>

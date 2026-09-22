@@ -98,7 +98,7 @@ export default function BuyingProfileForm({ profile }: { profile: BuyingProfile 
               name="gvwrMustBeStrictlyBelow"
               defaultChecked={profile.gvwrMustBeStrictlyBelow}
             />
-            Must be strictly below max (26,000 fails)
+            Strictly below max (legacy; leave unchecked so ≤ max is accepted and ≥ max+1 is rejected)
           </label>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

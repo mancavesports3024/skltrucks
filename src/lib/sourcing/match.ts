@@ -179,9 +179,13 @@ export function classifyLead(
       if (outcome === "fail") {
         label = profile.gvwrMustBeStrictlyBelow
           ? `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs is not strictly below ${profile.maxGvwrLbs.toLocaleString()}`
-          : `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs exceeds ${profile.maxGvwrLbs.toLocaleString()}`;
+          : `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs exceeds maximum ${profile.maxGvwrLbs.toLocaleString()} (reject ≥ ${
+              profile.maxGvwrLbs + 1
+            })`;
       } else {
-        label = `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs accepted`;
+        label = profile.gvwrMustBeStrictlyBelow
+          ? `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs accepted (strictly below ${profile.maxGvwrLbs.toLocaleString()})`
+          : `Manufacturer GVWR ${resolved.value.toLocaleString()} lbs accepted (≤ ${profile.maxGvwrLbs.toLocaleString()})`;
       }
     }
 
@@ -250,24 +254,24 @@ export function classifyLead(
     });
   }
 
-  // --- Preferred: Driving distance ---
+  // --- Required: Driving distance (within preferred max miles of origin) ---
   {
-    let outcome: MatchReason["outcome"] = "preferred_unknown";
+    let outcome: ConstraintOutcome = "unknown";
     let label = "Driving distance unknown — not invented";
     if (lead.drivingDistanceMiles != null) {
       if (lead.drivingDistanceMiles <= profile.preferredMaxDrivingMiles) {
-        outcome = "preferred_pass";
-        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (within preferred ${profile.preferredMaxDrivingMiles})`;
+        outcome = "pass";
+        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (within ${profile.preferredMaxDrivingMiles})`;
       } else {
-        outcome = "preferred_fail";
-        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (over preferred ${profile.preferredMaxDrivingMiles})`;
+        outcome = "fail";
+        label = `~${lead.drivingDistanceMiles} driving miles from ${profile.originLabel} (outside ${profile.preferredMaxDrivingMiles}-mile radius)`;
       }
     }
     reasons.push({
       code: "distance",
       label,
       outcome,
-      required: false,
+      required: true,
     });
   }
 
@@ -305,19 +309,13 @@ export function classifyLead(
   const anyRequiredUnknown = required.some((r) => r.outcome === "unknown");
   const allRequiredPass =
     required.length > 0 && required.every((r) => r.outcome === "pass");
-  const distanceOver =
-    lead.drivingDistanceMiles != null &&
-    lead.drivingDistanceMiles > profile.preferredMaxDrivingMiles;
 
   let status: MatchStatus;
   if (anyRequiredFail) {
     status = "does_not_match";
   } else if (anyRequiredUnknown) {
-    // Unknown required specs must never count as confirmed or out-of-range
+    // Unknown required specs (including distance) must never count as confirmed
     status = "needs_verification";
-  } else if (allRequiredPass && distanceOver) {
-    // Out-of-range only when every required spec is confirmed and passes
-    status = "out_of_range_opportunity";
   } else if (allRequiredPass) {
     status = "confirmed_match";
   } else {
