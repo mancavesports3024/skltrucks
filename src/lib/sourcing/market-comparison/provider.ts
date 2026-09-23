@@ -1,8 +1,11 @@
 import "server-only";
 
 import OpenAI from "openai";
+import { emptyFieldEvidence } from "@/lib/sourcing/market-comparison/evidence";
 import {
   MARKET_COMPARISON_MAX_TOOL_CALLS,
+  MARKET_COMPARISON_TARGET_VERIFIED_MAX,
+  MARKET_COMPARISON_TARGET_VERIFIED_MIN,
   type ComparableListingRaw,
   type LeadComparisonSnapshot,
 } from "@/lib/sourcing/market-comparison/types";
@@ -52,6 +55,12 @@ export function parseComparableListingsJson(raw: string): {
     for (const row of rows) {
       if (!row || typeof row !== "object") continue;
       const r = row as Record<string, unknown>;
+      const fe =
+        r.fieldEvidence && typeof r.fieldEvidence === "object"
+          ? (r.fieldEvidence as Record<string, unknown>)
+          : r.field_evidence && typeof r.field_evidence === "object"
+            ? (r.field_evidence as Record<string, unknown>)
+            : {};
       listings.push({
         listingUrl: asStr(r.listingUrl ?? r.listing_url ?? r.url),
         sourceName: asStr(r.sourceName ?? r.source_name ?? r.source),
@@ -74,6 +83,15 @@ export function parseComparableListingsJson(raw: string): {
         conditionNotes: asStr(r.conditionNotes ?? r.condition_notes),
         statusNotes: asStr(r.statusNotes ?? r.status_notes),
         evidenceNotes: asStr(r.evidenceNotes ?? r.evidence_notes ?? r.notes),
+        vin: asStr(r.vin),
+        stockNumber: asStr(r.stockNumber ?? r.stock_number),
+        listingPageInspected: asBool(r.listingPageInspected ?? r.listing_page_inspected) === true,
+        fieldEvidence: emptyFieldEvidence({
+          askingPrice: asStr(fe.askingPrice ?? fe.asking_price),
+          year: asStr(fe.year),
+          makeModel: asStr(fe.makeModel ?? fe.make_model),
+          mileage: asStr(fe.mileage),
+        }),
       });
     }
     return {
@@ -135,6 +153,10 @@ function comparisonSchema() {
               "conditionNotes",
               "statusNotes",
               "evidenceNotes",
+              "vin",
+              "stockNumber",
+              "listingPageInspected",
+              "fieldEvidence",
             ],
             properties: {
               listingUrl: { type: "string" },
@@ -156,6 +178,20 @@ function comparisonSchema() {
               conditionNotes: { type: "string" },
               statusNotes: { type: "string" },
               evidenceNotes: { type: "string" },
+              vin: { type: "string" },
+              stockNumber: { type: "string" },
+              listingPageInspected: { type: "boolean" },
+              fieldEvidence: {
+                type: "object",
+                additionalProperties: false,
+                required: ["askingPrice", "year", "makeModel", "mileage"],
+                properties: {
+                  askingPrice: { type: "string" },
+                  year: { type: "string" },
+                  makeModel: { type: "string" },
+                  mileage: { type: "string" },
+                },
+              },
             },
           },
         },
@@ -176,6 +212,7 @@ export type MarketComparisonProviderResult = {
 /**
  * OpenAI web-search comparable discovery for one lead.
  * Never invents specs; staff must confirm. max_tool_calls capped.
+ * Expects about 3–6 verified individual listings — not a promise of 5–10.
  */
 export async function runOpenAiMarketComparableSearch(
   lead: LeadComparisonSnapshot,
@@ -218,9 +255,13 @@ export async function runOpenAiMarketComparableSearch(
   );
 
   const prompt = [
-    "Find 5–10 current public individual medium-duty box truck listings comparable to this subject truck.",
+    `Find ${MARKET_COMPARISON_TARGET_VERIFIED_MIN}–${MARKET_COMPARISON_TARGET_VERIFIED_MAX} current public individual medium-duty box truck listings comparable to this subject truck.`,
     "Prefer Commercial Truck Trader, TruckPaper, SOARR, and individual dealer inventory unit pages.",
     "Return ONLY individual listing URLs — never search hubs, category pages, or invented URLs.",
+    "You MUST open/inspect each individual listing page before including it. Search-result snippets alone are insufficient.",
+    "For each comparable set listingPageInspected=true and fieldEvidence quotes that literally support askingPrice, year, makeModel, and mileage from THAT same URL.",
+    "Never attach a price or mileage to a URL by result position or inference.",
+    "Include VIN and stockNumber when shown on the page (empty string if unknown).",
     "Do not invent missing specifications. Use null when unknown.",
     "Exclude salvage, reefers, manuals, >26000 GVWR, cab/chassis without box, and auctions without asking price.",
     "Do not claim availability unless the individual page supports it.",

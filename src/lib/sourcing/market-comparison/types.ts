@@ -8,18 +8,35 @@ import type { SearchApiUsage } from "@/lib/sourcing/search/types";
 export const MARKET_COMPARISON_DISCLAIMER =
   "Market comparison uses public asking prices, not verified sale prices. Confirm availability, specifications, condition, and negotiated price before purchasing.";
 
+/** Shown on every assessment result. */
+export const MARKET_COMPARISON_ASKING_PRICE_BASIS =
+  "Based on public asking prices, not completed sale prices.";
+
+export const MARKET_COMPARISON_PURCHASE_PRICE_ONLY_LABEL =
+  "Purchase-price comparison only — expenses not included";
+
 export const MARKET_COMPARISON_PENDING_LABEL = "Comparing current market listings…";
 export const MARKET_COMPARISON_CONFIRM_FIELD = "confirmPaidSearch";
 export const MARKET_COMPARISON_CONFIRM_VALUE = "1";
 
-/** Strict per-run web_search tool ceiling (OpenAI). */
-export const MARKET_COMPARISON_MAX_TOOL_CALLS = 4;
+/**
+ * Hard per-run web_search tool ceiling (OpenAI).
+ * Four calls cannot reliably open and verify 5–10 individual unit pages.
+ * Twelve calls support discovery + verifying roughly 3–6 individual listings.
+ */
+export const MARKET_COMPARISON_MAX_TOOL_CALLS = 12;
+
+/** Target verified usable comps this budget can support (not a guarantee). */
+export const MARKET_COMPARISON_TARGET_VERIFIED_MIN = 3;
+export const MARKET_COMPARISON_TARGET_VERIFIED_MAX = 6;
 
 /**
- * Rough upper bound for staff confirmation copy:
- * 4 × $0.01 web_search + ~40k in / 8k out tokens on gpt-4o-mini ≈ $0.05–$0.07.
+ * Realistic cost band for staff confirmation (gpt-4o-mini + web_search):
+ * ~12 × $0.01 search + ~60–120k tokens ≈ $0.12–$0.22 typical; hard ceiling $0.25.
  */
-export const MARKET_COMPARISON_MAX_EXPECTED_COST_USD = 0.08;
+export const MARKET_COMPARISON_TYPICAL_COST_USD_MIN = 0.12;
+export const MARKET_COMPARISON_TYPICAL_COST_USD_MAX = 0.22;
+export const MARKET_COMPARISON_MAX_EXPECTED_COST_USD = 0.25;
 
 export type MarketConfidence = "low" | "medium" | "high";
 export type MarketAssessment =
@@ -27,6 +44,8 @@ export type MarketAssessment =
   | "near_comparable_asking_market"
   | "potentially_weak_deal"
   | "insufficient_evidence";
+
+export type AssessmentBasisKind = "purchase_price" | "landed_cost";
 
 export const MARKET_ASSESSMENT_LABELS: Record<MarketAssessment, string> = {
   potentially_strong_deal: "Potentially strong deal",
@@ -50,11 +69,13 @@ export type MarketComparisonRules = {
   preferredYearDelta: number;
   /** Prefer mileage within ± this many miles. */
   preferredMileageDelta: number;
-  /** Lead price ≤ median × (1 − this) may be "strong" when confidence allows. */
+  /** Assessment basis ≤ median × (1 − this) may be "strong" when confidence allows. */
   materialBelowMedianPct: number;
-  /** Lead price ≥ median × (1 + this) may be "weak". */
+  /** Assessment basis ≥ median × (1 + this) may be "weak". */
   materialAboveMedianPct: number;
   maxGvwrLbs: number;
+  /** Cap usable verified comps retained in a report. */
+  maxUsableComparables: number;
 };
 
 export const DEFAULT_MARKET_COMPARISON_RULES: MarketComparisonRules = {
@@ -66,6 +87,7 @@ export const DEFAULT_MARKET_COMPARISON_RULES: MarketComparisonRules = {
   materialBelowMedianPct: 0.1,
   materialAboveMedianPct: 0.1,
   maxGvwrLbs: 26_000,
+  maxUsableComparables: MARKET_COMPARISON_TARGET_VERIFIED_MAX,
 };
 
 export type LeadComparisonSnapshot = {
@@ -83,6 +105,14 @@ export type LeadComparisonSnapshot = {
   listedWeightLbs: number | null;
   hasLiftgate: boolean | null;
   location: string;
+};
+
+/** Provenance for required comparable fields — must cite the individual listing page. */
+export type ComparableFieldEvidence = {
+  askingPrice: string;
+  year: string;
+  makeModel: string;
+  mileage: string;
 };
 
 export type ComparableListingRaw = {
@@ -104,13 +134,25 @@ export type ComparableListingRaw = {
   location: string;
   conditionNotes: string;
   statusNotes: string;
-  /** Provider claims — never invent. */
+  /** Free-text notes — never invent. */
   evidenceNotes: string;
+  /** VIN when present on the listing (dedupe across marketplaces). */
+  vin: string;
+  /** Stock / unit number when present. */
+  stockNumber: string;
+  /**
+   * True only when the provider inspected or otherwise supported the individual
+   * listing page. Search-result snippets alone are not sufficient.
+   */
+  listingPageInspected: boolean;
+  /** Structured quotes/provenance for required fields, tied to this listing URL. */
+  fieldEvidence: ComparableFieldEvidence;
 };
 
 export type ComparableExclusionReason =
   | "invalid_or_hub_url"
   | "duplicate_url"
+  | "duplicate_vehicle"
   | "missing_asking_price"
   | "missing_mileage"
   | "auction_without_asking_price"
@@ -120,7 +162,10 @@ export type ComparableExclusionReason =
   | "over_max_gvwr"
   | "cab_chassis_without_box"
   | "insufficient_identity"
-  | "sold_historical";
+  | "sold_historical"
+  | "unverified_listing_evidence"
+  | "unsupported_required_field"
+  | "field_evidence_mismatch";
 
 export type ScoredComparable = {
   listing: ComparableListingRaw;
@@ -132,9 +177,16 @@ export type ScoredComparable = {
   canonicalUrl: string;
 };
 
+export type PriceVsMedian = {
+  amount: number;
+  dollarDiffFromMedian: number | null;
+  pctDiffFromMedian: number | null;
+};
+
 export type PriceSummary = {
   usableCount: number;
   lowestAsking: number | null;
+  /** Comparable asking-price median (not “market value”). */
   medianAsking: number | null;
   highestAsking: number | null;
   leadPrice: number;
@@ -159,9 +211,11 @@ export type LandedCostSummary = {
   truckPrice: number;
   estimatedLandedCost: number;
   landedVsMedian: number | null;
+  /** Asking-median minus landed cost — not profit. */
   approximateGrossMarginOpportunity: number | null;
   breakEvenResalePrice: number;
   inputs: LandedCostInput;
+  expensesIncluded: boolean;
 };
 
 export type MarketComparisonReport = {
@@ -169,10 +223,19 @@ export type MarketComparisonReport = {
   comparedAt: string;
   provider: "openai" | "mock";
   disclaimer: string;
+  askingPriceBasisNotice: string;
   assessment: MarketAssessment;
   confidence: MarketConfidence;
   assessmentLabel: string;
   confidenceLabel: string;
+  /** Which figure drove strong/near/weak. */
+  assessmentBasisKind: AssessmentBasisKind;
+  assessmentBasisAmount: number;
+  assessmentBasisLabel: string;
+  expensesIncluded: boolean;
+  purchasePriceOnlyLabel: string | null;
+  purchasePriceVsMedian: PriceVsMedian | null;
+  landedCostVsMedian: PriceVsMedian | null;
   eligibilityMissingRequired: string[];
   eligibilityMissingPreferred: string[];
   priceSummary: PriceSummary | null;

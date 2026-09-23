@@ -1,22 +1,41 @@
+import { emptyFieldEvidence } from "@/lib/sourcing/market-comparison/evidence";
 import type { LeadComparisonSnapshot } from "@/lib/sourcing/market-comparison/types";
 import type { ComparableListingRaw } from "@/lib/sourcing/market-comparison/types";
 import type { SearchApiUsage } from "@/lib/sourcing/search/types";
 
-/** Deterministic mock listings for unit tests and unpaid dry runs — not live web results. */
+function fieldEv(opts: {
+  price: number;
+  year: number;
+  model: string;
+  mileage: number;
+}) {
+  return emptyFieldEvidence({
+    askingPrice: `Asking price $${opts.price.toLocaleString("en-US")} on unit page`,
+    year: `Model year ${opts.year} on unit page`,
+    makeModel: `${opts.model} listed on unit page`,
+    mileage: `Odometer ${opts.mileage.toLocaleString("en-US")} miles on unit page`,
+  });
+}
+
+/**
+ * Deterministic mock listings for unit tests and unpaid dry runs — not live web results.
+ * Fixed comps for the documented example:
+ * purchase $40,000 / median $44,500 / landed $43,000 with $3,000 expenses → Near market.
+ */
 export function mockComparableListings(lead: LeadComparisonSnapshot): ComparableListingRaw[] {
   const year = lead.year ?? 2019;
   const miles = lead.mileage ?? 140000;
   const box = lead.boxLengthFt ?? 26;
   const model = lead.makeModel || "Freightliner M2";
 
-  return [
+  const comps: ComparableListingRaw[] = [
     {
       listingUrl: "https://www.commercialtrucktrader.com/listing/2019-freightliner-m2-26ft-mock-1001",
       sourceName: "Commercial Truck Trader",
       year,
       makeModel: model,
-      mileage: miles - 12000,
-      askingPrice: (lead.price ?? 42000) + 4500,
+      mileage: 128000,
+      askingPrice: 44500,
       auctionCurrentBid: null,
       boxLengthFt: box,
       bodyType: "dry van box",
@@ -29,15 +48,19 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       location: "Springfield, MO",
       conditionNotes: "",
       statusNotes: "For sale",
-      evidenceNotes: "Mock individual listing with asking price.",
+      evidenceNotes: "Mock inspected individual listing.",
+      vin: "1FVACWDT0KHMA1001",
+      stockNumber: "MOCK-1001",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 44500, year, model, mileage: 128000 }),
     },
     {
       listingUrl: "https://www.example-dealer.com/inventory/used-2018-freightliner-m2-mock-1002",
-      sourceName: "TruckPaper (mirrored mock dealer URL)",
+      sourceName: "Dealer inventory",
       year: year - 1,
       makeModel: model,
-      mileage: miles + 8000,
-      askingPrice: (lead.price ?? 42000) + 2000,
+      mileage: 148000,
+      askingPrice: 42000,
       auctionCurrentBid: null,
       boxLengthFt: box,
       bodyType: "box truck",
@@ -50,15 +73,19 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       location: "Tulsa, OK",
       conditionNotes: "",
       statusNotes: "",
-      evidenceNotes: "Mock individual unit page (TruckPaper-style source label).",
+      evidenceNotes: "Mock inspected unit page.",
+      vin: "1FVACWDT0KHMA1002",
+      stockNumber: "MOCK-1002",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 42000, year: year - 1, model, mileage: 148000 }),
     },
     {
       listingUrl: "https://www.debarytrucksales.com/inventory/used-2018-freightliner-m2-mock-1003",
       sourceName: "Dealer inventory",
       year: year - 1,
       makeModel: model,
-      mileage: miles + 22000,
-      askingPrice: (lead.price ?? 42000) + 6000,
+      mileage: 162000,
+      askingPrice: 46000,
       auctionCurrentBid: null,
       boxLengthFt: box,
       bodyType: "26 ft dry van",
@@ -71,15 +98,19 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       location: "Sanford, FL",
       conditionNotes: "",
       statusNotes: "",
-      evidenceNotes: "Mock dealer inventory page.",
+      evidenceNotes: "Mock inspected dealer inventory page.",
+      vin: "1FVACWDT0KHMA1003",
+      stockNumber: "MOCK-1003",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 46000, year: year - 1, model, mileage: 162000 }),
     },
     {
       listingUrl: "https://www.soarr.com/inventory/freightliner-m2-26-mock-1004",
       sourceName: "SOARR",
       year: year + 1,
       makeModel: model,
-      mileage: miles - 30000,
-      askingPrice: (lead.price ?? 42000) + 9000,
+      mileage: 110000,
+      askingPrice: 49000,
       auctionCurrentBid: null,
       boxLengthFt: box,
       bodyType: "dry van",
@@ -92,15 +123,19 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       location: "Kansas City, MO",
       conditionNotes: "",
       statusNotes: "",
-      evidenceNotes: "Mock SOARR listing.",
+      evidenceNotes: "Mock inspected SOARR listing.",
+      vin: "1FVACWDT0KHMA1004",
+      stockNumber: "MOCK-1004",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 49000, year: year + 1, model, mileage: 110000 }),
     },
     {
       listingUrl: "https://www.millerusedtrucks.com/inventory/used-freightliner-m2-mock-1005",
       sourceName: "Dealer inventory",
       year,
       makeModel: model,
-      mileage: miles + 5000,
-      askingPrice: (lead.price ?? 42000) + 3500,
+      mileage: 145000,
+      askingPrice: 43500,
       auctionCurrentBid: null,
       boxLengthFt: box,
       bodyType: "box",
@@ -113,7 +148,11 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       location: "Lumberton, NJ",
       conditionNotes: "",
       statusNotes: "",
-      evidenceNotes: "Mock dealer listing.",
+      evidenceNotes: "Mock inspected dealer listing.",
+      vin: "1FVACWDT0KHMA1005",
+      stockNumber: "MOCK-1005",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 43500, year, model, mileage: 145000 }),
     },
     // Exclusions mixed in — must not fail the run
     {
@@ -136,6 +175,10 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       conditionNotes: "",
       statusNotes: "",
       evidenceNotes: "Category hub — should exclude.",
+      vin: "",
+      stockNumber: "",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 50000, year, model, mileage: miles }),
     },
     {
       listingUrl: "https://www.example-dealer.com/inventory/used-reefer-mock-1006",
@@ -157,6 +200,10 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       conditionNotes: "",
       statusNotes: "",
       evidenceNotes: "Reefer body — exclude.",
+      vin: "1FVACWDT0KHMA1006",
+      stockNumber: "MOCK-1006",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 48000, year, model, mileage: miles }),
     },
     {
       listingUrl: "https://www.example-dealer.com/inventory/auction-unit-mock-1007",
@@ -178,8 +225,71 @@ export function mockComparableListings(lead: LeadComparisonSnapshot): Comparable
       conditionNotes: "",
       statusNotes: "Auction current bid",
       evidenceNotes: "Auction without asking — exclude.",
+      vin: "1FVACWDT0KHMA1007",
+      stockNumber: "MOCK-1007",
+      listingPageInspected: true,
+      fieldEvidence: emptyFieldEvidence({
+        askingPrice: "No asking price — auction bid only",
+        year: `Model year ${year}`,
+        makeModel: model,
+        mileage: `${miles} miles`,
+      }),
+    },
+    // Snippet-only (not inspected) — exclude
+    {
+      listingUrl: "https://www.example-dealer.com/inventory/used-snippet-only-mock-1008",
+      sourceName: "Search snippet",
+      year,
+      makeModel: model,
+      mileage: miles,
+      askingPrice: 41000,
+      auctionCurrentBid: null,
+      boxLengthFt: box,
+      bodyType: "box",
+      engine: "Cummins",
+      engineIsCummins: true,
+      transmission: "Automatic",
+      transmissionIsAutomatic: true,
+      manufacturerGvwrLbs: 25500,
+      hasLiftgate: true,
+      location: "Online",
+      conditionNotes: "",
+      statusNotes: "",
+      evidenceNotes: "Search result snippet only.",
+      vin: "",
+      stockNumber: "",
+      listingPageInspected: false,
+      fieldEvidence: emptyFieldEvidence(),
+    },
+    // Same VIN on another marketplace — duplicate vehicle
+    {
+      listingUrl: "https://www.truckpaper.com/listings/detail/used-freightliner-m2-mock-1002-mirror",
+      sourceName: "TruckPaper mirror",
+      year: year - 1,
+      makeModel: model,
+      mileage: 148000,
+      askingPrice: 42000,
+      auctionCurrentBid: null,
+      boxLengthFt: box,
+      bodyType: "box truck",
+      engine: "Cummins",
+      engineIsCummins: true,
+      transmission: "Automatic",
+      transmissionIsAutomatic: true,
+      manufacturerGvwrLbs: 26000,
+      hasLiftgate: true,
+      location: "Tulsa, OK",
+      conditionNotes: "",
+      statusNotes: "",
+      evidenceNotes: "Same VIN as MOCK-1002 on another site.",
+      vin: "1FVACWDT0KHMA1002",
+      stockNumber: "TP-1002",
+      listingPageInspected: true,
+      fieldEvidence: fieldEv({ price: 42000, year: year - 1, model, mileage: 148000 }),
     },
   ];
+
+  return comps;
 }
 
 export function mockMarketComparisonUsage(): SearchApiUsage {

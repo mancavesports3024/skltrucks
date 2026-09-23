@@ -1,5 +1,10 @@
 import { isIndividualListingUrl } from "@/lib/sourcing/search/map-candidates";
 import {
+  emptyFieldEvidence,
+  vehicleIdentityKey,
+  verifyComparableListingEvidence,
+} from "@/lib/sourcing/market-comparison/evidence";
+import {
   DEFAULT_MARKET_COMPARISON_RULES,
   type ComparableExclusionReason,
   type ComparableListingRaw,
@@ -12,7 +17,6 @@ export function canonicalizeComparableUrl(url: string): string {
   try {
     const u = new URL(String(url ?? "").trim());
     u.hash = "";
-    // Drop tracking / cache-buster query params
     const keys = [...u.searchParams.keys()];
     for (const k of keys) {
       if (/^(utm_|gclid|fbclid|mc_|ref$)/i.test(k) || k.toLowerCase() === "utm") {
@@ -78,6 +82,9 @@ export function detectComparableExclusion(
   if (listing.mileage == null || !Number.isFinite(listing.mileage)) return "missing_mileage";
   if (listing.year == null || !String(listing.makeModel ?? "").trim()) return "insufficient_identity";
 
+  const evidenceCheck = verifyComparableListingEvidence(listing);
+  if (!evidenceCheck.ok) return evidenceCheck.reason;
+
   return null;
 }
 
@@ -94,12 +101,10 @@ function modelsCompatible(leadModel: string, compModel: string): boolean {
   const b = normalizeModelKey(compModel);
   if (!a || !b) return false;
   if (a === b) return true;
-  // Shared tokens (freightliner m2, international 4300, etc.)
   const aTokens = new Set(a.split(" ").filter((t) => t.length > 1));
   const bTokens = b.split(" ").filter((t) => t.length > 1);
   const shared = bTokens.filter((t) => aTokens.has(t));
   if (shared.length >= 2) return true;
-  // Single distinctive model token
   if (shared.some((t) => /^(m2|4300|t270|t370|npr|nqr|isb)$/i.test(t))) return true;
   return false;
 }
@@ -113,13 +118,23 @@ export function scoreComparables(
   listings: ComparableListingRaw[],
   rules: MarketComparisonRules = DEFAULT_MARKET_COMPARISON_RULES
 ): { usable: ScoredComparable[]; excluded: ScoredComparable[] } {
-  const seen = new Set<string>();
+  const seenUrls = new Set<string>();
+  const seenVehicles = new Set<string>();
   const usable: ScoredComparable[] = [];
   const excluded: ScoredComparable[] = [];
 
-  for (const listing of listings) {
+  for (const raw of listings) {
+    const listing: ComparableListingRaw = {
+      ...raw,
+      vin: String(raw.vin ?? "").trim(),
+      stockNumber: String(raw.stockNumber ?? "").trim(),
+      listingPageInspected: Boolean(raw.listingPageInspected),
+      fieldEvidence: raw.fieldEvidence ?? emptyFieldEvidence(),
+      evidenceNotes: String(raw.evidenceNotes ?? "").trim(),
+    };
+
     const canonicalUrl = canonicalizeComparableUrl(listing.listingUrl);
-    if (seen.has(canonicalUrl) && canonicalUrl) {
+    if (seenUrls.has(canonicalUrl) && canonicalUrl) {
       excluded.push({
         listing,
         usable: false,
@@ -131,7 +146,23 @@ export function scoreComparables(
       });
       continue;
     }
-    if (canonicalUrl) seen.add(canonicalUrl);
+    if (canonicalUrl) seenUrls.add(canonicalUrl);
+
+    const vehicleKey = vehicleIdentityKey(listing);
+    if (vehicleKey && seenVehicles.has(vehicleKey)) {
+      excluded.push({
+        listing,
+        usable: false,
+        exclusionReason: "duplicate_vehicle",
+        matchScore: 0,
+        includeReasons: [],
+        differenceNotes: [
+          `Same truck duplicated on another marketplace (${vehicleKey.startsWith("vin:") ? "VIN" : "stock number"})`,
+        ],
+        canonicalUrl,
+      });
+      continue;
+    }
 
     const exclusionReason = detectComparableExclusion(listing, rules);
     if (exclusionReason) {
@@ -210,7 +241,9 @@ export function scoreComparables(
 
     if (listing.manufacturerGvwrLbs != null && listing.manufacturerGvwrLbs <= rules.maxGvwrLbs) {
       score += 6;
-      includeReasons.push(`GVWR ≤ ${rules.maxGvwrLbs.toLocaleString()} (${listing.manufacturerGvwrLbs.toLocaleString()})`);
+      includeReasons.push(
+        `GVWR ≤ ${rules.maxGvwrLbs.toLocaleString()} (${listing.manufacturerGvwrLbs.toLocaleString()})`
+      );
     }
 
     if (lead.hasLiftgate != null && listing.hasLiftgate != null) {
@@ -219,12 +252,15 @@ export function scoreComparables(
         includeReasons.push(listing.hasLiftgate ? "Liftgate present" : "No liftgate (matches lead)");
       } else {
         differenceNotes.push(
-          listing.hasLiftgate ? "Comparable has liftgate; lead does not" : "Lead has liftgate; comparable does not"
+          listing.hasLiftgate
+            ? "Comparable has liftgate; lead does not"
+            : "Lead has liftgate; comparable does not"
         );
       }
     }
 
-    // Require minimum compatibility — not merely "box truck"
+    includeReasons.push("Individual listing page inspected with field evidence for price/year/model/mileage");
+
     const usableFlag =
       score >= 40 &&
       modelsCompatible(lead.makeModel, listing.makeModel) &&
@@ -239,8 +275,10 @@ export function scoreComparables(
       differenceNotes,
       canonicalUrl,
     };
-    if (usableFlag) usable.push(scored);
-    else {
+    if (usableFlag) {
+      if (vehicleKey) seenVehicles.add(vehicleKey);
+      usable.push(scored);
+    } else {
       if (!scored.differenceNotes.length) {
         scored.differenceNotes.push("Not a sufficiently close comparable (model/year/mileage/box)");
       }
@@ -248,8 +286,11 @@ export function scoreComparables(
     }
   }
 
-  usable.sort((a, b) => b.matchScore - a.matchScore || (a.listing.askingPrice ?? 0) - (b.listing.askingPrice ?? 0));
-  return { usable: usable.slice(0, 10), excluded };
+  usable.sort(
+    (a, b) =>
+      b.matchScore - a.matchScore || (a.listing.askingPrice ?? 0) - (b.listing.askingPrice ?? 0)
+  );
+  return { usable: usable.slice(0, rules.maxUsableComparables), excluded };
 }
 
 export function exclusionLabel(reason: ComparableExclusionReason): string {
@@ -258,6 +299,8 @@ export function exclusionLabel(reason: ComparableExclusionReason): string {
       return "Not an individual listing URL (hub/category/invalid)";
     case "duplicate_url":
       return "Duplicate listing URL";
+    case "duplicate_vehicle":
+      return "Same truck duplicated across marketplaces (VIN/stock)";
     case "missing_asking_price":
       return "Missing verified asking price";
     case "missing_mileage":
@@ -278,6 +321,12 @@ export function exclusionLabel(reason: ComparableExclusionReason): string {
       return "Insufficient information to compare safely";
     case "sold_historical":
       return "Sold / historical listing";
+    case "unverified_listing_evidence":
+      return "Search snippet only — individual listing page was not inspected/supported";
+    case "unsupported_required_field":
+      return "Listing evidence missing required price, year, model, or mileage support";
+    case "field_evidence_mismatch":
+      return "Field values do not match evidence from this listing URL";
     default:
       return reason;
   }

@@ -1,12 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { recalculateReportWithLandedCosts } from "@/lib/sourcing/market-comparison/build-report";
+import {
+  EMPTY_LANDED_COST_INPUT,
+  hasExpenseInputs,
+} from "@/lib/sourcing/market-comparison/landed-cost";
 import {
   MARKET_COMPARISON_CONFIRM_FIELD,
   MARKET_COMPARISON_CONFIRM_VALUE,
   MARKET_COMPARISON_DISCLAIMER,
   MARKET_COMPARISON_MAX_EXPECTED_COST_USD,
   MARKET_COMPARISON_PENDING_LABEL,
+  MARKET_COMPARISON_TYPICAL_COST_USD_MAX,
+  MARKET_COMPARISON_TYPICAL_COST_USD_MIN,
+  type LandedCostInput,
   type MarketComparisonRecord,
   type MarketComparisonReport,
 } from "@/lib/sourcing/market-comparison/types";
@@ -60,6 +69,8 @@ function ComparePendingStatus() {
   );
 }
 
+type CostDraft = LandedCostInput;
+
 type Props = {
   leadId: string;
   eligible: boolean;
@@ -81,7 +92,29 @@ export default function MarketComparisonPanel({
   error,
   justCompleted,
 }: Props) {
-  const report = justCompleted || latest?.report || null;
+  const baseReport = justCompleted || latest?.report || null;
+  const [costs, setCosts] = useState<CostDraft>(EMPTY_LANDED_COST_INPUT);
+  const [displayReport, setDisplayReport] = useState<MarketComparisonReport | null>(baseReport);
+
+  useEffect(() => {
+    setDisplayReport(baseReport);
+    if (baseReport?.landedCost?.inputs) {
+      setCosts(baseReport.landedCost.inputs);
+    }
+  }, [baseReport]);
+
+  function updateCost<K extends keyof CostDraft>(key: K, raw: string) {
+    const n = Number(String(raw).replace(/[$,\s]/g, ""));
+    const next: CostDraft = {
+      ...costs,
+      [key]: Number.isFinite(n) && n > 0 ? n : 0,
+    };
+    setCosts(next);
+    if (baseReport) {
+      // Local recalculation — no paid search.
+      setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+    }
+  }
 
   return (
     <section
@@ -133,9 +166,11 @@ export default function MarketComparisonPanel({
               className="mt-1"
             />
             <span>
-              I understand this runs a paid OpenAI web search (about up to $
-              {MARKET_COMPARISON_MAX_EXPECTED_COST_USD.toFixed(2)} per comparison) and will not
-              create an automatic buy decision.
+              I understand this runs a paid OpenAI web search (typically about $
+              {MARKET_COMPARISON_TYPICAL_COST_USD_MIN.toFixed(2)}–$
+              {MARKET_COMPARISON_TYPICAL_COST_USD_MAX.toFixed(2)}, hard ceiling $
+              {MARKET_COMPARISON_MAX_EXPECTED_COST_USD.toFixed(2)}) and will not create an automatic
+              buy decision.
             </span>
           </label>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -156,12 +191,31 @@ export default function MarketComparisonPanel({
                   type="number"
                   min={0}
                   step="1"
+                  value={costs[name] || ""}
+                  onChange={(e) => updateCost(name, e.target.value)}
                   className="mt-1 w-full border border-neutral-300 px-3 py-2"
                   placeholder="0"
                 />
               </label>
             ))}
           </div>
+          {baseReport ? (
+            <p className="text-sm text-neutral-700">
+              Changing expenses recalculates the assessment locally from the last verified
+              comparables — <strong>no additional paid search</strong>. Re-run Compare market only
+              when you need fresh listings (that incurs another charge).
+            </p>
+          ) : null}
+          {hasExpenseInputs(costs) ? (
+            <p className="text-sm font-medium text-neutral-800">
+              Entered expenses are included in the final assessment (landed-cost basis).
+            </p>
+          ) : (
+            <p className="text-sm text-neutral-600">
+              No expenses entered yet — assessment will use purchase-price comparison only until
+              costs are added.
+            </p>
+          )}
           <CompareSubmitButton />
           <ComparePendingStatus />
         </form>
@@ -173,7 +227,7 @@ export default function MarketComparisonPanel({
         </div>
       )}
 
-      {report && <ComparisonReportView report={report} />}
+      {displayReport && <ComparisonReportView report={displayReport} />}
     </section>
   );
 }
@@ -189,10 +243,23 @@ function ComparisonReportView({ report }: { report: MarketComparisonReport }) {
           <p className="text-xs uppercase text-neutral-500">Assessment</p>
           <p className="text-lg font-bold text-neutral-900">{report.assessmentLabel}</p>
           <p className="text-sm text-neutral-700">Confidence: {report.confidenceLabel}</p>
+          <p className="mt-2 text-sm text-neutral-800" data-testid="assessment-basis">
+            Assessment basis: <strong>{report.assessmentBasisLabel}</strong>{" "}
+            ({money(report.assessmentBasisAmount)})
+          </p>
+          {report.purchasePriceOnlyLabel ? (
+            <p className="mt-1 text-sm font-medium text-amber-900">{report.purchasePriceOnlyLabel}</p>
+          ) : (
+            <p className="mt-1 text-sm text-neutral-700">
+              Expenses included in final assessment (landed-cost basis).
+            </p>
+          )}
+          <p className="mt-2 text-xs text-neutral-600">{report.askingPriceBasisNotice}</p>
         </div>
         <div className="bg-neutral-50 p-3 text-sm">
           <p>
-            Lead price: <strong>{money(ps?.leadPrice ?? report.landedCost?.truckPrice)}</strong>
+            Purchase/wholesale price:{" "}
+            <strong>{money(ps?.leadPrice ?? report.landedCost?.truckPrice)}</strong>
           </p>
           <p>
             Est. landed cost: <strong>{money(lc?.estimatedLandedCost)}</strong>
@@ -207,14 +274,13 @@ function ComparisonReportView({ report }: { report: MarketComparisonReport }) {
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <caption className="mb-2 text-left text-xs font-semibold uppercase text-neutral-500">
-              Comparable asking-price summary ({ps.usableCount} usable)
+              Comparable asking-price summary ({ps.usableCount} verified usable)
             </caption>
             <thead className="bg-neutral-50 text-xs uppercase text-neutral-500">
               <tr>
                 <th className="px-3 py-2">Low</th>
-                <th className="px-3 py-2">Median</th>
+                <th className="px-3 py-2">Comparable asking-price median</th>
                 <th className="px-3 py-2">High</th>
-                <th className="px-3 py-2">vs median</th>
                 <th className="px-3 py-2">Years</th>
                 <th className="px-3 py-2">Mileage</th>
               </tr>
@@ -224,9 +290,6 @@ function ComparisonReportView({ report }: { report: MarketComparisonReport }) {
                 <td className="px-3 py-2">{money(ps.lowestAsking)}</td>
                 <td className="px-3 py-2">{money(ps.medianAsking)}</td>
                 <td className="px-3 py-2">{money(ps.highestAsking)}</td>
-                <td className="px-3 py-2">
-                  {money(ps.dollarDiffFromMedian)} ({pct(ps.pctDiffFromMedian)})
-                </td>
                 <td className="px-3 py-2">
                   {ps.yearMin ?? "—"}–{ps.yearMax ?? "—"}
                 </td>
@@ -240,21 +303,34 @@ function ComparisonReportView({ report }: { report: MarketComparisonReport }) {
         </div>
       )}
 
-      {lc && (
-        <ul className="grid gap-1 text-sm sm:grid-cols-2">
-          <li>
-            Landed vs median: <strong>{money(lc.landedVsMedian)}</strong>
-          </li>
-          <li>
-            Approx. gross-margin opportunity (before overhead):{" "}
-            <strong>{money(lc.approximateGrossMarginOpportunity)}</strong>
-          </li>
-          <li>
-            Break-even resale (landed + desired margin):{" "}
-            <strong>{money(lc.breakEvenResalePrice)}</strong>
-          </li>
-        </ul>
-      )}
+      <ul className="grid gap-1 text-sm sm:grid-cols-2" data-testid="price-vs-median">
+        <li>
+          Purchase price vs comparable asking-price median:{" "}
+          <strong>
+            {money(report.purchasePriceVsMedian?.dollarDiffFromMedian)} (
+            {pct(report.purchasePriceVsMedian?.pctDiffFromMedian)})
+          </strong>
+        </li>
+        <li>
+          Landed cost vs comparable asking-price median:{" "}
+          <strong>
+            {money(report.landedCostVsMedian?.dollarDiffFromMedian)} (
+            {pct(report.landedCostVsMedian?.pctDiffFromMedian)})
+          </strong>
+        </li>
+        {lc && (
+          <>
+            <li>
+              Approx. gross-margin opportunity vs asking median (before overhead — not profit):{" "}
+              <strong>{money(lc.approximateGrossMarginOpportunity)}</strong>
+            </li>
+            <li>
+              Break-even asking target (landed + desired margin — not a predicted sale price):{" "}
+              <strong>{money(lc.breakEvenResalePrice)}</strong>
+            </li>
+          </>
+        )}
+      </ul>
 
       <div className="space-y-3">
         <h4 className="text-sm font-bold uppercase text-neutral-600">Usable comparables</h4>

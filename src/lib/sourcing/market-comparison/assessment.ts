@@ -1,9 +1,11 @@
 import {
   DEFAULT_MARKET_COMPARISON_RULES,
+  MARKET_COMPARISON_ASKING_PRICE_BASIS,
+  MARKET_COMPARISON_PURCHASE_PRICE_ONLY_LABEL,
+  type AssessmentBasisKind,
   type MarketAssessment,
   type MarketConfidence,
   type MarketComparisonRules,
-  type PriceSummary,
   type ScoredComparable,
 } from "@/lib/sourcing/market-comparison/types";
 
@@ -11,6 +13,11 @@ export type AssessmentResult = {
   assessment: MarketAssessment;
   confidence: MarketConfidence;
   reasons: string[];
+  assessmentBasisKind: AssessmentBasisKind;
+  assessmentBasisAmount: number;
+  assessmentBasisLabel: string;
+  expensesIncluded: boolean;
+  askingPriceBasisNotice: string;
 };
 
 /**
@@ -30,7 +37,6 @@ export function resolveConfidence(options: {
     else max = "high";
   }
 
-  // Cap confidence when preferred lead fields are missing or matches are loose
   const weakMatches = options.usable.filter((c) => c.matchScore < 55).length;
   if (options.missingPreferredCount >= 3 || weakMatches >= Math.ceil(options.usableCount / 2)) {
     if (max === "high") max = "medium";
@@ -41,11 +47,45 @@ export function resolveConfidence(options: {
 }
 
 /**
- * Cautious deal assessment. Strong requires Medium/High confidence.
- * Never invents adjustments — uses verified asking-price median only.
+ * Material comparability problem: too few strong matches or widespread critical diffs.
+ * Triggers Insufficient evidence (not a soft near-market label).
+ */
+export function hasMaterialComparabilityProblem(
+  usable: ScoredComparable[],
+  rules: MarketComparisonRules = DEFAULT_MARKET_COMPARISON_RULES
+): boolean {
+  if (usable.length < rules.minUsableForAnyAssessment) return false;
+  const strongMatches = usable.filter((c) => c.matchScore >= 60).length;
+  if (strongMatches < rules.minUsableForAnyAssessment) return true;
+  const criticalDiffCount = usable.filter((c) =>
+    c.differenceNotes.some((d) =>
+      /gvwr|box length|manual|not cummins|salvage|model differs/i.test(d)
+    )
+  ).length;
+  return criticalDiffCount > usable.length / 2;
+}
+
+function pctVsMedian(amount: number, median: number): number {
+  return Math.round(((amount - median) / median) * 1000) / 10;
+}
+
+/**
+ * Deterministic deal assessment. Precedence (first match wins):
+ * 1. Fewer than 3 usable comps → Insufficient evidence
+ * 2. Material comparability problem → Insufficient evidence
+ * 3. Low confidence can never produce Potentially strong
+ * 4. Assessment basis ≤ median × 0.90 with Medium/High → Potentially strong
+ * 5. Assessment basis ≥ median × 1.10 → Potentially weak
+ * 6. Otherwise → Near comparable asking market
+ *
+ * Assessment basis is landed cost when expenses are included; otherwise purchase price.
+ * “Inside low–high range” is NOT a higher-priority rule (avoids overlap with ±10%).
  */
 export function assessMarketDeal(options: {
-  priceSummary: PriceSummary | null;
+  assessmentBasisAmount: number;
+  assessmentBasisKind: AssessmentBasisKind;
+  expensesIncluded: boolean;
+  medianAsking: number | null;
   usable: ScoredComparable[];
   missingPreferredCount: number;
   rules?: MarketComparisonRules;
@@ -53,12 +93,55 @@ export function assessMarketDeal(options: {
   const rules = options.rules ?? DEFAULT_MARKET_COMPARISON_RULES;
   const reasons: string[] = [];
   const count = options.usable.length;
+  const basisLabel =
+    options.assessmentBasisKind === "landed_cost"
+      ? "Estimated landed cost"
+      : "Purchase/wholesale price";
 
-  if (!options.priceSummary || count < rules.minUsableForAnyAssessment) {
+  const baseMeta = {
+    assessmentBasisKind: options.assessmentBasisKind,
+    assessmentBasisAmount: options.assessmentBasisAmount,
+    assessmentBasisLabel: basisLabel,
+    expensesIncluded: options.expensesIncluded,
+    askingPriceBasisNotice: MARKET_COMPARISON_ASKING_PRICE_BASIS,
+  };
+
+  // 1. Fewer than min usable
+  if (count < rules.minUsableForAnyAssessment || options.medianAsking == null) {
     reasons.push(
-      `Fewer than ${rules.minUsableForAnyAssessment} usable comparables with verified asking prices`
+      count < rules.minUsableForAnyAssessment
+        ? `Fewer than ${rules.minUsableForAnyAssessment} verified usable comparables with asking prices supported by individual listing URLs`
+        : "Comparable asking-price median could not be calculated"
     );
-    return { assessment: "insufficient_evidence", confidence: "low", reasons };
+    if (!options.expensesIncluded) {
+      reasons.push(MARKET_COMPARISON_PURCHASE_PRICE_ONLY_LABEL);
+    }
+    reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
+    return {
+      assessment: "insufficient_evidence",
+      confidence: "low",
+      reasons,
+      ...baseMeta,
+    };
+  }
+
+  // 2. Material comparability problem
+  if (hasMaterialComparabilityProblem(options.usable, rules)) {
+    reasons.push(
+      "Material comparability problem (weak matches or important differences such as GVWR, box length, drivetrain, or model) — comparison is unreliable"
+    );
+    reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
+    return {
+      assessment: "insufficient_evidence",
+      confidence: resolveConfidence({
+        usableCount: count,
+        missingPreferredCount: options.missingPreferredCount,
+        usable: options.usable,
+        rules,
+      }),
+      reasons,
+      ...baseMeta,
+    };
   }
 
   const confidence = resolveConfidence({
@@ -68,64 +151,70 @@ export function assessMarketDeal(options: {
     rules,
   });
 
-  const { leadPrice, medianAsking, lowestAsking, highestAsking, pctDiffFromMedian } =
-    options.priceSummary;
+  const median = options.medianAsking;
+  const basis = options.assessmentBasisAmount;
+  const pct = pctVsMedian(basis, median);
+  const belowStrong = basis <= median * (1 - rules.materialBelowMedianPct);
+  const aboveWeak = basis >= median * (1 + rules.materialAboveMedianPct);
 
-  if (medianAsking == null) {
+  if (!options.expensesIncluded) {
+    reasons.push(MARKET_COMPARISON_PURCHASE_PRICE_ONLY_LABEL);
+  } else {
+    reasons.push("Final assessment uses estimated landed cost (truck price + entered expenses)");
+  }
+
+  // 3 + 4. Strong only with Medium/High (low confidence never produces strong)
+  if (belowStrong && (confidence === "medium" || confidence === "high")) {
+    reasons.push(
+      `${basisLabel} ${formatMoney(basis)} is ${Math.abs(pct)}% below comparable asking-price median ${formatMoney(median)}`
+    );
+    reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
     return {
-      assessment: "insufficient_evidence",
-      confidence: "low",
-      reasons: ["Median asking price could not be calculated"],
+      assessment: "potentially_strong_deal",
+      confidence,
+      reasons,
+      ...baseMeta,
     };
   }
 
-  const belowStrong = leadPrice <= medianAsking * (1 - rules.materialBelowMedianPct);
-  const aboveWeak = leadPrice >= medianAsking * (1 + rules.materialAboveMedianPct);
-  const withinRange =
-    lowestAsking != null &&
-    highestAsking != null &&
-    leadPrice >= lowestAsking &&
-    leadPrice <= highestAsking;
-
-  // Unreliable comparison → do not call strong
-  const strongMatchCount = options.usable.filter((c) => c.matchScore >= 60).length;
-  const hasMaterialDifferences = options.usable.some((c) =>
-    c.differenceNotes.some((d) => /gvwr|box length|manual|not cummins|salvage/i.test(d))
-  );
-  const unreliable =
-    confidence === "low" ||
-    (hasMaterialDifferences && strongMatchCount < rules.minUsableForAnyAssessment);
-
-  if (belowStrong && !unreliable && (confidence === "medium" || confidence === "high")) {
+  if (belowStrong && confidence === "low") {
     reasons.push(
-      `Lead price ${formatMoney(leadPrice)} is ${Math.abs(pctDiffFromMedian ?? 0)}% below median ${formatMoney(medianAsking)}`
+      `${basisLabel} is below comparable asking-price median, but Low confidence cannot produce a Potentially strong deal label`
     );
-    return { assessment: "potentially_strong_deal", confidence, reasons };
+    reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
+    return {
+      assessment: "near_comparable_asking_market",
+      confidence,
+      reasons,
+      ...baseMeta,
+    };
   }
 
-  if (belowStrong && unreliable) {
-    reasons.push(
-      "Price is below median, but confidence is low or important differences make a strong-deal label unreliable"
-    );
-    return { assessment: "near_comparable_asking_market", confidence, reasons };
-  }
-
+  // 5. Weak
   if (aboveWeak) {
     reasons.push(
-      `Lead price ${formatMoney(leadPrice)} is ${Math.abs(pctDiffFromMedian ?? 0)}% above median ${formatMoney(medianAsking)}`
+      `${basisLabel} ${formatMoney(basis)} is ${Math.abs(pct)}% above comparable asking-price median ${formatMoney(median)}`
     );
-    return { assessment: "potentially_weak_deal", confidence, reasons };
+    reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
+    return {
+      assessment: "potentially_weak_deal",
+      confidence,
+      reasons,
+      ...baseMeta,
+    };
   }
 
-  if (withinRange || Math.abs(pctDiffFromMedian ?? 0) <= rules.materialAboveMedianPct * 100) {
-    reasons.push(
-      `Lead price ${formatMoney(leadPrice)} is near median ${formatMoney(medianAsking)} (${pctDiffFromMedian ?? 0}% vs median)`
-    );
-    return { assessment: "near_comparable_asking_market", confidence, reasons };
-  }
-
-  reasons.push("Price position relative to comparables is inconclusive");
-  return { assessment: "insufficient_evidence", confidence, reasons };
+  // 6. Otherwise near
+  reasons.push(
+    `${basisLabel} ${formatMoney(basis)} is near comparable asking-price median ${formatMoney(median)} (${pct}% vs median)`
+  );
+  reasons.push(MARKET_COMPARISON_ASKING_PRICE_BASIS);
+  return {
+    assessment: "near_comparable_asking_market",
+    confidence,
+    reasons,
+    ...baseMeta,
+  };
 }
 
 function formatMoney(n: number): string {

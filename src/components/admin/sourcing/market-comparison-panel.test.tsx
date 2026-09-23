@@ -60,4 +60,65 @@ describe("MarketComparisonPanel", () => {
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent(MARKET_COMPARISON_PENDING_LABEL);
   });
+
+  it("shows assessment basis and purchase-price-only label on report", async () => {
+    const { buildMarketComparisonReport } = await import(
+      "@/lib/sourcing/market-comparison/build-report"
+    );
+    const { mockComparableListings, mockMarketComparisonUsage } = await import(
+      "@/lib/sourcing/market-comparison/mock"
+    );
+    const report = buildMarketComparisonReport({
+      lead: {
+        id: "1",
+        year: 2019,
+        makeModel: "Freightliner M2",
+        mileage: 140000,
+        price: 40000,
+        boxLengthFt: 26,
+        engine: "Cummins",
+        engineIsCummins: true,
+        transmission: "Auto",
+        transmissionIsAutomatic: true,
+        manufacturerGvwrLbs: 25500,
+        listedWeightLbs: null,
+        hasLiftgate: true,
+        location: "Joplin, MO",
+      },
+      listings: mockComparableListings({
+        id: "1",
+        year: 2019,
+        makeModel: "Freightliner M2",
+        mileage: 140000,
+        price: 40000,
+        boxLengthFt: 26,
+        engine: "Cummins",
+        engineIsCummins: true,
+        transmission: "Auto",
+        transmissionIsAutomatic: true,
+        manufacturerGvwrLbs: 25500,
+        listedWeightLbs: null,
+        hasLiftgate: true,
+        location: "Joplin, MO",
+      }),
+      apiUsage: mockMarketComparisonUsage(),
+      provider: "mock",
+    });
+    render(
+      <MarketComparisonPanel
+        leadId="1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        justCompleted={report}
+        action={async () => undefined}
+      />
+    );
+    expect(screen.getByTestId("assessment-basis")).toHaveTextContent(/Purchase\/wholesale price/i);
+    expect(
+      screen.getAllByText("Purchase-price comparison only — expenses not included").length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Based on public asking prices/i).length).toBeGreaterThan(0);
+  });
 });

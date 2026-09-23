@@ -14,6 +14,8 @@ import {
   MARKET_COMPARISON_CONFIRM_VALUE,
   MARKET_COMPARISON_MAX_EXPECTED_COST_USD,
   MARKET_COMPARISON_MAX_TOOL_CALLS,
+  MARKET_COMPARISON_TYPICAL_COST_USD_MAX,
+  MARKET_COMPARISON_TYPICAL_COST_USD_MIN,
   type ComparableListingRaw,
   type LandedCostInput,
   type MarketComparisonReport,
@@ -31,7 +33,11 @@ import {
 } from "@/lib/sourcing/search/search-lock";
 
 export const MARKET_COMPARISON_CONFIRM_REQUIRED =
-  "Confirm that this run will use a paid OpenAI web search (cost ceiling about $" +
+  "Confirm that this run will use a paid OpenAI web search (typically about $" +
+  MARKET_COMPARISON_TYPICAL_COST_USD_MIN.toFixed(2) +
+  "–$" +
+  MARKET_COMPARISON_TYPICAL_COST_USD_MAX.toFixed(2) +
+  ", hard ceiling $" +
   MARKET_COMPARISON_MAX_EXPECTED_COST_USD.toFixed(2) +
   ") before comparing.";
 
