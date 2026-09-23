@@ -1,8 +1,19 @@
 import { notFound } from "next/navigation";
+import MarketComparisonClient from "@/components/admin/sourcing/MarketComparisonClient";
 import MatchStatusBadge from "@/components/admin/sourcing/MatchStatusBadge";
 import SourcingNav from "@/components/admin/sourcing/SourcingNav";
 import TruckLeadForm from "@/components/admin/sourcing/TruckLeadForm";
-import { getSupplierContacts, getTruckLeadById } from "@/lib/sourcing/db";
+import {
+  getSupplierContacts,
+  getTruckLeadById,
+  listMarketComparisonsForLead,
+} from "@/lib/sourcing/db";
+import {
+  leadToComparisonSnapshot,
+  missingPreferredLeadFields,
+  missingRequiredLeadFields,
+  isLeadEligibleForMarketComparison,
+} from "@/lib/sourcing/market-comparison/eligibility";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -10,8 +21,18 @@ interface PageProps {
 
 export default async function EditTruckLeadPage({ params }: PageProps) {
   const { id } = await params;
-  const [lead, contacts] = await Promise.all([getTruckLeadById(id), getSupplierContacts()]);
+  const [lead, contacts, comparisons] = await Promise.all([
+    getTruckLeadById(id),
+    getSupplierContacts(),
+    listMarketComparisonsForLead(id),
+  ]);
   if (!lead) notFound();
+
+  const snapshot = leadToComparisonSnapshot(lead);
+  const missingRequired = missingRequiredLeadFields(snapshot);
+  const missingPreferred = missingPreferredLeadFields(snapshot);
+  const eligible = isLeadEligibleForMarketComparison(snapshot);
+  const latest = comparisons.find((c) => c.status === "completed" && c.report) ?? null;
 
   return (
     <div>
@@ -39,6 +60,14 @@ export default async function EditTruckLeadPage({ params }: PageProps) {
             Uncertainty: {lead.researchUncertaintyLabels.join(" · ")}
           </p>
         )}
+
+        <MarketComparisonClient
+          leadId={lead.id}
+          eligible={eligible}
+          missingRequired={missingRequired}
+          missingPreferred={missingPreferred}
+          latest={latest}
+        />
 
         <TruckLeadForm lead={lead} contacts={contacts} />
       </div>
