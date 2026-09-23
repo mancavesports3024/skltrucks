@@ -446,3 +446,37 @@ export async function runPenskeUrlInspectionAction(urlsText: string) {
   if (result.report) revalidateSourcing();
   return result;
 }
+
+/**
+ * Staff-only market comparison for one truck lead (OpenAI web search, manual button).
+ * Requires paid-search confirmation. Uses shared search lock. No cron.
+ */
+export async function compareMarketAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null, comparisonId: null };
+
+  const leadId = String(formData.get("leadId") ?? "").trim();
+  if (!leadId) return { error: "Missing lead id.", report: null, comparisonId: null };
+
+  const { executeMarketComparison, isPaidSearchConfirmed } = await import(
+    "@/lib/sourcing/market-comparison/run"
+  );
+  const { parseLandedCostFromForm } = await import(
+    "@/lib/sourcing/market-comparison/landed-cost"
+  );
+
+  // Development/test environments without OpenAI key use mock automatically inside execute.
+  // Never force live from this action during automated verification.
+  const result = await executeMarketComparison({
+    leadId,
+    confirmPaidSearch: isPaidSearchConfirmed(formData),
+    landedCostInput: parseLandedCostFromForm(formData),
+  });
+
+  if (result.report) revalidateSourcing();
+  return {
+    error: result.error ?? null,
+    report: result.report ?? null,
+    comparisonId: result.comparisonId ?? null,
+  };
+}

@@ -1,6 +1,12 @@
 import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { listingContentChanged } from "@/lib/sourcing/listing-content";
 import { classifyLead } from "@/lib/sourcing/match";
+import type {
+  MarketAssessment,
+  MarketConfidence,
+  MarketComparisonReport,
+  MarketComparisonRecord,
+} from "@/lib/sourcing/market-comparison/types";
 import {
   buyingProfileToRow,
   rowToBuyingProfile,
@@ -12,6 +18,7 @@ import {
   type DbSupplierContact,
   type DbTruckLead,
 } from "@/lib/sourcing/mappers";
+import type { SearchApiUsage } from "@/lib/sourcing/search/types";
 import {
   buildIntakeBatchFromCsv,
   type IntakeBatchReport,
@@ -359,4 +366,80 @@ export async function applyWorkbookIntake(
 
   // Refresh counts from plans after persist attempts
   return { report };
+}
+
+export async function insertMarketComparison(input: {
+  leadId: string;
+  status: "completed" | "failed";
+  assessment: MarketAssessment | null;
+  confidence: MarketConfidence | null;
+  report: MarketComparisonReport | null;
+  apiUsage: SearchApiUsage | null;
+  errorMessage: string | null;
+  createdBy: string;
+  /**
+   * Prefer the already-authorized staff client from requireSourcingStaff() so the
+   * insert runs with the signed-in user’s JWT (auth.uid() + RLS). Never use a
+   * service-role client here.
+   */
+  access?: Extract<Awaited<ReturnType<typeof requireSourcingStaff>>, { ok: true }>;
+}): Promise<{ id?: string; error?: string }> {
+  const access = input.access ?? (await requireSourcingStaff());
+  if (!access.ok) return { error: access.error };
+
+  // Defense in depth: refuse empty uid — trigger also requires auth.uid().
+  if (!access.user.id) {
+    return { error: "Authenticated user id missing; cannot record comparison." };
+  }
+
+  const { data, error } = await access.supabase
+    .from("sourcing_market_comparisons")
+    .insert({
+      lead_id: input.leadId,
+      status: input.status,
+      assessment: input.assessment,
+      confidence: input.confidence,
+      report: input.report,
+      api_usage: input.apiUsage,
+      error_message: input.errorMessage,
+      // Trigger overwrites with auth.uid(); value is advisory for the client session.
+      created_by: access.user.id,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+  return { id: data?.id as string };
+}
+
+export async function listMarketComparisonsForLead(
+  leadId: string
+): Promise<MarketComparisonRecord[]> {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return [];
+
+  const { data, error } = await access.supabase
+    .from("sourcing_market_comparisons")
+    .select("*")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (error || !data) {
+    if (error) console.error("[sourcing] market comparisons:", error.message);
+    return [];
+  }
+
+  return data.map((row) => ({
+    id: row.id as string,
+    leadId: row.lead_id as string,
+    status: row.status as "completed" | "failed",
+    assessment: (row.assessment as MarketAssessment | null) ?? null,
+    confidence: (row.confidence as MarketConfidence | null) ?? null,
+    report: (row.report as MarketComparisonReport | null) ?? null,
+    apiUsage: (row.api_usage as SearchApiUsage | null) ?? null,
+    errorMessage: (row.error_message as string | null) ?? null,
+    createdBy: (row.created_by as string) ?? "",
+    createdAt: row.created_at as string,
+  }));
 }

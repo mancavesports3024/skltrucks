@@ -1,0 +1,15 @@
+-- Companion notes for scripts/verify-market-comparison-rls.sh
+-- Local non-production RLS verification for sourcing_market_comparisons.
+-- Four identities: anon, authenticated outsider, inactive staff, active authorized staff.
+-- Does NOT touch production.
+--
+-- Expected matrix (enforced by RLS + grants, not app code):
+--   anon                         SELECT/INSERT/UPDATE/DELETE denied
+--   authenticated outsider       SELECT 0 rows; INSERT/UPDATE/DELETE denied
+--   authenticated inactive staff SELECT 0 rows; INSERT/UPDATE/DELETE denied
+--   authenticated active staff   SELECT ok; INSERT ok (created_by=auth.uid()); UPDATE/DELETE denied
+--
+-- Policies require public.is_sourcing_staff() AND active sourcing_authorized_staff row.
+-- created_by is forced from auth.uid() (spoof rejected).
+-- lead_id FK ON DELETE CASCADE.
+select 'see scripts/verify-market-comparison-rls.sh' as status;
