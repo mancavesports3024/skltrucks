@@ -219,4 +219,25 @@ describe("TruckLeadsList year and mileage", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Year —/)).toBeInTheDocument();
   });
+
+  it("renders listing and inspection links without event handlers (Server Component safe)", () => {
+    render(
+      <TruckLeadsList
+        leads={[
+          sampleLead({
+            id: "3",
+            sourceUrl: "https://example.com/listing/1",
+            specEvidence: { inspectionUrl: "https://example.com/inspection/token" },
+          }),
+        ]}
+      />
+    );
+    const listing = screen.getAllByRole("link", { name: "View listing" });
+    const inspection = screen.getAllByRole("link", { name: "View inspection report" });
+    expect(listing.length).toBeGreaterThanOrEqual(1);
+    expect(inspection.length).toBeGreaterThanOrEqual(1);
+    for (const a of [...listing, ...inspection]) {
+      expect(a.getAttribute("onclick")).toBeNull();
+    }
+  });
 });
