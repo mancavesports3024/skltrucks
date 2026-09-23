@@ -377,9 +377,20 @@ export async function insertMarketComparison(input: {
   apiUsage: SearchApiUsage | null;
   errorMessage: string | null;
   createdBy: string;
+  /**
+   * Prefer the already-authorized staff client from requireSourcingStaff() so the
+   * insert runs with the signed-in user’s JWT (auth.uid() + RLS). Never use a
+   * service-role client here.
+   */
+  access?: Extract<Awaited<ReturnType<typeof requireSourcingStaff>>, { ok: true }>;
 }): Promise<{ id?: string; error?: string }> {
-  const access = await requireSourcingStaff();
+  const access = input.access ?? (await requireSourcingStaff());
   if (!access.ok) return { error: access.error };
+
+  // Defense in depth: refuse empty uid — trigger also requires auth.uid().
+  if (!access.user.id) {
+    return { error: "Authenticated user id missing; cannot record comparison." };
+  }
 
   const { data, error } = await access.supabase
     .from("sourcing_market_comparisons")
@@ -391,7 +402,8 @@ export async function insertMarketComparison(input: {
       report: input.report,
       api_usage: input.apiUsage,
       error_message: input.errorMessage,
-      created_by: input.createdBy,
+      // Trigger overwrites with auth.uid(); value is advisory for the client session.
+      created_by: access.user.id,
     })
     .select("id")
     .single();

@@ -145,6 +145,7 @@ export async function executeMarketComparison(options: {
       apiUsage: captured.apiUsage,
       errorMessage: captured.error,
       createdBy: createdByUid,
+      access,
     });
     return { error: `Provider failure: ${captured.error}` };
   }
@@ -169,6 +170,7 @@ export async function executeMarketComparison(options: {
     apiUsage: report.apiUsage,
     errorMessage: null,
     createdBy: createdByUid,
+    access,
   });
 
   if (saved.error) {
