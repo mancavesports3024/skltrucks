@@ -1,15 +1,15 @@
+-- Companion notes for scripts/verify-market-comparison-rls.sh
 -- Local non-production RLS verification for sourcing_market_comparisons.
--- Run against a throwaway Postgres with auth stubs (see scripts/verify-market-comparison-rls.sh).
+-- Four identities: anon, authenticated outsider, inactive staff, active authorized staff.
 -- Does NOT touch production.
-
--- Expectation summary (asserted by the shell script):
--- 1. anon cannot select/insert
--- 2. authenticated outsider (is_sourcing_staff false in our stub) cannot select/insert
--- 3. active sourcing staff can select/insert
--- 4. insert with nonexistent lead_id fails FK
--- 5. deleting a lead cascades comparisons
--- 6. created_by is forced from JWT email (spoof ignored when JWT present)
--- 7. failed rows store status=failed, report null, error_message set
--- 8. no raw provider blob column exists
-
-select 'rls_harness_loaded' as status;
+--
+-- Expected matrix (enforced by RLS + grants, not app code):
+--   anon                         SELECT/INSERT/UPDATE/DELETE denied
+--   authenticated outsider       SELECT 0 rows; INSERT/UPDATE/DELETE denied
+--   authenticated inactive staff SELECT 0 rows; INSERT/UPDATE/DELETE denied
+--   authenticated active staff   SELECT ok; INSERT ok (created_by=auth.uid()); UPDATE/DELETE denied
+--
+-- Policies require public.is_sourcing_staff() AND active sourcing_authorized_staff row.
+-- created_by is forced from auth.uid() (spoof rejected).
+-- lead_id FK ON DELETE CASCADE.
+select 'see scripts/verify-market-comparison-rls.sh' as status;

@@ -38,23 +38,26 @@ describe("sourcing staff allowlist (optional narrow)", () => {
   });
 });
 
-describe("application authorization (admin-aligned)", () => {
+describe("application authorization (admin-aligned + active DB staff)", () => {
   function appAllows(opts: {
     email: string | null;
     envList: string[];
     authenticatedRpc: boolean;
+    activeAuthorizedStaff: boolean;
   }): boolean {
     if (!isSourcingStaffEmail(opts.email, opts.envList)) return false;
     if (!opts.authenticatedRpc) return false;
+    if (!opts.activeAuthorizedStaff) return false;
     return true;
   }
 
-  it("any signed-in admin with empty env → allowed", () => {
+  it("signed-in admin with empty env + active DB staff → allowed", () => {
     expect(
       appAllows({
         email: "teammate@example.com",
         envList: [],
         authenticatedRpc: true,
+        activeAuthorizedStaff: true,
       })
     ).toBe(true);
   });
@@ -65,6 +68,18 @@ describe("application authorization (admin-aligned)", () => {
         email: "teammate@example.com",
         envList: [],
         authenticatedRpc: false,
+        activeAuthorizedStaff: true,
+      })
+    ).toBe(false);
+  });
+
+  it("signed-in + RPC true but inactive/missing DB staff → denied", () => {
+    expect(
+      appAllows({
+        email: "teammate@example.com",
+        envList: [],
+        authenticatedRpc: true,
+        activeAuthorizedStaff: false,
       })
     ).toBe(false);
   });
@@ -75,6 +90,7 @@ describe("application authorization (admin-aligned)", () => {
         email: "other@example.com",
         envList: ["skltrucksllc@gmail.com"],
         authenticatedRpc: true,
+        activeAuthorizedStaff: true,
       })
     ).toBe(false);
     expect(
@@ -82,6 +98,7 @@ describe("application authorization (admin-aligned)", () => {
         email: "skltrucksllc@gmail.com",
         envList: ["skltrucksllc@gmail.com"],
         authenticatedRpc: true,
+        activeAuthorizedStaff: true,
       })
     ).toBe(true);
   });

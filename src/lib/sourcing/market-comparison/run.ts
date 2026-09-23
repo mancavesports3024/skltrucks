@@ -92,6 +92,8 @@ export async function executeMarketComparison(options: {
 
   const lock = options.lockStore ?? resolveSearchLockStore(access.supabase);
   const holderEmail = access.user.email ?? "";
+  /** Persisted as created_by — DB trigger overwrites with auth.uid(). */
+  const createdByUid = access.user.id ?? "";
 
   const acquired = await lock.tryAcquire(holderEmail);
   if (!acquired.ok) {
@@ -142,7 +144,7 @@ export async function executeMarketComparison(options: {
       report: null,
       apiUsage: captured.apiUsage,
       errorMessage: captured.error,
-      createdBy: holderEmail,
+      createdBy: createdByUid,
     });
     return { error: `Provider failure: ${captured.error}` };
   }
@@ -166,7 +168,7 @@ export async function executeMarketComparison(options: {
     report,
     apiUsage: report.apiUsage,
     errorMessage: null,
-    createdBy: holderEmail,
+    createdBy: createdByUid,
   });
 
   if (saved.error) {
