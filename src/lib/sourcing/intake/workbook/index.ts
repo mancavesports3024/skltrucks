@@ -29,6 +29,7 @@ export {
 export { validateInspectionUrl } from "@/lib/sourcing/intake/workbook/hogan-wholesale";
 export {
   classifyPenskeUnitHyperlink,
+  extractWorkbookHyperlinkTarget,
   maskHyperlinkForDiagnostics,
   PENSKE_LISTING_ALLOWED_HOSTS,
   PENSKE_INSPECTION_ALLOWED_HOSTS,

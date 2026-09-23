@@ -2,7 +2,8 @@
  * Safe server-side spreadsheet read for staff intake.
  * - SheetJS CE (`xlsx@0.20.3` via official cdn.sheetjs.com tarball)
  * - Uses stored values only (raw: false / cellDates false)
- * - Does not execute macros, external links, or formulas (bookVBA: false)
+ * - Does not execute macros, external links, or formulas (bookVBA: false).
+ *   Stored `HYPERLINK("url")` formula text may be parsed for the quoted URL only.
  * - Enforces size / row limits and file signatures
  */
 import * as XLSX from "xlsx";
@@ -18,6 +19,7 @@ import {
   detectWorkbookFormat,
   type DetectedWorkbook,
 } from "@/lib/sourcing/intake/workbook/detect";
+import { extractWorkbookHyperlinkTarget } from "@/lib/sourcing/intake/workbook/unit-hyperlink";
 
 export type WorkbookParseFailure = {
   ok: false;
@@ -153,7 +155,8 @@ function readHyperlinks(
 
 /**
  * Attach hyperlink targets onto rows for a known column display name (e.g. 3rd Party Insp).
- * Uses SheetJS `!links` / cell hyperlinks when present.
+ * Uses SheetJS sheet link map / `cell.l.Target`, then falls back to parsing a stored
+ * `HYPERLINK("url")` formula string (common in BIFF/.xls). Does not evaluate formulas.
  */
 export function attachColumnHyperlinks(
   sheet: XLSX.WorkSheet,
@@ -182,7 +185,6 @@ export function attachColumnHyperlinks(
   if (colIdx < 0) return;
 
   const links = readHyperlinks(sheet);
-  // Also check cell objects for .l
   const dataStart = headerIdx + 1;
   let dataRow = 0;
   for (let r = dataStart; r < headerRow.length && dataRow < records.rows.length; r += 1) {
@@ -190,13 +192,11 @@ export function attachColumnHyperlinks(
     if (!cells.some((c) => String(c ?? "").trim())) continue;
     const addr = XLSX.utils.encode_cell({ r, c: colIdx });
     const cell = sheet[addr] as XLSX.CellObject | undefined;
-    const target =
-      links.get(addr.toUpperCase()) ||
-      (cell && "l" in cell && cell.l && typeof cell.l === "object" && "Target" in cell.l
-        ? String((cell.l as { Target?: string }).Target ?? "")
-        : "");
+    const fromMap = links.get(addr.toUpperCase()) || "";
+    const fromCell = extractWorkbookHyperlinkTarget(cell);
+    const target = (fromMap || fromCell).trim();
     if (target) {
-      records.rows[dataRow][outKey] = target.trim();
+      records.rows[dataRow][outKey] = target;
     }
     dataRow += 1;
   }

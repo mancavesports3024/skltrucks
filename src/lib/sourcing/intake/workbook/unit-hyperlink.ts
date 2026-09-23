@@ -5,12 +5,33 @@
  */
 import { canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
 
+/**
+ * Extract a hyperlink Target from a SheetJS cell without evaluating formulas.
+ * Prefer native `cell.l.Target` (xlsx hyperlink records). For BIFF/.xls workbooks that
+ * store Excel `HYPERLINK("url",…)` as formula text in `cell.f`, parse the quoted URL
+ * string only — never execute the formula.
+ */
+export function extractWorkbookHyperlinkTarget(
+  cell: { l?: { Target?: string } | unknown; f?: string } | null | undefined
+): string {
+  if (!cell || typeof cell !== "object") return "";
+  if (cell.l && typeof cell.l === "object" && "Target" in cell.l) {
+    const target = String((cell.l as { Target?: string }).Target ?? "").trim();
+    if (target) return target;
+  }
+  const formula = typeof cell.f === "string" ? cell.f.trim() : "";
+  if (!formula) return "";
+  // Optional leading "=", then HYPERLINK("url") or HYPERLINK("url","label")
+  const m = formula.match(/^=?\s*HYPERLINK\(\s*"((?:[^"]|"")*)"/i);
+  if (!m) return "";
+  return m[1].replace(/""/g, '"').trim();
+}
+
 /** Public Penske individual unit hostnames. */
 export const PENSKE_LISTING_ALLOWED_HOSTS = new Set([
   "penskeusedtrucks.com",
   "www.penskeusedtrucks.com",
 ]);
-
 /**
  * Explicitly approved inspection/report hostnames for Penske unit-cell links.
  * Synthetic fixture host included for tests only.

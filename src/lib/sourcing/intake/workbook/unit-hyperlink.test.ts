@@ -6,11 +6,14 @@ import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 import {
   buildWorkbookPreview,
   classifyPenskeUnitHyperlink,
+  extractWorkbookHyperlinkTarget,
   parseWorkbookBuffer,
   workbookRowsToIntake,
 } from "@/lib/sourcing/intake/workbook";
 import { mapPenskePreauctionRow } from "@/lib/sourcing/intake/workbook/penske-preauction";
 import { listingContentChanged } from "@/lib/sourcing/listing-content";
+import { planIntakeRow } from "@/lib/sourcing/intake/import";
+import type { TruckLead } from "@/types/sourcing";
 
 const casesPath = resolve(
   __dirname,
@@ -105,6 +108,32 @@ describe("classifyPenskeUnitHyperlink", () => {
   });
 });
 
+describe("extractWorkbookHyperlinkTarget", () => {
+  it("prefers cell.l.Target over formula text", () => {
+    expect(
+      extractWorkbookHyperlinkTarget({
+        l: { Target: "https://www.penskeusedtrucks.com/unit-1/" },
+        f: 'HYPERLINK("https://evil.example.com/x","1")',
+      })
+    ).toBe("https://www.penskeusedtrucks.com/unit-1/");
+  });
+
+  it("parses HYPERLINK formula text without evaluating it", () => {
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://reports.nationalinspect.com/1/2/abc/","88001")',
+      })
+    ).toBe("https://reports.nationalinspect.com/1/2/abc/");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: '=HYPERLINK("https://www.penskeusedtrucks.com/unit-9/","9")',
+      })
+    ).toBe("https://www.penskeusedtrucks.com/unit-9/");
+    expect(extractWorkbookHyperlinkTarget({ f: "SUM(A1:A2)" })).toBe("");
+    expect(extractWorkbookHyperlinkTarget({ f: "" })).toBe("");
+  });
+});
+
 describe("Penske workbook Unit hyperlink extraction", () => {
   it("extracts hyperlink Target separately from Unit display text", () => {
     const buf = readFileSync(casesPath);
@@ -114,6 +143,30 @@ describe("Penske workbook Unit hyperlink extraction", () => {
     const first = parsed.active.rows[0];
     expect(first.unit || first.unit_number).toBe("88001");
     expect(first.unit_hyperlink).toMatch(/penskeusedtrucks\.com\/unit-88001/);
+  });
+
+  it("attaches HYPERLINK formula targets from a synthetic sheet", () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Unit", "Year"],
+      ["99001", "2019"],
+    ]);
+    ws["A2"].f =
+      'HYPERLINK("https://reports.nationalinspect.com/11/22/tokentokentoken/","99001")';
+    ws["A2"].v = "99001";
+    ws["A2"].t = "s";
+    XLSX.utils.book_append_sheet(wb, ws, "Medium Duty");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const wb2 = XLSX.read(buf, { type: "buffer", bookVBA: false });
+    const sheet = wb2.Sheets["Medium Duty"];
+    expect(extractWorkbookHyperlinkTarget(sheet["A2"])).toMatch(
+      /reports\.nationalinspect\.com\/11\/22\/tokentokentoken\//
+    );
+    const classified = classifyPenskeUnitHyperlink(
+      extractWorkbookHyperlinkTarget(sheet["A2"])
+    );
+    expect(classified.kind).toBe("inspectionUrl");
+    expect(classified.url).toMatch(/nationalinspect/);
   });
 
   it("does not treat display text that looks like a URL as a hyperlink", () => {
@@ -234,6 +287,197 @@ describe("Penske workbook Unit hyperlink extraction", () => {
       canonicalListingUrl: "https://www.penskeusedtrucks.com/unit-88001",
     };
     expect(listingContentChanged(before, after)).toBe(true);
+  });
+
+  it("missing/rejected hyperlink on re-import does not erase an existing listing URL", () => {
+    const existing = {
+      id: "lead-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      listingFirstSeenAt: "2026-01-01T00:00:00.000Z",
+      listingLastSeenAt: "2026-01-01T00:00:00.000Z",
+      listingLastChangedAt: "2026-01-01T00:00:00.000Z",
+      seller: "Penske Pre-Auction",
+      supplierContactId: null,
+      sourceUrl: "https://www.penskeusedtrucks.com/unit-88001",
+      sourceScope: "penske-preauction",
+      sourceListingId: "88001",
+      canonicalListingUrl: "https://www.penskeusedtrucks.com/unit-88001",
+      stockNumber: "88001",
+      vin: "",
+      year: 2019,
+      makeModel: "Freightliner M2",
+      boxLengthFt: 26,
+      boxLengthRaw: "26'",
+      engine: "Cummins",
+      engineIsCummins: true,
+      transmission: "Automatic",
+      transmissionIsAutomatic: true,
+      listedWeightLbs: 25500,
+      listedWeightTerm: "gvw" as const,
+      manufacturerGvwrLbs: 25500,
+      gvwrDoorPlateVerified: false,
+      mileage: 120000,
+      hasLiftgate: true,
+      liftgateNotes: "",
+      price: 42000,
+      location: "Dallas, TX",
+      drivingDistanceMiles: null,
+      distanceIsEstimate: true,
+      dateLastChecked: "2026-01-01",
+      verificationNotes: "prior",
+      workflowStatus: "contacted" as const,
+      sklCallNotes: "Called yard; notes must stay",
+      researchUncertaintyLabels: [] as string[],
+      isSeedResearch: false,
+      seedSource: "",
+      matchStatus: "confirmed_match" as const,
+      matchReasons: [],
+      specEvidence: {
+        engine: "Cummins",
+        transmission: "Automatic",
+        boxLength: "26'",
+        gvwr: "GVW 25500",
+        inspectionUrl: "https://reports.nationalinspect.com/1/2/abc/",
+        hyperlinkSource: "workbook_unit_cell" as const,
+        hyperlinkDestinationType: "listing",
+        hyperlinkHostname: "www.penskeusedtrucks.com",
+        hyperlinkValidation: "Individual Penske unit page",
+        workbookStatus: "",
+        salesTerms: "",
+        penskeStatus: "",
+        titleStatus: "",
+        distance: "",
+      },
+    } satisfies TruckLead;
+
+    const incoming = {
+      ...existing,
+      sourceUrl: "",
+      canonicalListingUrl: "",
+      sklCallNotes: "",
+      workflowStatus: "new" as const,
+      verificationNotes: "No hyperlink provided",
+      specEvidence: {
+        ...existing.specEvidence,
+        inspectionUrl: "",
+        hyperlinkDestinationType: "missing",
+        hyperlinkHostname: "",
+        hyperlinkValidation: "No hyperlink provided",
+      },
+    };
+
+    const plan = planIntakeRow(incoming, existing, DEFAULT_BUYING_PROFILE, {
+      dateObserved: "2026-09-21",
+      missingEvidence: [],
+    });
+    expect(plan.kind).toBe("seen_again");
+    expect(plan.input.sourceUrl).toMatch(/unit-88001/);
+    expect(plan.input.canonicalListingUrl).toMatch(/unit-88001/);
+    expect(plan.input.specEvidence.inspectionUrl).toMatch(/nationalinspect/);
+    expect(plan.input.sklCallNotes).toBe("Called yard; notes must stay");
+    expect(plan.input.workflowStatus).toBe("contacted");
+  });
+
+  it("newly discovered safe listing URL is listing_change; inspection-only is not", () => {
+    const base = {
+      id: "lead-2",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      listingFirstSeenAt: "2026-01-01T00:00:00.000Z",
+      listingLastSeenAt: "2026-01-01T00:00:00.000Z",
+      listingLastChangedAt: "2026-01-01T00:00:00.000Z",
+      seller: "Penske Pre-Auction",
+      supplierContactId: null,
+      sourceUrl: "",
+      sourceScope: "penske-preauction",
+      sourceListingId: "88002",
+      canonicalListingUrl: "",
+      stockNumber: "88002",
+      vin: "",
+      year: 2019,
+      makeModel: "Freightliner M2",
+      boxLengthFt: 26,
+      boxLengthRaw: "26'",
+      engine: "Cummins",
+      engineIsCummins: true,
+      transmission: "Automatic",
+      transmissionIsAutomatic: true,
+      listedWeightLbs: 25500,
+      listedWeightTerm: "gvw" as const,
+      manufacturerGvwrLbs: 25500,
+      gvwrDoorPlateVerified: false,
+      mileage: 120000,
+      hasLiftgate: true,
+      liftgateNotes: "",
+      price: 42000,
+      location: "Dallas, TX",
+      drivingDistanceMiles: null,
+      distanceIsEstimate: true,
+      dateLastChecked: "2026-01-01",
+      verificationNotes: "",
+      workflowStatus: "new" as const,
+      sklCallNotes: "keep me",
+      researchUncertaintyLabels: [] as string[],
+      isSeedResearch: false,
+      seedSource: "",
+      matchStatus: "needs_verification" as const,
+      matchReasons: [],
+      specEvidence: {
+        engine: "Cummins",
+        transmission: "Automatic",
+        boxLength: "26'",
+        gvwr: "GVW 25500",
+        inspectionUrl: "",
+        hyperlinkSource: "" as const,
+        hyperlinkDestinationType: "missing",
+        hyperlinkHostname: "",
+        hyperlinkValidation: "No hyperlink provided",
+        workbookStatus: "",
+        salesTerms: "",
+        penskeStatus: "",
+        titleStatus: "",
+        distance: "",
+      },
+    } satisfies TruckLead;
+
+    const withListing = {
+      ...base,
+      sourceUrl: "https://www.penskeusedtrucks.com/unit-88002",
+      canonicalListingUrl: "https://www.penskeusedtrucks.com/unit-88002",
+      specEvidence: {
+        ...base.specEvidence,
+        hyperlinkSource: "workbook_unit_cell" as const,
+        hyperlinkDestinationType: "listing",
+        hyperlinkHostname: "www.penskeusedtrucks.com",
+        hyperlinkValidation: "Individual Penske unit page",
+      },
+    };
+    const listingPlan = planIntakeRow(withListing, base, DEFAULT_BUYING_PROFILE, {
+      dateObserved: "2026-09-21",
+      missingEvidence: [],
+    });
+    expect(listingPlan.kind).toBe("listing_change");
+    expect(listingPlan.input.sklCallNotes).toBe("keep me");
+
+    const withInspection = {
+      ...base,
+      specEvidence: {
+        ...base.specEvidence,
+        inspectionUrl: "https://reports.nationalinspect.com/1/2/tok/",
+        hyperlinkSource: "workbook_unit_cell" as const,
+        hyperlinkDestinationType: "inspection",
+        hyperlinkHostname: "reports.nationalinspect.com",
+        hyperlinkValidation: "Approved inspection/report page",
+      },
+    };
+    const inspPlan = planIntakeRow(withInspection, base, DEFAULT_BUYING_PROFILE, {
+      dateObserved: "2026-09-21",
+      missingEvidence: [],
+    });
+    expect(inspPlan.kind).toBe("seen_again");
+    expect(inspPlan.input.specEvidence.inspectionUrl).toMatch(/nationalinspect/);
+    expect(inspPlan.input.sklCallNotes).toBe("keep me");
   });
 
   it("does not execute formulas or macros (bookVBA false path still parses stored values)", () => {

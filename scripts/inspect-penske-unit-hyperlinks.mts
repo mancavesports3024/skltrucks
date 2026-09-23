@@ -11,7 +11,11 @@
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import path from "node:path";
-import { classifyPenskeUnitHyperlink, maskHyperlinkForDiagnostics } from "../src/lib/sourcing/intake/workbook/unit-hyperlink.ts";
+import {
+  classifyPenskeUnitHyperlink,
+  extractWorkbookHyperlinkTarget,
+  maskHyperlinkForDiagnostics,
+} from "../src/lib/sourcing/intake/workbook/unit-hyperlink.ts";
 
 function maskUnit(unit: string): string {
   const s = String(unit).trim();
@@ -19,10 +23,19 @@ function maskUnit(unit: string): string {
   return `${s.slice(0, 2)}***${s.slice(-2)}`;
 }
 
+function maskPathIds(pathPattern: string): string {
+  return pathPattern
+    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "/{uuid}")
+    .replace(/\/[0-9a-f]{16,}/gi, "/{hex}")
+    .replace(/\/[A-Za-z0-9_-]{20,}/g, "/{token}")
+    .replace(/\/\d{4,}/g, "/{id}");
+}
+
 function main() {
   const arg = process.argv[2];
   const candidates = [
     arg,
+    path.join(process.cwd(), "tmp-workbooks", "Pre-Auction-For-Sale-List-9.21.26.xls"),
     path.join(process.cwd(), "tmp-workbooks", "penske-9.21.26.xls"),
     path.join(process.cwd(), "tmp-workbooks", "penske-used-trucks.xls"),
   ].filter(Boolean) as string[];
@@ -58,6 +71,8 @@ function main() {
     sheets: [] as unknown[],
     totals: {
       unitCells: 0,
+      withLTarget: 0,
+      withHyperlinkFormula: 0,
       withHyperlink: 0,
       listingUrl: 0,
       inspectionUrl: 0,
@@ -68,6 +83,16 @@ function main() {
     pathPatterns: {} as Record<string, number>,
     queryKeyNamesSeen: [] as string[],
     credentialLikeQueryKeys: [] as string[],
+    rejectReasons: {} as Record<string, number>,
+    sensitiveNamedParams: {
+      session: 0,
+      token: 0,
+      signature: 0,
+      clientId: 0,
+      userinfo: 0,
+      fragment: 0,
+      expiring: 0,
+    },
   };
 
   const queryKeys = new Set<string>();
@@ -96,6 +121,8 @@ function main() {
 
     let unitCells = 0;
     let withHyperlink = 0;
+    let withLTarget = 0;
+    let withFormula = 0;
     const links = (sheet as XLSX.WorkSheet & { l?: Record<string, { Target?: string }> }).l || {};
 
     for (let r = headerIdx + 1; r < matrix.length; r++) {
@@ -108,12 +135,22 @@ function main() {
 
       const addr = XLSX.utils.encode_cell({ r, c: unitCol });
       const cell = sheet[addr] as XLSX.CellObject | undefined;
-      const target =
+      const lTarget =
         links[addr]?.Target ||
         links[addr.toUpperCase()]?.Target ||
         (cell && "l" in cell && cell.l && typeof cell.l === "object"
           ? String((cell.l as { Target?: string }).Target ?? "")
           : "");
+      if (lTarget) {
+        withLTarget += 1;
+        summary.totals.withLTarget += 1;
+      }
+      if (cell && typeof cell.f === "string" && /HYPERLINK\s*\(/i.test(cell.f)) {
+        withFormula += 1;
+        summary.totals.withHyperlinkFormula += 1;
+      }
+
+      const target = (lTarget || extractWorkbookHyperlinkTarget(cell) || "").trim();
 
       if (!target) {
         summary.totals.missing += 1;
@@ -123,9 +160,10 @@ function main() {
       summary.totals.withHyperlink += 1;
 
       const masked = maskHyperlinkForDiagnostics(target);
+      const pathPattern = maskPathIds(masked.pathPattern);
       summary.hosts[masked.hostname] = (summary.hosts[masked.hostname] || 0) + 1;
-      summary.pathPatterns[masked.pathPattern] =
-        (summary.pathPatterns[masked.pathPattern] || 0) + 1;
+      summary.pathPatterns[pathPattern] =
+        (summary.pathPatterns[pathPattern] || 0) + 1;
       for (const k of masked.queryKeyNames) {
         queryKeys.add(k);
         if (/(token|auth|session|client|api[_-]?key|signature|window_name|request)/i.test(k)) {
@@ -133,11 +171,34 @@ function main() {
         }
       }
 
+      try {
+        const u = new URL(target);
+        if (u.username || u.password) summary.sensitiveNamedParams.userinfo += 1;
+        if (u.hash && u.hash.replace(/^#/, "").length > 0) {
+          summary.sensitiveNamedParams.fragment += 1;
+        }
+        for (const k of u.searchParams.keys()) {
+          const lk = k.toLowerCase();
+          if (/session/.test(lk)) summary.sensitiveNamedParams.session += 1;
+          if (/token/.test(lk)) summary.sensitiveNamedParams.token += 1;
+          if (/sig(nature)?$/.test(lk) || lk === "signature") {
+            summary.sensitiveNamedParams.signature += 1;
+          }
+          if (/client[_-]?id/.test(lk)) summary.sensitiveNamedParams.clientId += 1;
+          if (/^exp(ire|ires|iry)?$/.test(lk)) summary.sensitiveNamedParams.expiring += 1;
+        }
+      } catch {
+        /* ignore */
+      }
+
       const classified = classifyPenskeUnitHyperlink(target);
       if (classified.kind === "listingUrl") summary.totals.listingUrl += 1;
       else if (classified.kind === "inspectionUrl") summary.totals.inspectionUrl += 1;
-      else if (classified.kind === "rejected") summary.totals.rejected += 1;
-      else summary.totals.missing += 1;
+      else if (classified.kind === "rejected") {
+        summary.totals.rejected += 1;
+        summary.rejectReasons[classified.reason] =
+          (summary.rejectReasons[classified.reason] || 0) + 1;
+      } else summary.totals.missing += 1;
 
       void maskUnit(unit); // ensure mask helper stays used without printing units
     }
@@ -147,6 +208,8 @@ function main() {
       unitColumn: headers[unitCol],
       unitCells,
       withHyperlink,
+      withLTarget,
+      withHyperlinkFormula: withFormula,
     });
   }
 
