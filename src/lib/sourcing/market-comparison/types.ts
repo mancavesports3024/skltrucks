@@ -26,6 +26,13 @@ export const MARKET_COMPARISON_CONFIRM_VALUE = "1";
  */
 export const MARKET_COMPARISON_MAX_TOOL_CALLS = 12;
 
+/**
+ * Hard ceiling for the final structured JSON message.
+ * Truncation here yields "Unterminated string in JSON" and empty comparisons.
+ * ~8k tokens covers 3–6 verified comps with short evidence quotes.
+ */
+export const MARKET_COMPARISON_MAX_OUTPUT_TOKENS = 8192;
+
 /** Target verified usable comps this budget can support (not a guarantee). */
 export const MARKET_COMPARISON_TARGET_VERIFIED_MIN = 3;
 export const MARKET_COMPARISON_TARGET_VERIFIED_MAX = 6;
