@@ -1,5 +1,11 @@
 import { canonicalizeListingUrl, normalizeVin } from "@/lib/sourcing/duplicates";
 import { estimateDistanceFromLocation } from "@/lib/sourcing/distance/estimate-from-location";
+import {
+  CANADA,
+  UNITED_STATES,
+  resolveLeadCountry,
+  shouldSkipUsDistanceLookup,
+} from "@/lib/sourcing/location/country";
 import { emptySpecEvidence } from "@/lib/sourcing/intake/sources";
 import type { WorkbookParseSuccess } from "@/lib/sourcing/intake/workbook/parse";
 import { mapPenskePreauctionRow } from "@/lib/sourcing/intake/workbook/penske-preauction";
@@ -31,7 +37,8 @@ function weightFields(gvwLbs: number | null, gvwRaw: string): {
 export function applyOfflineWorkbookDistance(
   location: string,
   evidence: SpecEvidence,
-  uncertaintyLabels: string[]
+  uncertaintyLabels: string[],
+  options?: { country?: string | null; stateOrProvince?: string | null }
 ): {
   drivingDistanceMiles: number | null;
   distanceIsEstimate: true;
@@ -39,28 +46,73 @@ export function applyOfflineWorkbookDistance(
   researchUncertaintyLabels: string[];
   missingDistance: boolean;
   distanceSummary: string;
+  countryResolution: ReturnType<typeof resolveLeadCountry>;
 } {
-  const estimate = estimateDistanceFromLocation(location);
+  const countryResolution = resolveLeadCountry({
+    location,
+    country: options?.country,
+    stateOrProvince: options?.stateOrProvince,
+  });
   const labels = uncertaintyLabels.filter((l) => l !== "distance_not_geocoded");
+
+  const countryEvidence =
+    countryResolution.kind === "us"
+      ? UNITED_STATES
+      : countryResolution.kind === "foreign"
+        ? countryResolution.country
+        : undefined;
+
+  if (shouldSkipUsDistanceLookup(countryResolution) && countryResolution.kind === "foreign") {
+    const country = countryResolution.country;
+    const note =
+      country === CANADA
+        ? "Distance not evaluated — Outside allowed country: Canada (U.S. Census lookup skipped)"
+        : `Distance not evaluated — Outside allowed country: ${country} (U.S. Census lookup skipped)`;
+    return {
+      drivingDistanceMiles: null,
+      distanceIsEstimate: true,
+      evidence: {
+        ...evidence,
+        distance: note,
+        country,
+      },
+      researchUncertaintyLabels: labels.filter((l) => l !== "canadian_location"),
+      missingDistance: false,
+      distanceSummary: note,
+      countryResolution,
+    };
+  }
+
+  const estimate = estimateDistanceFromLocation(location);
 
   if (estimate.ok) {
     return {
       drivingDistanceMiles: estimate.miles,
       distanceIsEstimate: true,
-      evidence: { ...evidence, distance: estimate.evidenceText },
+      evidence: {
+        ...evidence,
+        distance: estimate.evidenceText,
+        country: countryEvidence ?? UNITED_STATES,
+      },
       researchUncertaintyLabels: labels,
       missingDistance: false,
       distanceSummary: `${estimate.methodLabel}: ${estimate.miles} mi (${estimate.resolved.display})`,
+      countryResolution,
     };
   }
 
   return {
     drivingDistanceMiles: null,
     distanceIsEstimate: true,
-    evidence: { ...evidence, distance: estimate.evidenceText },
+    evidence: {
+      ...evidence,
+      distance: estimate.evidenceText,
+      ...(countryEvidence ? { country: countryEvidence } : {}),
+    },
     researchUncertaintyLabels: [...labels, "distance_not_geocoded"],
     missingDistance: true,
     distanceSummary: `Distance unknown (${estimate.reason})`,
+    countryResolution,
   };
 }
 
@@ -101,7 +153,8 @@ export function workbookRowsToIntake(
         [
           ...(mapped.gvwLbs != null ? ["workbook_gvw_not_door_plate"] : ["missing_or_ambiguous_gvw"]),
           ...(mapped.bodyRejectReason ? ["non_dry_van_body"] : []),
-        ]
+        ],
+        { stateOrProvince: mapped.state || null }
       );
       const input: TruckLeadInput = {
         seller: "Penske Pre-Auction",

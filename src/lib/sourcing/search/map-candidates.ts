@@ -6,6 +6,10 @@ import {
 } from "@/lib/sourcing/duplicates";
 import { applyEvidenceGate } from "@/lib/sourcing/intake/csv";
 import { emptySpecEvidence } from "@/lib/sourcing/intake/sources";
+import {
+  UNITED_STATES,
+  resolveLeadCountry,
+} from "@/lib/sourcing/location/country";
 import { applyDeterministicEngineIsCummins } from "@/lib/sourcing/search/deterministic-specs";
 import type { ExtractedTruckCandidate } from "@/lib/sourcing/search/types";
 import { emptySpecEvidenceFromCandidate } from "@/lib/sourcing/search/types";
@@ -179,6 +183,18 @@ export function candidateToTruckLeadInput(
   }
   if (t.evidenceUrl) notes.push(`Evidence URL: ${t.evidenceUrl}`);
 
+  const location = (t.location || "").trim();
+  const countryResolution = resolveLeadCountry({ location });
+  const countryEvidence =
+    countryResolution.kind === "us"
+      ? UNITED_STATES
+      : countryResolution.kind === "foreign"
+        ? countryResolution.country
+        : undefined;
+  if (countryResolution.kind === "foreign") {
+    notes.push(`Outside allowed country: ${countryResolution.country}`);
+  }
+
   const input: TruckLeadInput = {
     seller: seller || sourceScope,
     supplierContactId: null,
@@ -204,7 +220,7 @@ export function candidateToTruckLeadInput(
     hasLiftgate: t.hasLiftgate,
     liftgateNotes: "",
     price,
-    location: (t.location || "").trim(),
+    location,
     drivingDistanceMiles: t.drivingDistanceMiles,
     distanceIsEstimate: t.distanceIsEstimate !== false,
     dateLastChecked: new Date().toISOString().slice(0, 10),
@@ -217,7 +233,11 @@ export function candidateToTruckLeadInput(
     ],
     isSeedResearch: false,
     seedSource: "Internet Search Pilot",
-    specEvidence: { ...emptySpecEvidence(), ...evidence },
+    specEvidence: {
+      ...emptySpecEvidence(),
+      ...evidence,
+      ...(countryEvidence ? { country: countryEvidence } : {}),
+    },
   };
 
   return { input };

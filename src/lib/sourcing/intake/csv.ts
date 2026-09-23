@@ -6,6 +6,10 @@ import {
   normalizeVin,
 } from "@/lib/sourcing/duplicates";
 import { emptySpecEvidence, normalizeSpecEvidence } from "@/lib/sourcing/intake/sources";
+import {
+  UNITED_STATES,
+  resolveLeadCountry,
+} from "@/lib/sourcing/location/country";
 
 export interface CsvParseResult {
   ok: true;
@@ -311,6 +315,19 @@ export function csvRowToIntakeLead(
     notesParts.push(`CSV claimed manufacturer GVWR ${claimedGvwr} lbs without evidence.`);
   }
 
+  const location = get(row, "location", "city_state");
+  const countryRaw = get(row, "country", "country_code");
+  const countryResolution = resolveLeadCountry({ location, country: countryRaw || null });
+  const countryEvidence =
+    countryResolution.kind === "us"
+      ? UNITED_STATES
+      : countryResolution.kind === "foreign"
+        ? countryResolution.country
+        : undefined;
+  if (countryResolution.kind === "foreign") {
+    notesParts.push(`Outside allowed country: ${countryResolution.country}`);
+  }
+
   const input: TruckLeadInput = {
     seller: seller || sourceScope,
     supplierContactId: null,
@@ -336,7 +353,7 @@ export function csvRowToIntakeLead(
     hasLiftgate: parseOptionalBool(get(row, "has_liftgate", "liftgate")),
     liftgateNotes: get(row, "liftgate_notes"),
     price: parseOptionalNumber(get(row, "price", "asking_price")),
-    location: get(row, "location", "city_state"),
+    location,
     drivingDistanceMiles: parseOptionalNumber(get(row, "driving_distance_miles", "distance_miles")),
     distanceIsEstimate: parseOptionalBool(get(row, "distance_is_estimate")) ?? true,
     dateLastChecked: dateObserved.slice(0, 10),
@@ -349,6 +366,7 @@ export function csvRowToIntakeLead(
     specEvidence: {
       ...emptySpecEvidence(),
       ...evidence,
+      ...(countryEvidence ? { country: countryEvidence } : {}),
     },
   };
 

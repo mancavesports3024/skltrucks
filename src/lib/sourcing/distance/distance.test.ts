@@ -151,6 +151,7 @@ describe("classification boundary at 1,200 miles", () => {
     hasLiftgate: true,
     distanceIsEstimate: true,
     price: 40000,
+    location: "Joplin, MO",
   };
 
   it("exactly 1,200 miles passes when profile max is 1,200", () => {

@@ -187,7 +187,7 @@ export function mapHoganWholesaleRow(row: Record<string, string>): HoganWholesal
     notes.push(insp.error);
   }
   if (loc.looksCanadian) {
-    notes.push("Canadian location — not assumed inside Joplin radius.");
+    notes.push("Canadian location — rejected as outside allowed country (United States only).");
   }
   if (bodyRejectReason) notes.push(bodyRejectReason);
   if (gvwRaw) {

@@ -1,3 +1,9 @@
+import {
+  CANADA,
+  UNITED_STATES,
+  countryRejectionReason,
+  resolveLeadCountry,
+} from "@/lib/sourcing/location/country";
 import type {
   BuyingProfile,
   ConstraintOutcome,
@@ -24,6 +30,15 @@ export interface LeadMatchInput {
   /** When true (workbook offline estimate), labels say straight-line — never driving. */
   distanceIsEstimate?: boolean;
   price: number | null;
+  /** Free-text location used for US-only country resolution. */
+  location?: string | null;
+  /**
+   * Explicit country when provided separately (CSV / form / workbook column).
+   * Ambiguous `CA` means Canada here.
+   */
+  country?: string | null;
+  /** Separate state/province field; ambiguous `CA` means California. */
+  stateOrProvince?: string | null;
 }
 
 export function earliestAcceptedModelYear(
@@ -256,6 +271,33 @@ export function classifyLead(
     });
   }
 
+  // --- Required: United States only (before distance) ---
+  const leadWithEvidence = lead as LeadMatchInput & {
+    specEvidence?: { country?: string };
+  };
+  const countryResolution = resolveLeadCountry({
+    location: lead.location,
+    country: lead.country ?? leadWithEvidence.specEvidence?.country,
+    stateOrProvince: lead.stateOrProvince,
+  });
+  {
+    let outcome: ConstraintOutcome = "unknown";
+    let label = "Country / location region unknown";
+    if (countryResolution.kind === "us") {
+      outcome = "pass";
+      label = `Located in ${UNITED_STATES}`;
+    } else if (countryResolution.kind === "foreign") {
+      outcome = "fail";
+      label = countryRejectionReason(countryResolution.country);
+    }
+    reasons.push({
+      code: "country",
+      label,
+      outcome,
+      required: true,
+    });
+  }
+
   // --- Required: Distance from origin (within preferred max miles) ---
   {
     let outcome: ConstraintOutcome = "unknown";
@@ -264,7 +306,15 @@ export function classifyLead(
       ? "Estimated straight-line distance"
       : "Driving distance";
     let label = `${milesNoun} unknown — not invented`;
-    if (lead.drivingDistanceMiles != null) {
+    if (countryResolution.kind === "foreign") {
+      // Explicit foreign trucks are rejected on country — do not treat missing
+      // distance as the primary failure or invent a U.S. mileage.
+      outcome = "fail";
+      label =
+        countryResolution.country === CANADA
+          ? "Distance not evaluated for Canadian location"
+          : `Distance not evaluated outside ${UNITED_STATES} (${countryResolution.country})`;
+    } else if (lead.drivingDistanceMiles != null) {
       const miles = lead.drivingDistanceMiles;
       if (miles <= profile.preferredMaxDrivingMiles) {
         outcome = "pass";
