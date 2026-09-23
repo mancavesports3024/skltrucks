@@ -343,6 +343,16 @@ export function parseWorkbookBuffer(
     }
   }
 
+  // Penske: Unit Number / Unit cell hyperlink Target (never treat display text as URL)
+  if (detected.format === "penske-preauction") {
+    const sheet = workbook.Sheets[active.sheetName];
+    if (sheet) {
+      attachColumnHyperlinks(sheet, active, "Unit", "unit_hyperlink");
+      attachColumnHyperlinks(sheet, active, "Unit Number", "unit_hyperlink");
+      attachColumnHyperlinks(sheet, active, "Unit #", "unit_hyperlink");
+    }
+  }
+
   return { ok: true, filename, detected, sheets, active };
 }
 

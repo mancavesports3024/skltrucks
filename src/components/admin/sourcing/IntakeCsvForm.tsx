@@ -299,6 +299,7 @@ export default function IntakeCsvForm() {
                   <tr className="border-b border-neutral-200">
                     <th className="py-2 pr-3">#</th>
                     <th className="py-2 pr-3">Unit</th>
+                    <th className="py-2 pr-3">Link</th>
                     <th className="py-2 pr-3">Year / unit</th>
                     <th className="py-2 pr-3">GVW</th>
                     <th className="py-2 pr-3">Location</th>
@@ -313,6 +314,29 @@ export default function IntakeCsvForm() {
                     <tr key={row.rowNumber} className="border-b border-neutral-100 align-top">
                       <td className="py-2 pr-3">{row.rowNumber}</td>
                       <td className="py-2 pr-3 font-mono">{row.unit}</td>
+                      <td className="py-2 pr-3">
+                        {row.hyperlinkKind === "listing" && row.hyperlinkUrl ? (
+                          <a
+                            href={row.hyperlinkUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#fc0527] underline"
+                          >
+                            Listing
+                          </a>
+                        ) : row.hyperlinkKind === "inspection" && row.hyperlinkUrl ? (
+                          <a
+                            href={row.hyperlinkUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#fc0527] underline"
+                          >
+                            Inspection report
+                          </a>
+                        ) : (
+                          <span className="text-neutral-500">{row.hyperlinkNote || "—"}</span>
+                        )}
+                      </td>
                       <td className="py-2 pr-3">
                         {row.year ?? "—"} {row.makeModel}
                       </td>

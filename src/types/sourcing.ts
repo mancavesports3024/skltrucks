@@ -73,6 +73,16 @@ export interface SpecEvidence {
    * Not a public sale/listing URL — stored in jsonb evidence only (no migration).
    */
   inspectionUrl?: string;
+  /**
+   * Provenance for a hyperlink taken from a Penske Unit Number cell.
+   * Stored in jsonb — no migration.
+   */
+  hyperlinkSource?: "workbook_unit_cell" | "";
+  /** listing | inspection | rejected | missing (or empty when N/A) */
+  hyperlinkDestinationType?: string;
+  hyperlinkHostname?: string;
+  /** Staff-safe validation summary (never stores raw unsafe URLs). */
+  hyperlinkValidation?: string;
   /** Dealer workbook status / completion text (e.g. Not Started, 75% COMPLETE). */
   workbookStatus?: string;
   salesTerms?: string;

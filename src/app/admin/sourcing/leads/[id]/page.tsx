@@ -43,6 +43,26 @@ export default async function EditTruckLeadPage({ params }: PageProps) {
             {[lead.year, lead.makeModel].filter(Boolean).join(" ") || "Edit lead"}
           </h2>
           <MatchStatusBadge status={lead.matchStatus} />
+          {(lead.sourceUrl || lead.canonicalListingUrl) && (
+            <a
+              href={(lead.sourceUrl || lead.canonicalListingUrl).trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-semibold text-[#fc0527] underline"
+            >
+              View listing
+            </a>
+          )}
+          {lead.specEvidence?.inspectionUrl?.trim() ? (
+            <a
+              href={lead.specEvidence.inspectionUrl.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-semibold text-[#fc0527] underline"
+            >
+              View inspection report
+            </a>
+          ) : null}
         </div>
 
         {lead.matchReasons.length > 0 && (

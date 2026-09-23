@@ -12,6 +12,10 @@ import {
   parseYear,
   type BodyKind,
 } from "@/lib/sourcing/intake/workbook/normalize";
+import {
+  classifyPenskeUnitHyperlink,
+  type PenskeUnitHyperlinkClassification,
+} from "@/lib/sourcing/intake/workbook/unit-hyperlink";
 import type { SpecEvidence } from "@/types/sourcing";
 
 export const PENSKE_PREAUCTION_SCOPE = "penske-preauction";
@@ -58,11 +62,20 @@ export interface PenskePreauctionMapped {
   comments: string;
   evidence: SpecEvidence;
   notes: string[];
+  /** Validated public listing URL from Unit cell hyperlink, else "". */
+  listingUrl: string;
+  /** Validated inspection URL from Unit cell hyperlink, else "". */
+  inspectionUrl: string;
+  hyperlink: PenskeUnitHyperlinkClassification;
 }
 
 export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreauctionMapped | null {
   const unit = get(row, "unit", "unit_number");
   if (!unit) return null;
+
+  // Hyperlink Target only — never treat displayed Unit text as a URL.
+  const hyperlinkRaw = get(row, "unit_hyperlink");
+  const hyperlink = classifyPenskeUnitHyperlink(hyperlinkRaw);
 
   const vin = get(row, "vin", "vin_number").toUpperCase().replace(/\s+/g, "");
   const year = parseYear(get(row, "year"));
@@ -116,6 +129,9 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
   const liftCombined = [liftRaw, liftModel, liftCap].filter(Boolean).join(" ");
   const lift = parseLiftgate(liftCombined || liftRaw);
 
+  const listingUrl = hyperlink.kind === "listingUrl" ? hyperlink.url : "";
+  const inspectionUrl = hyperlink.kind === "inspectionUrl" ? hyperlink.url : "";
+
   const evidence: SpecEvidence = {
     engine: engine || "",
     transmission: transmission || "",
@@ -123,6 +139,18 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
       bodyRejectReason ||
       (boxFromDesc != null ? `${description || type} → ${boxFromDesc}'` : description || type),
     gvwr: gvwRaw ? `GVW ${gvwRaw}` : "",
+    inspectionUrl,
+    hyperlinkSource: "workbook_unit_cell",
+    hyperlinkDestinationType:
+      hyperlink.kind === "listingUrl"
+        ? "listing"
+        : hyperlink.kind === "inspectionUrl"
+          ? "inspection"
+          : hyperlink.kind === "missing"
+            ? "missing"
+            : "rejected",
+    hyperlinkHostname: hyperlink.hostname,
+    hyperlinkValidation: hyperlink.reason,
     workbookStatus: penskeStatus,
     salesTerms,
     penskeStatus,
@@ -130,7 +158,11 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
   };
 
   const notes: string[] = [];
-  notes.push(`Penske pre-auction Unit ${unit} (authorized workbook; no public listing URL invented).`);
+  notes.push(`Penske pre-auction Unit ${unit} (authorized workbook).`);
+  notes.push(hyperlink.previewNote);
+  if (!listingUrl && !inspectionUrl && hyperlink.kind === "missing") {
+    notes.push("No public listing URL invented from the unit number.");
+  }
   if (type) notes.push(`Type: ${type}`);
   if (description) notes.push(`Description: ${description}`);
   if (comments) notes.push(comments);
@@ -177,5 +209,8 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
     comments,
     evidence,
     notes,
+    listingUrl,
+    inspectionUrl,
+    hyperlink,
   };
 }

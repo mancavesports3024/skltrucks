@@ -159,10 +159,12 @@ export function workbookRowsToIntake(
       const input: TruckLeadInput = {
         seller: "Penske Pre-Auction",
         supplierContactId: null,
-        sourceUrl: "",
+        sourceUrl: mapped.listingUrl,
         sourceScope: mapped.sourceScope,
         sourceListingId: mapped.sourceListingId,
-        canonicalListingUrl: "",
+        canonicalListingUrl: mapped.listingUrl
+          ? canonicalizeListingUrl(mapped.listingUrl)
+          : "",
         stockNumber: mapped.stockNumber,
         vin: normalizeVin(mapped.vin),
         year: mapped.year,
