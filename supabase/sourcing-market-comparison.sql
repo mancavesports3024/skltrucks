@@ -5,9 +5,10 @@
 --
 -- Dependencies (must already exist from supabase/sourcing-schema.sql):
 --   - public.is_sourcing_staff()
---   - public.sourcing_authorized_staff (email PK, active boolean)
 --   - public.sourcing_truck_leads
--- This file fails hard if those are missing — it does not create weaker fallbacks.
+-- Optional (not required for access; kept for directory/notes):
+--   - public.sourcing_authorized_staff
+-- This file fails hard if required deps are missing — it does not create weaker fallbacks.
 --
 -- Production sequence (migrate BEFORE merge/deploy of the application):
 --   1. Review this SQL from the exact release commit.
@@ -19,8 +20,9 @@
 --   7. No live OpenAI call unless separately authorized.
 --
 -- RLS (defense in depth with application requireSourcingStaff()):
---   SELECT/INSERT require public.is_sourcing_staff() AND an active matching
---   sourcing_authorized_staff row for auth.jwt() email.
+--   SELECT/INSERT require public.is_sourcing_staff() — same bar as inventory /
+--   sourcing_truck_leads (any authenticated Auth user). Optional
+--   SOURCING_STAFF_EMAILS narrows the app UI only.
 --   UPDATE/DELETE are not granted to authenticated/anon (history is append-only).
 --   Lead FK: ON DELETE CASCADE — deleting a lead removes its comparisons.
 --
@@ -37,10 +39,6 @@ begin
     raise exception
       'public.is_sourcing_staff() is missing. Apply supabase/sourcing-schema.sql before sourcing-market-comparison.sql.';
   end if;
-  if to_regclass('public.sourcing_authorized_staff') is null then
-    raise exception
-      'public.sourcing_authorized_staff is missing. Apply supabase/sourcing-schema.sql before sourcing-market-comparison.sql.';
-  end if;
   if to_regclass('public.sourcing_truck_leads') is null then
     raise exception
       'public.sourcing_truck_leads is missing. Apply supabase/sourcing-schema.sql before sourcing-market-comparison.sql.';
@@ -48,7 +46,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Market-comparison authorization helper (uses is_sourcing_staff + active directory)
+-- Market-comparison authorization helper (same bar as is_sourcing_staff / inventory)
 -- ---------------------------------------------------------------------------
 create or replace function public.can_manage_sourcing_market_comparisons()
 returns boolean
@@ -57,15 +55,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select
-    coalesce(public.is_sourcing_staff(), false)
-    and exists (
-      select 1
-      from public.sourcing_authorized_staff s
-      where s.active is true
-        and lower(btrim(s.email)) = lower(btrim(coalesce(auth.jwt() ->> 'email', '')))
-        and btrim(coalesce(auth.jwt() ->> 'email', '')) <> ''
-    );
+  select coalesce(public.is_sourcing_staff(), false);
 $$;
 
 revoke all on function public.can_manage_sourcing_market_comparisons() from public;
@@ -109,9 +99,9 @@ create index if not exists sourcing_market_comparisons_created_at_idx
 alter table public.sourcing_market_comparisons enable row level security;
 
 -- ---------------------------------------------------------------------------
--- RLS policies — always require is_sourcing_staff(); also require active staff row.
+-- RLS policies — same is_sourcing_staff() bar as sourcing_truck_leads.
 -- Lead visibility: only rows whose lead is selectable under lead RLS are exposed
--- via the EXISTS subquery (same is_sourcing_staff() bar as sourcing_truck_leads).
+-- via the EXISTS subquery.
 -- ---------------------------------------------------------------------------
 drop policy if exists "Sourcing staff select market comparisons"
   on public.sourcing_market_comparisons;

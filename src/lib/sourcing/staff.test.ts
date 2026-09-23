@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getSourcingStaffAllowlist,
   isSourcingStaffAllowlistConfigured,
@@ -6,6 +6,17 @@ import {
 } from "@/lib/sourcing/staff";
 
 describe("sourcing staff allowlist (optional narrow)", () => {
+  const prev = process.env.SOURCING_STAFF_EMAILS;
+
+  beforeEach(() => {
+    delete process.env.SOURCING_STAFF_EMAILS;
+  });
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.SOURCING_STAFF_EMAILS;
+    else process.env.SOURCING_STAFF_EMAILS = prev;
+  });
+
   it("empty/unset allowlist allows any signed-in email (same as inventory admin)", () => {
     expect(getSourcingStaffAllowlist(undefined)).toEqual([]);
     expect(getSourcingStaffAllowlist("")).toEqual([]);
@@ -38,26 +49,23 @@ describe("sourcing staff allowlist (optional narrow)", () => {
   });
 });
 
-describe("application authorization (admin-aligned + active DB staff)", () => {
+describe("application authorization (same bar as inventory admin)", () => {
   function appAllows(opts: {
     email: string | null;
     envList: string[];
     authenticatedRpc: boolean;
-    activeAuthorizedStaff: boolean;
   }): boolean {
     if (!isSourcingStaffEmail(opts.email, opts.envList)) return false;
     if (!opts.authenticatedRpc) return false;
-    if (!opts.activeAuthorizedStaff) return false;
     return true;
   }
 
-  it("signed-in admin with empty env + active DB staff → allowed", () => {
+  it("signed-in admin with empty env → allowed (directory not required)", () => {
     expect(
       appAllows({
         email: "teammate@example.com",
         envList: [],
         authenticatedRpc: true,
-        activeAuthorizedStaff: true,
       })
     ).toBe(true);
   });
@@ -68,18 +76,6 @@ describe("application authorization (admin-aligned + active DB staff)", () => {
         email: "teammate@example.com",
         envList: [],
         authenticatedRpc: false,
-        activeAuthorizedStaff: true,
-      })
-    ).toBe(false);
-  });
-
-  it("signed-in + RPC true but inactive/missing DB staff → denied", () => {
-    expect(
-      appAllows({
-        email: "teammate@example.com",
-        envList: [],
-        authenticatedRpc: true,
-        activeAuthorizedStaff: false,
       })
     ).toBe(false);
   });
@@ -90,7 +86,6 @@ describe("application authorization (admin-aligned + active DB staff)", () => {
         email: "other@example.com",
         envList: ["skltrucksllc@gmail.com"],
         authenticatedRpc: true,
-        activeAuthorizedStaff: true,
       })
     ).toBe(false);
     expect(
@@ -98,7 +93,6 @@ describe("application authorization (admin-aligned + active DB staff)", () => {
         email: "skltrucksllc@gmail.com",
         envList: ["skltrucksllc@gmail.com"],
         authenticatedRpc: true,
-        activeAuthorizedStaff: true,
       })
     ).toBe(true);
   });
