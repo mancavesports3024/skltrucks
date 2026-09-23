@@ -1,11 +1,8 @@
 /**
- * Sourcing staff email allowlist (application layer only).
- * Database RLS uses public.is_sourcing_staff() + sourcing_authorized_staff and
- * never reads this env var.
- *
- * When SOURCING_STAFF_EMAILS is set, only listed emails pass the app gate.
- * When unset/empty, any non-empty signed-in email passes the *app* gate — but
- * the database RPC must still return true (active directory row required).
+ * @deprecated Sourcing no longer uses a separate email allowlist.
+ * Inventory Admin and Sourcing both authorize any authenticated Supabase user.
+ * These helpers remain only so old env docs/tests can reference the removed gate.
+ * Do not call from middleware, layouts, or server actions.
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
@@ -18,21 +15,15 @@ export function getSourcingStaffAllowlist(
   return [...new Set(parsed)];
 }
 
-/**
- * When SOURCING_STAFF_EMAILS is set, only those emails pass.
- * When unset/empty, any non-empty email passes this app check (DB still fail-closed).
- * Missing/blank email always denies.
- */
+/** @deprecated Always returns true for non-empty email; allowlist is unused. */
 export function isSourcingStaffEmail(
   email: string | null | undefined,
-  allowlist: string[] = getSourcingStaffAllowlist()
+  _allowlist: string[] = getSourcingStaffAllowlist()
 ): boolean {
-  if (!email || !String(email).trim()) return false;
-  if (allowlist.length === 0) return true;
-  return allowlist.includes(email.trim().toLowerCase());
+  return Boolean(email && String(email).trim());
 }
 
-/** True when an optional narrowing allowlist is configured. */
+/** @deprecated SOURCING_STAFF_EMAILS is not part of Admin/Sourcing authorization. */
 export function isSourcingStaffAllowlistConfigured(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
 ): boolean {

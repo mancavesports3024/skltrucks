@@ -1,49 +1,35 @@
-# Private sourcing staff RLS (fail-closed)
+# Sourcing authorization = inventory Admin
 
-## Why
+## Verified inventory Admin rule
 
-`public.is_sourcing_staff()` previously returned true for any authenticated
-Supabase Auth user (`auth.role() = 'authenticated'`). Application
-`requireSourcingStaff()` cannot protect **direct PostgREST/Supabase REST**
-access to private sourcing tables, including `spec_evidence.inspectionUrl`
-capability-token URLs.
+| Layer | Rule |
+|-------|------|
+| Middleware (`src/lib/supabase/middleware.ts`) | `supabase.auth.getUser()` must return a user for `/admin` (except login) |
+| Inventory server actions / `/api/admin` | Signed-in user (middleware + session client); products writes rely on RLS |
+| Products RLS (`supabase/schema.sql`) | `auth.role() = 'authenticated'` for full access; anon reads published only |
+| Email allowlist / role claim / staff table | **None** for inventory Admin |
 
-## Fix
+**Conclusion:** Admin = any authenticated Supabase Auth user. There is no narrower inventory staff list.
 
-Apply `supabase/sourcing-staff-rls-failclosed.sql` so `is_sourcing_staff()` is
-true only when:
+## Shared sourcing rule
 
-1. `auth.uid()` is present
-2. JWT `email` is present and non-empty
-3. `sourcing_authorized_staff` has a matching row (case-insensitive)
-4. `active = true`
+`Can access inventory Admin` ⇔ `Can access Sourcing`
 
-Database authorization does **not** read `SOURCING_STAFF_EMAILS`.
-The app continues to require **both** the env allowlist check and this RPC.
+- App: `requireAdmin()` / `requireSourcingStaff()` (alias) — identical decision
+- SQL: `public.is_sourcing_staff()` = `auth.role() = 'authenticated'`
+- `SOURCING_STAFF_EMAILS`: **unused** (not part of Admin rule)
+- `sourcing_authorized_staff`: **retained, unused for authorization** (do not drop/delete)
 
-## Production sequence (human)
+**Accepted implication:** every authenticated Supabase account can access private sourcing data via app and via direct PostgREST/RLS (same as inventory). Anonymous remains denied.
 
-1. Review exact SQL in `supabase/sourcing-staff-rls-failclosed.sql`
-2. Apply SQL to **production** Supabase SQL Editor
-3. Run four-identity direct-RLS tests (`scripts/verify-sourcing-rls-four-identity.mts` against prod keys, or equivalent)
-4. Confirm authorized SKL access (`skltrucksllc@gmail.com`) still works in UI
-5. Only then merge/deploy the matching repository change
-6. Only after deployment + verification may the Penske workbook be re-imported
+## Production SQL (human)
 
-## Verification queries (read-only)
+Apply `supabase/sourcing-rls-admin-aligned.sql` **before** merge/deploy if production still has the fail-closed directory check:
 
-```sql
-select pg_get_functiondef('public.is_sourcing_staff()'::regprocedure);
+1. Review app + SQL
+2. Apply SQL to production
+3. Confirm signed-in inventory admin can open `/admin/sourcing`
+4. Merge/deploy app
+5. Reconfirm signed-out denial + signed-in Admin access
 
-select count(*) as inspection_url_count
-from public.sourcing_truck_leads
-where spec_evidence ? 'inspectionUrl'
-  and nullif(btrim(spec_evidence ->> 'inspectionUrl'), '') is not null;
-
-select case when exists (
-  select 1 from public.sourcing_authorized_staff
-  where lower(email) = lower('skltrucksllc@gmail.com') and active
-) then 'present_active' else 'MISSING' end;
-```
-
-Do not print emails other than confirming the SKL row, and never print inspection URLs.
+Do not auto-apply from CI. Do not re-import Penske until recovery is confirmed.
