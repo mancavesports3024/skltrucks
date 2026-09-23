@@ -9,11 +9,14 @@ export type SourcingAccess =
 
 /**
  * Authorize sourcing access for the signed-in admin user.
- * Same bar as inventory: authenticated Supabase user.
- * Optional SOURCING_STAFF_EMAILS can narrow further; RLS uses is_sourcing_staff().
  *
- * `sourcing_authorized_staff` is an optional directory (notes / future use), not
- * required for access — same agreement as PR #14.
+ * Both gates must pass (fail-closed):
+ * 1) Optional narrowing via SOURCING_STAFF_EMAILS (when set); empty/missing email denies
+ * 2) Database RPC public.is_sourcing_staff() — requires an active
+ *    sourcing_authorized_staff directory row (not merely auth.role()=authenticated)
+ *
+ * Direct Supabase REST access is protected only by (2). The Vercel env allowlist
+ * is never consulted by SQL/RLS.
  */
 export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isSupabaseConfigured()) {
@@ -43,7 +46,7 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
     return {
       ok: false,
       error:
-        "Sourcing authorization is not available. Apply supabase/sourcing-schema.sql to this Supabase project.",
+        "Sourcing authorization is not available. Apply supabase/sourcing-schema.sql and supabase/sourcing-staff-rls-failclosed.sql to this Supabase project.",
       status: 403,
     };
   }
@@ -51,7 +54,8 @@ export async function requireSourcingStaff(): Promise<SourcingAccess> {
   if (!isStaff) {
     return {
       ok: false,
-      error: "Forbidden — sign in with an admin account to use private sourcing.",
+      error:
+        "Forbidden — this account is not an active authorized sourcing staff member.",
       status: 403,
     };
   }

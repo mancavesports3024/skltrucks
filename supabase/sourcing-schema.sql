@@ -3,16 +3,16 @@
 -- Safe for existing DBs: uses IF NOT EXISTS / DROP IF EXISTS / additive ALTERs.
 -- No public read policies.
 --
--- Authorization (matches inventory admin):
---   SQL/RLS: is_sourcing_staff() is true for any authenticated Supabase Auth user
---   (same accounts that can manage trucks at /admin).
---   Application: same signed-in bar. Optional SOURCING_STAFF_EMAILS can narrow
---   sourcing to a subset of admins; when unset/empty, all admins are allowed.
---   sourcing_authorized_staff is an optional directory (notes / future use),
---   not required for access.
+-- Authorization (fail-closed):
+--   SQL/RLS: is_sourcing_staff() is true only for JWT users with auth.uid(),
+--   a non-empty JWT email, and an active row in sourcing_authorized_staff.
+--   Application: requireSourcingStaff() also enforces optional SOURCING_STAFF_EMAILS.
+--   Database authorization does NOT read Vercel env vars.
+--   If an older database still has inventory-aligned is_sourcing_staff(), apply
+--   supabase/sourcing-staff-rls-failclosed.sql.
 
 -- ---------------------------------------------------------------------------
--- Optional staff directory (not required for access)
+-- Authorized staff directory (required for RLS)
 -- ---------------------------------------------------------------------------
 create table if not exists public.sourcing_authorized_staff (
   email text primary key,
@@ -27,7 +27,7 @@ alter table public.sourcing_authorized_staff
 
 alter table public.sourcing_authorized_staff enable row level security;
 
--- Same bar as inventory: signed-in Auth user (auth.role() = authenticated).
+-- Fail-closed: active directory row required (not merely authenticated).
 create or replace function public.is_sourcing_staff()
 returns boolean
 language sql
@@ -35,7 +35,15 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce(auth.role() = 'authenticated', false);
+  select
+    auth.uid() is not null
+    and nullif(lower(trim(coalesce(auth.jwt() ->> 'email', ''))), '') is not null
+    and exists (
+      select 1
+      from public.sourcing_authorized_staff s
+      where lower(s.email) = lower(trim(auth.jwt() ->> 'email'))
+        and s.active is true
+    );
 $$;
 
 revoke all on function public.is_sourcing_staff() from public;
@@ -48,12 +56,17 @@ drop policy if exists "Authenticated read sourcing staff directory"
   on public.sourcing_authorized_staff;
 drop policy if exists "Sourcing staff read authorized staff directory"
   on public.sourcing_authorized_staff;
--- Directory readable by any authenticated admin
-create policy "Authenticated read sourcing staff directory"
+-- Directory readable only by active authorized sourcing staff
+create policy "Sourcing staff read authorized staff directory"
   on public.sourcing_authorized_staff for select
-  using (auth.role() = 'authenticated');
+  using (public.is_sourcing_staff());
 
--- Bootstrap SKL primary account (informational directory row)
+revoke all on public.sourcing_authorized_staff from anon;
+revoke insert, update, delete, truncate, references, trigger
+  on public.sourcing_authorized_staff from authenticated;
+grant select on public.sourcing_authorized_staff to authenticated;
+
+-- Bootstrap SKL primary account
 insert into public.sourcing_authorized_staff (email, display_name, active)
 values ('skltrucksllc@gmail.com', 'SKL Trucks', true)
 on conflict (email) do update

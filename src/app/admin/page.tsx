@@ -70,14 +70,15 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
               <>
                 Private sourcing is restricted by{" "}
                 <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> on this deployment.
-                Your signed-in email is not on that optional list. Ask an admin to add it, or clear
-                the variable so every inventory admin can use sourcing.
+                Your signed-in email is not on that list. Ask an admin to add it.
               </>
             ) : (
               <>
-                Private sourcing uses the same admin sign-in as inventory. Sign in at{" "}
-                <code className="bg-amber-100 px-1">/admin/login</code>, then open Sourcing again. If
-                you are already signed in, sign out and back in to refresh your session.
+                Private sourcing requires an active row in{" "}
+                <code className="bg-amber-100 px-1">sourcing_authorized_staff</code> plus a valid
+                admin sign-in. Sign in at <code className="bg-amber-100 px-1">/admin/login</code>,
+                then open Sourcing again. If you are already signed in, sign out and back in, or ask
+                an admin to activate your directory row.
               </>
             )}
           </div>

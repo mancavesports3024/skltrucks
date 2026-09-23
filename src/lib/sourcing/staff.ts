@@ -1,7 +1,11 @@
 /**
- * Sourcing uses the same access bar as inventory admin: any signed-in
- * Supabase Auth user. Optional SOURCING_STAFF_EMAILS can further restrict
- * (comma-separated); when unset/empty, all authenticated admins are allowed.
+ * Sourcing staff email allowlist (application layer only).
+ * Database RLS uses public.is_sourcing_staff() + sourcing_authorized_staff and
+ * never reads this env var.
+ *
+ * When SOURCING_STAFF_EMAILS is set, only listed emails pass the app gate.
+ * When unset/empty, any non-empty signed-in email passes the *app* gate — but
+ * the database RPC must still return true (active directory row required).
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
@@ -16,7 +20,8 @@ export function getSourcingStaffAllowlist(
 
 /**
  * When SOURCING_STAFF_EMAILS is set, only those emails pass.
- * When unset/empty, any signed-in account with an email passes (same as /admin).
+ * When unset/empty, any non-empty email passes this app check (DB still fail-closed).
+ * Missing/blank email always denies.
  */
 export function isSourcingStaffEmail(
   email: string | null | undefined,

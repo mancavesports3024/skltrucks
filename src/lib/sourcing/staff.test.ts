@@ -17,7 +17,7 @@ describe("sourcing staff allowlist (optional narrow)", () => {
     else process.env.SOURCING_STAFF_EMAILS = prev;
   });
 
-  it("empty/unset allowlist allows any signed-in email (same as inventory admin)", () => {
+  it("empty/unset allowlist allows any non-empty email at the app layer only", () => {
     expect(getSourcingStaffAllowlist(undefined)).toEqual([]);
     expect(getSourcingStaffAllowlist("")).toEqual([]);
     expect(getSourcingStaffAllowlist("   ")).toEqual([]);
@@ -49,7 +49,7 @@ describe("sourcing staff allowlist (optional narrow)", () => {
   });
 });
 
-describe("application authorization (same bar as inventory admin)", () => {
+describe("application authorization (env allowlist + DB RPC)", () => {
   function appAllows(opts: {
     email: string | null;
     envList: string[];
@@ -60,7 +60,14 @@ describe("application authorization (same bar as inventory admin)", () => {
     return true;
   }
 
-  it("signed-in admin with empty env → allowed (directory not required)", () => {
+  it("signed-in with empty env still requires DB RPC true (directory)", () => {
+    expect(
+      appAllows({
+        email: "teammate@example.com",
+        envList: [],
+        authenticatedRpc: false,
+      })
+    ).toBe(false);
     expect(
       appAllows({
         email: "teammate@example.com",
@@ -70,17 +77,12 @@ describe("application authorization (same bar as inventory admin)", () => {
     ).toBe(true);
   });
 
-  it("signed-in but RPC false → denied", () => {
-    expect(
-      appAllows({
-        email: "teammate@example.com",
-        envList: [],
-        authenticatedRpc: false,
-      })
-    ).toBe(false);
+  it("empty/missing JWT email denies", () => {
+    expect(appAllows({ email: null, envList: [], authenticatedRpc: true })).toBe(false);
+    expect(appAllows({ email: "", envList: [], authenticatedRpc: true })).toBe(false);
   });
 
-  it("optional env allowlist can still narrow", () => {
+  it("optional env allowlist can still narrow further", () => {
     expect(
       appAllows({
         email: "other@example.com",
