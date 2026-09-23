@@ -238,6 +238,27 @@ describe("TruckLeadsList year and mileage", () => {
     expect(inspection.length).toBeGreaterThanOrEqual(1);
     for (const a of [...listing, ...inspection]) {
       expect(a.getAttribute("onclick")).toBeNull();
+      expect(a).toHaveAttribute("target", "_blank");
+      expect(a).toHaveAttribute("rel", "noopener noreferrer");
+      // Not nested inside another link
+      expect(a.closest("a") === a).toBe(true);
     }
+  });
+
+  it("omits listing and inspection links when URLs are missing", () => {
+    render(
+      <TruckLeadsList
+        leads={[
+          sampleLead({
+            id: "4",
+            sourceUrl: "",
+            canonicalListingUrl: "",
+            specEvidence: {},
+          }),
+        ]}
+      />
+    );
+    expect(screen.queryByRole("link", { name: "View listing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View inspection report" })).not.toBeInTheDocument();
   });
 });
