@@ -1,60 +1,16 @@
-import { isSourcingStaffEmail } from "@/lib/sourcing/staff";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
-import type { User, SupabaseClient } from "@supabase/supabase-js";
+/**
+ * Sourcing authorization — identical to inventory Admin.
+ * Prefer requireAdmin() for new code; this alias keeps existing call sites stable.
+ */
+import { requireAdmin, type AdminAccess } from "@/lib/admin/access";
 
-export type SourcingAccess =
-  | { ok: true; user: User; supabase: SupabaseClient }
-  | { ok: false; error: string; status: 401 | 403 };
+export type SourcingAccess = AdminAccess;
 
 /**
- * Authorize sourcing access for the signed-in admin user.
- * Same bar as inventory: authenticated Supabase user.
- * Optional SOURCING_STAFF_EMAILS can narrow further; RLS uses is_sourcing_staff().
- *
- * `sourcing_authorized_staff` is an optional directory (notes / future use), not
- * required for access — same agreement as PR #14.
+ * Authorize private sourcing. Same decision as requireAdmin():
+ * any authenticated Supabase Auth user. No separate sourcing email allowlist.
+ * Database RLS uses public.is_sourcing_staff() with the same authenticated bar.
  */
 export async function requireSourcingStaff(): Promise<SourcingAccess> {
-  if (!isSupabaseConfigured()) {
-    return { ok: false, error: "Database not connected.", status: 401 };
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { ok: false, error: "Unauthorized", status: 401 };
-  }
-
-  if (!isSourcingStaffEmail(user.email)) {
-    return {
-      ok: false,
-      error: "Forbidden — this account is not on SOURCING_STAFF_EMAILS.",
-      status: 403,
-    };
-  }
-
-  const { data: isStaff, error } = await supabase.rpc("is_sourcing_staff");
-  if (error) {
-    console.error("[sourcing] is_sourcing_staff RPC:", error.message);
-    return {
-      ok: false,
-      error:
-        "Sourcing authorization is not available. Apply supabase/sourcing-schema.sql to this Supabase project.",
-      status: 403,
-    };
-  }
-
-  if (!isStaff) {
-    return {
-      ok: false,
-      error: "Forbidden — sign in with an admin account to use private sourcing.",
-      status: 403,
-    };
-  }
-
-  return { ok: true, user, supabase };
+  return requireAdmin();
 }

@@ -3,10 +3,10 @@
 -- documented migrate-before-merge sequence (see header comment below).
 -- Does not alter sourcing_truck_leads or overwrite lead evidence/prices.
 --
--- Dependencies (must already exist from supabase/sourcing-schema.sql):
---   - public.is_sourcing_staff()
+-- Dependencies (must already exist from supabase/sourcing-schema.sql and
+-- supabase/sourcing-staff-rls-failclosed.sql on upgraded databases):
+--   - public.is_sourcing_staff()  (fail-closed: active sourcing_authorized_staff)
 --   - public.sourcing_truck_leads
--- Optional (not required for access; kept for directory/notes):
 --   - public.sourcing_authorized_staff
 -- This file fails hard if required deps are missing — it does not create weaker fallbacks.
 --
@@ -20,9 +20,8 @@
 --   7. No live OpenAI call unless separately authorized.
 --
 -- RLS (defense in depth with application requireSourcingStaff()):
---   SELECT/INSERT require public.is_sourcing_staff() — same bar as inventory /
---   sourcing_truck_leads (any authenticated Auth user). Optional
---   SOURCING_STAFF_EMAILS narrows the app UI only.
+--   SELECT/INSERT require public.is_sourcing_staff() — active authorized staff only.
+--   Application also enforces SOURCING_STAFF_EMAILS; SQL does not read env vars.
 --   UPDATE/DELETE are not granted to authenticated/anon (history is append-only).
 --   Lead FK: ON DELETE CASCADE — deleting a lead removes its comparisons.
 --

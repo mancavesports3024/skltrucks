@@ -1,7 +1,8 @@
 /**
- * Sourcing uses the same access bar as inventory admin: any signed-in
- * Supabase Auth user. Optional SOURCING_STAFF_EMAILS can further restrict
- * (comma-separated); when unset/empty, all authenticated admins are allowed.
+ * @deprecated Sourcing no longer uses a separate email allowlist.
+ * Inventory Admin and Sourcing both authorize any authenticated Supabase user.
+ * These helpers remain only so old env docs/tests can reference the removed gate.
+ * Do not call from middleware, layouts, or server actions.
  */
 export function getSourcingStaffAllowlist(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
@@ -14,20 +15,15 @@ export function getSourcingStaffAllowlist(
   return [...new Set(parsed)];
 }
 
-/**
- * When SOURCING_STAFF_EMAILS is set, only those emails pass.
- * When unset/empty, any signed-in account with an email passes (same as /admin).
- */
+/** @deprecated Always returns true for non-empty email; allowlist is unused. */
 export function isSourcingStaffEmail(
   email: string | null | undefined,
-  allowlist: string[] = getSourcingStaffAllowlist()
+  _allowlist: string[] = getSourcingStaffAllowlist()
 ): boolean {
-  if (!email || !String(email).trim()) return false;
-  if (allowlist.length === 0) return true;
-  return allowlist.includes(email.trim().toLowerCase());
+  return Boolean(email && String(email).trim());
 }
 
-/** True when an optional narrowing allowlist is configured. */
+/** @deprecated SOURCING_STAFF_EMAILS is not part of Admin/Sourcing authorization. */
 export function isSourcingStaffAllowlistConfigured(
   envValue: string | undefined = process.env.SOURCING_STAFF_EMAILS
 ): boolean {

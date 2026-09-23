@@ -68,16 +68,16 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
               </>
             ) : error === "sourcing_forbidden_email" ? (
               <>
-                Private sourcing is restricted by{" "}
-                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code> on this deployment.
-                Your signed-in email is not on that optional list. Ask an admin to add it, or clear
-                the variable so every inventory admin can use sourcing.
+                This deployment still has a stale sourcing email gate. Sourcing now uses the same
+                Admin sign-in as inventory — any signed-in admin account. Sign out and back in, or
+                ask an operator to clear unused{" "}
+                <code className="bg-amber-100 px-1">SOURCING_STAFF_EMAILS</code>.
               </>
             ) : (
               <>
-                Private sourcing uses the same admin sign-in as inventory. Sign in at{" "}
-                <code className="bg-amber-100 px-1">/admin/login</code>, then open Sourcing again. If
-                you are already signed in, sign out and back in to refresh your session.
+                Private sourcing uses the same Admin sign-in as inventory. Sign in at{" "}
+                <code className="bg-amber-100 px-1">/admin/login</code> with your existing admin
+                account, then open Sourcing again. You do not need a separate sourcing login.
               </>
             )}
           </div>

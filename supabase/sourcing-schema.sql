@@ -3,16 +3,17 @@
 -- Safe for existing DBs: uses IF NOT EXISTS / DROP IF EXISTS / additive ALTERs.
 -- No public read policies.
 --
--- Authorization (matches inventory admin):
+-- Authorization (matches inventory Admin):
 --   SQL/RLS: is_sourcing_staff() is true for any authenticated Supabase Auth user
---   (same accounts that can manage trucks at /admin).
---   Application: same signed-in bar. Optional SOURCING_STAFF_EMAILS can narrow
---   sourcing to a subset of admins; when unset/empty, all admins are allowed.
---   sourcing_authorized_staff is an optional directory (notes / future use),
---   not required for access.
+--   (same bar as public.products "Authenticated users full access").
+--   Application: requireAdmin() / requireSourcingStaff() — any signed-in user.
+--   No separate sourcing email allowlist. SOURCING_STAFF_EMAILS is unused.
+--   sourcing_authorized_staff is retained but not required for authorization.
+--   If an older DB has a fail-closed directory-only is_sourcing_staff(), apply
+--   supabase/sourcing-rls-admin-aligned.sql.
 
 -- ---------------------------------------------------------------------------
--- Optional staff directory (not required for access)
+-- Authorized staff directory (retained; not required for authorization)
 -- ---------------------------------------------------------------------------
 create table if not exists public.sourcing_authorized_staff (
   email text primary key,
@@ -27,7 +28,7 @@ alter table public.sourcing_authorized_staff
 
 alter table public.sourcing_authorized_staff enable row level security;
 
--- Same bar as inventory: signed-in Auth user (auth.role() = authenticated).
+-- Same bar as inventory Admin / products RLS: any authenticated Auth user.
 create or replace function public.is_sourcing_staff()
 returns boolean
 language sql
@@ -48,12 +49,17 @@ drop policy if exists "Authenticated read sourcing staff directory"
   on public.sourcing_authorized_staff;
 drop policy if exists "Sourcing staff read authorized staff directory"
   on public.sourcing_authorized_staff;
--- Directory readable by any authenticated admin
+-- Directory readable by any authenticated Admin (unused for auth decisions)
 create policy "Authenticated read sourcing staff directory"
   on public.sourcing_authorized_staff for select
   using (auth.role() = 'authenticated');
 
--- Bootstrap SKL primary account (informational directory row)
+revoke all on public.sourcing_authorized_staff from anon;
+revoke insert, update, delete, truncate, references, trigger
+  on public.sourcing_authorized_staff from authenticated;
+grant select on public.sourcing_authorized_staff to authenticated;
+
+-- Bootstrap SKL primary account (informational directory row only)
 insert into public.sourcing_authorized_staff (email, display_name, active)
 values ('skltrucksllc@gmail.com', 'SKL Trucks', true)
 on conflict (email) do update
