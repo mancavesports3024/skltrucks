@@ -157,6 +157,69 @@ describe("resolveLeadCountry", () => {
       country: "Germany",
     });
   });
+
+  it("does not false-positive U.S. cities that share foreign place names", () => {
+    expect(resolveLeadCountry({ location: "Ontario, CA" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "Mexico, MO" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "California, MO" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "Toronto, OH" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "Vancouver, WA" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "London, KY" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+    expect(resolveLeadCountry({ location: "Paris, TX" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+  });
+
+  it("rejects Ontario, Canada and province ON while keeping CA country vs state rules", () => {
+    expect(resolveLeadCountry({ location: "Ontario, Canada" })).toEqual({
+      kind: "foreign",
+      country: CANADA,
+    });
+    expect(resolveLeadCountry({ stateOrProvince: "ON" })).toEqual({
+      kind: "foreign",
+      country: CANADA,
+    });
+    expect(resolveLeadCountry({ country: "CA" }).kind).toBe("foreign");
+    expect(resolveLeadCountry({ stateOrProvince: "CA" }).kind).toBe("us");
+  });
+
+  it("gives dedicated country field precedence only when provided", () => {
+    expect(resolveLeadCountry({ location: "Los Angeles, CA", country: "CA" })).toEqual({
+      kind: "foreign",
+      country: CANADA,
+    });
+    expect(resolveLeadCountry({ location: "Los Angeles, CA" })).toEqual({
+      kind: "us",
+      country: UNITED_STATES,
+    });
+  });
+
+  it("never rejects free-form city names alone as foreign countries", () => {
+    expect(resolveLeadCountry({ location: "Toronto" }).kind).toBe("unknown");
+    expect(resolveLeadCountry({ location: "Ontario" }).kind).toBe("unknown");
+    expect(resolveLeadCountry({ location: "Mexico" }).kind).toBe("unknown");
+    expect(resolveLeadCountry({ location: "Quebec" }).kind).toBe("unknown");
+    expect(resolveLeadCountry({ location: "Vancouver" }).kind).toBe("unknown");
+  });
 });
 
 describe("parseOsLocation Canadian detection", () => {

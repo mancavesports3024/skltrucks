@@ -387,33 +387,48 @@ export function resolveLeadCountry(input: ResolveCountryInput): CountryResolutio
   }
 
   if (parts.length === 1) {
-    // "Canada" alone, bare state/province, or "Joplin MO"
-    const asCountry = resolveCountryTokenFromLocation(parts[0]);
-    if (asCountry.kind !== "unknown") return asCountry;
-    if (/^[A-Za-z]{2}$/.test(parts[0])) {
-      const region = resolveStateOrProvinceToken(parts[0], true);
+    // Free-form single tokens must not invent a foreign country from city names
+    // that collide with countries/provinces (Mexico MO, Ontario CA, Quebec, …).
+    // Only unambiguous country-only aliases, bare region codes, or "City ST" apply.
+    const sole = parts[0];
+    const soleKey = cleanToken(sole);
+
+    // Unambiguous country-only phrases (never U.S. city names).
+    if (
+      US_COUNTRY_ALIASES.has(soleKey) ||
+      CANADA_LOCATION_COUNTRY_ALIASES.has(soleKey) ||
+      soleKey === "united kingdom" ||
+      soleKey === "great britain" ||
+      soleKey === "united states of america"
+    ) {
+      const asCountry = resolveCountryTokenFromLocation(sole);
+      if (asCountry.kind !== "unknown") return asCountry;
+    }
+
+    // Bare 2-letter state/province code only (ON → Canada, MO → US, CA → California).
+    if (/^[A-Za-z]{2}$/.test(sole)) {
+      const region = resolveStateOrProvinceToken(sole, true);
       if (region.kind !== "unknown") return region;
     }
-    const m = parts[0].match(/^(.+?)\s+([A-Za-z]{2})$/);
+
+    // "Joplin MO" / "Toronto ON" without comma
+    const m = sole.match(/^(.+?)\s+([A-Za-z]{2})$/);
     if (m) {
       const region = resolveStateOrProvinceToken(m[2], true);
       if (region.kind !== "unknown") return region;
     }
-    const provinceName = normalizeCanadianProvince(parts[0]);
-    if (provinceName) return { kind: "foreign", country: CANADA };
+
+    // Do not treat lone province/country words (Ontario, Mexico, Quebec, …) as foreign.
+    return { kind: "unknown" };
   }
 
-  // Embedded Canada / province names anywhere in the string
+  // Explicit "Canada" / "CAN" anywhere remaining (e.g. unusual punctuation).
   if (/\bCanada\b/i.test(stripped) || /\bCAN\b/.test(stripped)) {
     return { kind: "foreign", country: CANADA };
   }
-  for (const name of Object.keys(CANADIAN_PROVINCE_NAME_TO_CODE)) {
-    const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    if (re.test(stripped)) return { kind: "foreign", country: CANADA };
-  }
-  if (/\bMexico\b/i.test(stripped) || /\bMéxico\b/i.test(stripped)) {
-    return { kind: "foreign", country: "Mexico" };
-  }
+
+  // Do not scan embedded province/country city names — "Ontario, CA" and "Mexico, MO"
+  // already resolved via the trailing state token above.
 
   if (stateField) {
     return resolveStateOrProvinceToken(stateField, true);
