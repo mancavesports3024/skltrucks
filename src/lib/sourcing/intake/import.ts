@@ -95,10 +95,18 @@ export function planIntakeRow(
     };
   }
 
-  const contentChanged = listingContentChanged(existing, input);
-  // Preserve staff call notes / workflow when re-importing
+  // Preserve staff call notes / workflow when re-importing.
+  // Unsafe or missing workbook hyperlinks must not erase an existing valid URL.
+  const nextSourceUrl = input.sourceUrl.trim() || existing.sourceUrl;
+  const nextCanonical =
+    input.canonicalListingUrl.trim() || existing.canonicalListingUrl;
+  const nextInspection =
+    (input.specEvidence?.inspectionUrl || "").trim() ||
+    (existing.specEvidence?.inspectionUrl || "").trim();
   const merged: TruckLeadInput = {
     ...input,
+    sourceUrl: nextSourceUrl,
+    canonicalListingUrl: nextCanonical,
     sklCallNotes: existing.sklCallNotes,
     workflowStatus: existing.workflowStatus === "new" ? input.workflowStatus : existing.workflowStatus,
     supplierContactId: input.supplierContactId ?? existing.supplierContactId,
@@ -112,8 +120,16 @@ export function planIntakeRow(
         ...input.researchUncertaintyLabels,
       ]),
     ],
+    specEvidence: {
+      ...existing.specEvidence,
+      ...input.specEvidence,
+      inspectionUrl: nextInspection,
+    },
   };
 
+  // Re-evaluate listing content after URL preservation so a blank workbook
+  // hyperlink does not look like a listing change that clears sourceUrl.
+  const contentChanged = listingContentChanged(existing, merged);
   const firstSeen = existing.listingFirstSeenAt || existing.createdAt || observedAt;
   const priorChanged = existing.listingLastChangedAt || firstSeen;
 

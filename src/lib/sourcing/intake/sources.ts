@@ -184,6 +184,10 @@ export function emptySpecEvidence(): SpecEvidence {
     boxLength: "",
     gvwr: "",
     inspectionUrl: "",
+    hyperlinkSource: "",
+    hyperlinkDestinationType: "",
+    hyperlinkHostname: "",
+    hyperlinkValidation: "",
     workbookStatus: "",
     salesTerms: "",
     penskeStatus: "",
@@ -202,10 +206,17 @@ export function normalizeSpecEvidence(raw: unknown): SpecEvidence {
     boxLength: String(obj.boxLength ?? obj.box_length ?? obj.box_length_evidence ?? "").trim(),
     gvwr: String(obj.gvwr ?? obj.gvwr_evidence ?? "").trim(),
     inspectionUrl: String(obj.inspectionUrl ?? obj.inspection_url ?? "").trim(),
+    hyperlinkSource: String(obj.hyperlinkSource ?? obj.hyperlink_source ?? "").trim() as SpecEvidence["hyperlinkSource"],
+    hyperlinkDestinationType: String(
+      obj.hyperlinkDestinationType ?? obj.hyperlink_destination_type ?? ""
+    ).trim(),
+    hyperlinkHostname: String(obj.hyperlinkHostname ?? obj.hyperlink_hostname ?? "").trim(),
+    hyperlinkValidation: String(obj.hyperlinkValidation ?? obj.hyperlink_validation ?? "").trim(),
     workbookStatus: String(obj.workbookStatus ?? obj.workbook_status ?? "").trim(),
     salesTerms: String(obj.salesTerms ?? obj.sales_terms ?? "").trim(),
     penskeStatus: String(obj.penskeStatus ?? obj.penske_status ?? "").trim(),
     titleStatus: String(obj.titleStatus ?? obj.title_status ?? "").trim(),
     distance: String(obj.distance ?? obj.distance_evidence ?? "").trim(),
+    country: String(obj.country ?? "").trim() || undefined,
   };
 }

@@ -34,6 +34,10 @@ export type WorkbookPreviewRow = {
   applyKind: IntakeApplyPlan["kind"] | "invalid";
   summary: string;
   reasons: string[];
+  /** Safe validated hyperlink for Preview UI (listing or inspection). */
+  hyperlinkUrl: string;
+  hyperlinkKind: "listing" | "inspection" | "none";
+  hyperlinkNote: string;
 };
 
 export type WorkbookPreviewReport = IntakeBatchReport & {
@@ -114,6 +118,9 @@ export function buildWorkbookPreview(
         applyKind: "invalid",
         summary: row.rowErrors.join(" "),
         reasons: row.rowErrors,
+        hyperlinkUrl: "",
+        hyperlinkKind: "none",
+        hyperlinkNote: "",
       });
       return;
     }
@@ -157,6 +164,39 @@ export function buildWorkbookPreview(
       resolvedLocation = distanceEstimate.ok ? distanceEstimate.resolved.display : null;
     }
 
+    const listingUrl = (plan.input.sourceUrl || plan.input.canonicalListingUrl || "").trim();
+    const inspectionUrl = (plan.input.specEvidence?.inspectionUrl || "").trim();
+    let hyperlinkUrl = "";
+    let hyperlinkKind: WorkbookPreviewRow["hyperlinkKind"] = "none";
+    let hyperlinkNote =
+      plan.input.specEvidence?.hyperlinkValidation ||
+      plan.input.verificationNotes
+        .split("\n")
+        .find(
+          (line) =>
+            /hyperlink|listing link|inspection link|No hyperlink/i.test(line)
+        ) ||
+      "";
+    if (listingUrl) {
+      hyperlinkUrl = listingUrl;
+      hyperlinkKind = "listing";
+      hyperlinkNote = "Individual listing link found";
+    } else if (inspectionUrl) {
+      hyperlinkUrl = inspectionUrl;
+      hyperlinkKind = "inspection";
+      hyperlinkNote = "Inspection link found";
+    } else if (plan.input.specEvidence?.hyperlinkDestinationType === "rejected") {
+      const validation = (plan.input.specEvidence.hyperlinkValidation || "").trim();
+      hyperlinkNote =
+        !validation
+          ? "Workbook hyperlink rejected"
+          : /^(Inspection|Workbook) hyperlink rejected/i.test(validation)
+            ? validation
+            : `Workbook hyperlink rejected: ${validation}`;
+    } else if (plan.input.specEvidence?.hyperlinkDestinationType === "missing") {
+      hyperlinkNote = "No hyperlink provided";
+    }
+
     previewRows.push({
       rowNumber: idx + 1,
       unit: plan.input.sourceListingId || plan.input.stockNumber,
@@ -179,6 +219,9 @@ export function buildWorkbookPreview(
             ? "Rejected"
             : "Needs verification",
       reasons: reasonLabels,
+      hyperlinkUrl,
+      hyperlinkKind,
+      hyperlinkNote,
     });
 
     const synthetic: TruckLead = {

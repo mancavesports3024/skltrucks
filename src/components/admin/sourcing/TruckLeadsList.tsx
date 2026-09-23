@@ -4,12 +4,42 @@ import { formatLeadMileage, formatLeadYear } from "@/lib/sourcing/format-lead-di
 import type { TruckLead } from "@/types/sourcing";
 
 function LeadSubmeta({ lead }: { lead: TruckLead }) {
+  const listingUrl = (lead.sourceUrl || lead.canonicalListingUrl || "").trim();
+  const inspectionUrl = (lead.specEvidence?.inspectionUrl || "").trim();
   return (
-    <div className="text-xs text-neutral-500">
-      {lead.stockNumber && <span>#{lead.stockNumber} · </span>}
-      {lead.boxLengthFt != null ? `${lead.boxLengthFt}' box` : lead.boxLengthRaw || "box ?"}
-      {lead.isSeedResearch && <span className="ml-2 text-amber-700">seed</span>}
-      {lead.seedSource?.includes("CSV") && <span className="ml-2 text-sky-700">intake</span>}
+    <div className="space-y-1 text-xs text-neutral-500">
+      <div>
+        {lead.stockNumber && <span>#{lead.stockNumber} · </span>}
+        {lead.boxLengthFt != null ? `${lead.boxLengthFt}' box` : lead.boxLengthRaw || "box ?"}
+        {lead.isSeedResearch && <span className="ml-2 text-amber-700">seed</span>}
+        {lead.seedSource?.includes("CSV") && <span className="ml-2 text-sky-700">intake</span>}
+      </div>
+      {(listingUrl || inspectionUrl) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {listingUrl ? (
+            <a
+              href={listingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#fc0527] underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View listing
+            </a>
+          ) : null}
+          {inspectionUrl ? (
+            <a
+              href={inspectionUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#fc0527] underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View inspection report
+            </a>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

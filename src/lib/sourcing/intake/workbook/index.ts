@@ -27,4 +27,13 @@ export {
   detectWorkbookFormat,
 } from "@/lib/sourcing/intake/workbook/detect";
 export { validateInspectionUrl } from "@/lib/sourcing/intake/workbook/hogan-wholesale";
+export {
+  classifyPenskeUnitHyperlink,
+  extractWorkbookHyperlinkTarget,
+  maskHyperlinkForDiagnostics,
+  INSPECTION_REJECT_UNSUPPORTED,
+  INSPECTION_REJECT_UNSUPPORTED_NOTE,
+  PENSKE_LISTING_ALLOWED_HOSTS,
+  PENSKE_INSPECTION_ALLOWED_HOSTS,
+} from "@/lib/sourcing/intake/workbook/unit-hyperlink";
 export { workbookRowsToIntake } from "@/lib/sourcing/intake/workbook/to-intake";
