@@ -219,4 +219,46 @@ describe("TruckLeadsList year and mileage", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Year —/)).toBeInTheDocument();
   });
+
+  it("renders listing and inspection links without event handlers (Server Component safe)", () => {
+    render(
+      <TruckLeadsList
+        leads={[
+          sampleLead({
+            id: "3",
+            sourceUrl: "https://example.com/listing/1",
+            specEvidence: { inspectionUrl: "https://example.com/inspection/token" },
+          }),
+        ]}
+      />
+    );
+    const listing = screen.getAllByRole("link", { name: "View listing" });
+    const inspection = screen.getAllByRole("link", { name: "View inspection report" });
+    expect(listing.length).toBeGreaterThanOrEqual(1);
+    expect(inspection.length).toBeGreaterThanOrEqual(1);
+    for (const a of [...listing, ...inspection]) {
+      expect(a.getAttribute("onclick")).toBeNull();
+      expect(a).toHaveAttribute("target", "_blank");
+      expect(a).toHaveAttribute("rel", "noopener noreferrer");
+      // Not nested inside another link
+      expect(a.closest("a") === a).toBe(true);
+    }
+  });
+
+  it("omits listing and inspection links when URLs are missing", () => {
+    render(
+      <TruckLeadsList
+        leads={[
+          sampleLead({
+            id: "4",
+            sourceUrl: "",
+            canonicalListingUrl: "",
+            specEvidence: {},
+          }),
+        ]}
+      />
+    );
+    expect(screen.queryByRole("link", { name: "View listing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View inspection report" })).not.toBeInTheDocument();
+  });
 });

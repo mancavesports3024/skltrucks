@@ -22,7 +22,6 @@ function LeadSubmeta({ lead }: { lead: TruckLead }) {
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#fc0527] underline"
-              onClick={(e) => e.stopPropagation()}
             >
               View listing
             </a>
@@ -33,7 +32,6 @@ function LeadSubmeta({ lead }: { lead: TruckLead }) {
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#fc0527] underline"
-              onClick={(e) => e.stopPropagation()}
             >
               View inspection report
             </a>
