@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Production-shaped RLS checks against the local sb_db (app-connected Postgres).
-# Does not touch cloud production. Cleans up all test rows.
+# Same bar as inventory: authenticated Auth users may SELECT/INSERT; anon denied;
+# no UPDATE/DELETE policies. Cleans up all test rows. Does not touch cloud production.
 set -euo pipefail
 
 export PGPASSWORD=postgres
@@ -11,16 +12,22 @@ RESULTS=/opt/cursor/artifacts/market_comparison_local_prodshaped_rls.txt
 leads_before="$("${PSQL[@]}" -c "select count(*) from public.sourcing_truck_leads;")"
 echo "leads_before=$leads_before" | tee -a "$RESULTS"
 
-ACTIVE_UID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-INACTIVE_UID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
-OUTSIDER_UID=cccccccc-cccc-cccc-cccc-cccccccccccc
-SPOOF_UID=99999999-9999-9999-9999-999999999999
+# Align helper to inventory bar (idempotent; same as sourcing-market-comparison-align-staff.sql)
+"${PSQL[@]}" <<'SQL'
+create or replace function public.can_manage_sourcing_market_comparisons()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(public.is_sourcing_staff(), false);
+$$;
+SQL
 
-# Ensure staff directory rows for this check (restore primary after)
-"${PSQL[@]}" -c "insert into public.sourcing_authorized_staff(email,display_name,active) values
-  ('active-rls@skl.example','Active RLS',true),
-  ('inactive-rls@skl.example','Inactive RLS',false)
-on conflict (email) do update set active=excluded.active;"
+ACTIVE_UID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+OTHER_UID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+SPOOF_UID=99999999-9999-9999-9999-999999999999
 
 LEAD="$("${PSQL[@]}" -c "insert into public.sourcing_truck_leads(year,make_model,source_url,canonical_listing_url)
   values (2019,'Freightliner M2','https://example.com/rls-check','https://example.com/rls-check-'||gen_random_uuid()::text)
@@ -60,7 +67,7 @@ assert_eq() {
   fi
 }
 
-# Seed as active (forces created_by)
+# Seed as authenticated (forces created_by)
 SEED=$(psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -q -t -A <<SQL
 select set_config('request.jwt.claim.sub','${ACTIVE_UID}',false);
 select set_config('request.jwt.claim.role','authenticated',false);
@@ -73,7 +80,6 @@ SEED=$(echo "$SEED" | tail -n1 | tr -d '[:space:]')
 CB=$("${PSQL[@]}" -c "select created_by from public.sourcing_market_comparisons where id='${SEED}';")
 assert_eq "spoof_replaced_by_auth_uid" "$ACTIVE_UID" "$CB"
 
-# Grant authenticated/anon roles if missing (supabase local usually has them)
 psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -q <<'SQL' >/dev/null
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
@@ -89,20 +95,15 @@ assert_fail "anon_select" "$ANON_SEL"
 ANON_INS=$(run_as anon '' '' "insert into public.sourcing_market_comparisons(lead_id,status,created_by) values('${LEAD}','failed','x') returning id;" 2>&1 || true)
 assert_fail "anon_insert" "$ANON_INS"
 
-OUT_SEL=$(run_as authenticated "$OUTSIDER_UID" "outsider@example.com" "select count(*)::text from public.sourcing_market_comparisons;" 2>&1 || true)
-OUT_N=$(echo "$OUT_SEL" | tail -n1 | tr -d '[:space:]')
-assert_eq "outsider_select_empty" "0" "$OUT_N"
-OUT_INS=$(run_as authenticated "$OUTSIDER_UID" "outsider@example.com" "insert into public.sourcing_market_comparisons(lead_id,status,created_by) values('${LEAD}','failed','${SPOOF_UID}') returning id;" 2>&1 || true)
-assert_fail "outsider_insert" "$OUT_INS"
-
-IN_SEL=$(run_as authenticated "$INACTIVE_UID" "inactive-rls@skl.example" "select count(*)::text from public.sourcing_market_comparisons;" 2>&1 || true)
-IN_N=$(echo "$IN_SEL" | tail -n1 | tr -d '[:space:]')
-assert_eq "inactive_select_empty" "0" "$IN_N"
-IN_INS=$(run_as authenticated "$INACTIVE_UID" "inactive-rls@skl.example" "insert into public.sourcing_market_comparisons(lead_id,status,created_by) values('${LEAD}','failed','${SPOOF_UID}') returning id;" 2>&1 || true)
-assert_fail "inactive_insert" "$IN_INS"
+# Any authenticated user (same as inventory) can SELECT/INSERT
+OTHER_SEL=$(run_as authenticated "$OTHER_UID" "other-admin@example.com" "select count(*)::text from public.sourcing_market_comparisons where lead_id='${LEAD}';" | tail -n1)
+assert_eq "other_admin_select" "1" "$OTHER_SEL"
+OTHER_INS=$(run_as authenticated "$OTHER_UID" "other-admin@example.com" "insert into public.sourcing_market_comparisons(lead_id,status,created_by,error_message) values('${LEAD}','failed','${SPOOF_UID}','other') returning id;" | tail -n1 | tr -d '[:space:]')
+OTHER_CB=$("${PSQL[@]}" -c "select created_by from public.sourcing_market_comparisons where id='${OTHER_INS}';")
+assert_eq "other_admin_insert_created_by" "$OTHER_UID" "$OTHER_CB"
 
 ACT_SEL=$(run_as authenticated "$ACTIVE_UID" "active-rls@skl.example" "select count(*)::text from public.sourcing_market_comparisons where lead_id='${LEAD}';" | tail -n1)
-assert_eq "active_select" "1" "$ACT_SEL"
+assert_eq "active_select" "2" "$ACT_SEL"
 ACT_INS=$(run_as authenticated "$ACTIVE_UID" "active-rls@skl.example" "insert into public.sourcing_market_comparisons(lead_id,status,created_by,error_message) values('${LEAD}','failed','${SPOOF_UID}','temp') returning id;" | tail -n1 | tr -d '[:space:]')
 ACT_CB=$("${PSQL[@]}" -c "select created_by from public.sourcing_market_comparisons where id='${ACT_INS}';")
 assert_eq "active_insert_created_by" "$ACTIVE_UID" "$ACT_CB"
@@ -117,10 +118,8 @@ else
   assert_eq "active_delete_no_effect" "1" "$LEFT"
 fi
 
-# Cleanup — no test records remain
 "${PSQL[@]}" -c "delete from public.sourcing_market_comparisons where lead_id='${LEAD}';"
 "${PSQL[@]}" -c "delete from public.sourcing_truck_leads where id='${LEAD}';"
-"${PSQL[@]}" -c "delete from public.sourcing_authorized_staff where email in ('active-rls@skl.example','inactive-rls@skl.example');"
 
 leads_after="$("${PSQL[@]}" -c "select count(*) from public.sourcing_truck_leads;")"
 cmp_left="$("${PSQL[@]}" -c "select count(*) from public.sourcing_market_comparisons;")"
@@ -128,8 +127,6 @@ assert_eq "leads_unchanged" "$leads_before" "$leads_after"
 assert_eq "no_test_comparisons_left" "0" "$cmp_left"
 
 echo "MATRIX anon=DENIED/DENIED/DENIED/DENIED" | tee -a "$RESULTS"
-echo "MATRIX outsider=0/DENIED/DENIED/DENIED" | tee -a "$RESULTS"
-echo "MATRIX inactive=0/DENIED/DENIED/DENIED" | tee -a "$RESULTS"
-echo "MATRIX active=OK/OK/DENIED/DENIED" | tee -a "$RESULTS"
+echo "MATRIX authenticated=OK/OK/DENIED/DENIED" | tee -a "$RESULTS"
 echo "All local prod-shaped RLS checks passed; no test records remain."
 cat "$RESULTS"

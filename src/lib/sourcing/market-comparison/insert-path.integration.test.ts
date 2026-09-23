@@ -64,7 +64,7 @@ describe("market comparison JWT insert path (integration)", () => {
       return;
     }
 
-    // Ensure active authorized staff directory row
+    // Staff directory is optional (notes) — not required for insert under inventory bar
     await admin.from("sourcing_authorized_staff").upsert({
       email: STAFF_EMAIL,
       display_name: "MC Integration Staff",
@@ -190,7 +190,7 @@ describe("market comparison JWT insert path (integration)", () => {
     expect(row?.created_by).toBe(staffUser.id);
     expect(row?.created_by).not.toBe(SPOOF_UID);
 
-    // Staff JWT can SELECT the row (RLS allows active staff)
+    // Staff JWT can SELECT the row (RLS allows authenticated staff)
     const { data: staffView, error: staffViewErr } = await staffClient
       .from("sourcing_market_comparisons")
       .select("id, created_by")
@@ -199,26 +199,16 @@ describe("market comparison JWT insert path (integration)", () => {
     expect(staffViewErr).toBeNull();
     expect(staffView?.created_by).toBe(staffUser.id);
 
-    // Outsider JWT cannot INSERT (create ephemeral outsider)
-    const outsiderClient = createClient(url, anon, {
+    // Anon (no JWT) cannot INSERT
+    const anonClient = createClient(url, anon, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const outsiderEmail = `mc-outsider-${Date.now()}@example.com`;
-    await admin.auth.admin.createUser({
-      email: outsiderEmail,
-      password: STAFF_PASSWORD,
-      email_confirm: true,
-    });
-    await outsiderClient.auth.signInWithPassword({
-      email: outsiderEmail,
-      password: STAFF_PASSWORD,
-    });
-    const outsiderInsert = await outsiderClient.from("sourcing_market_comparisons").insert({
+    const anonInsert = await anonClient.from("sourcing_market_comparisons").insert({
       lead_id: leadId,
       status: "failed",
       created_by: SPOOF_UID,
       error_message: "should fail",
     });
-    expect(outsiderInsert.error).toBeTruthy();
+    expect(anonInsert.error).toBeTruthy();
   }, 60_000);
 });

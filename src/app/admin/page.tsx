@@ -75,8 +75,9 @@ export default async function AdminDashboard({ searchParams }: AdminPageProps) {
               </>
             ) : (
               <>
-                Private sourcing requires a signed-in admin account (same as inventory). Sign in at{" "}
-                <code className="bg-amber-100 px-1">/admin/login</code>, then open Sourcing again.
+                Private sourcing uses the same admin sign-in as inventory. Sign in at{" "}
+                <code className="bg-amber-100 px-1">/admin/login</code>, then open Sourcing again. If
+                you are already signed in, sign out and back in to refresh your session.
               </>
             )}
           </div>

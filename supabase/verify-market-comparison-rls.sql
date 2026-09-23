@@ -9,7 +9,7 @@
 --   authenticated inactive staff SELECT 0 rows; INSERT/UPDATE/DELETE denied
 --   authenticated active staff   SELECT ok; INSERT ok (created_by=auth.uid()); UPDATE/DELETE denied
 --
--- Policies require public.is_sourcing_staff() AND active sourcing_authorized_staff row.
+-- Policies require public.is_sourcing_staff() (same bar as sourcing_truck_leads).
 -- created_by is forced from auth.uid() (spoof rejected).
 -- lead_id FK ON DELETE CASCADE.
 select 'see scripts/verify-market-comparison-rls.sh' as status;

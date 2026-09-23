@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Local non-production migration + four-identity RLS checks for market comparison.
-# Simulates PostgREST role/JWT switching (anon | outsider | inactive | active staff).
+# Local non-production migration + RLS checks for market comparison.
+# Simulates PostgREST role/JWT switching (anon | authenticated admins).
+# Authenticated = same bar as inventory; anon denied; no UPDATE/DELETE.
 # Never touches production.
 set -euo pipefail
 
@@ -227,57 +228,47 @@ assert_fail "anon_update_denied" "$ANON_UPD"
 assert_fail "anon_delete_denied" "$ANON_DEL"
 matrix_row "anon|DENIED|DENIED|DENIED|DENIED"
 
-# --- authenticated outsider (no authorized staff row) ---
+# --- authenticated other admin (no directory row; same bar as inventory) ---
 OUT_SEL="$(run_as_capture authenticated "$OUTSIDER_UID" "outsider@example.com" "select count(*)::text from public.sourcing_market_comparisons;" 2>&1 || true)"
 OUT_SEL_N="$(echo "$OUT_SEL" | tail -n1 | tr -d '[:space:]')"
-# SELECT under RLS returns 0 (not necessarily ERROR) when granted SELECT but policy filters
-if [[ "$OUT_SEL_N" == "0" ]]; then
-  echo "PASS outsider_select_zero_rows" | tee -a "$RESULTS"
-elif [[ "$OUT_SEL" == *ERROR* || "$OUT_SEL" == *"permission denied"* ]]; then
-  echo "PASS outsider_select_denied" | tee -a "$RESULTS"
-else
-  echo "FAIL outsider_select expected 0 or deny got=$OUT_SEL" | tee -a "$RESULTS"
-  exit 1
-fi
-OUT_INS="$(run_as_capture authenticated "$OUTSIDER_UID" "outsider@example.com" "insert into public.sourcing_market_comparisons (lead_id, status, created_by) values ('${LEAD_ID}','failed','${SPOOF_UID}') returning id;" 2>&1 || true)"
-assert_fail "outsider_insert_denied" "$OUT_INS"
+assert_eq "other_admin_select_count" "1" "$OUT_SEL_N"
+OUT_INS="$(run_as_capture authenticated "$OUTSIDER_UID" "outsider@example.com" "insert into public.sourcing_market_comparisons (lead_id, status, created_by, error_message) values ('${LEAD_ID}','failed','${SPOOF_UID}','other') returning id;" 2>&1 || true)"
+OUT_INS_ID="$(echo "$OUT_INS" | tail -n1 | tr -d '[:space:]')"
+OUT_BY="$(psql_q -c "select created_by from public.sourcing_market_comparisons where id='${OUT_INS_ID}';")"
+assert_eq "other_admin_insert_created_by" "$OUTSIDER_UID" "$OUT_BY"
 OUT_UPD="$(run_as_capture authenticated "$OUTSIDER_UID" "outsider@example.com" "update public.sourcing_market_comparisons set status='failed' where id='${SEED_CMP}' returning id;" 2>&1 || true)"
-assert_fail "outsider_update_denied" "$OUT_UPD"
+assert_fail "other_admin_update_denied" "$OUT_UPD"
 OUT_DEL="$(run_as_capture authenticated "$OUTSIDER_UID" "outsider@example.com" "delete from public.sourcing_market_comparisons where id='${SEED_CMP}' returning id;" 2>&1 || true)"
-# DELETE with no policy: 0 rows affected or permission denied
 if [[ "$OUT_DEL" == *ERROR* || "$OUT_DEL" == *"permission denied"* ]]; then
-  echo "PASS outsider_delete_denied" | tee -a "$RESULTS"
+  echo "PASS other_admin_delete_denied" | tee -a "$RESULTS"
 else
   OUT_LEFT="$(psql_q -c "select count(*)::text from public.sourcing_market_comparisons where id='${SEED_CMP}';")"
-  assert_eq "outsider_delete_no_effect" "1" "$OUT_LEFT"
+  assert_eq "other_admin_delete_no_effect" "1" "$OUT_LEFT"
 fi
-matrix_row "authenticated_outsider|0_ROWS|DENIED|DENIED|DENIED"
+matrix_row "authenticated_other_admin|OK|OK_INSERT|DENIED|DENIED"
 
-# --- inactive staff ---
-IN_SEL="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "select count(*)::text from public.sourcing_market_comparisons;" 2>&1 || true)"
+# --- inactive directory row still authenticated → allowed (directory optional) ---
+IN_SEL="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "select count(*)::text from public.sourcing_market_comparisons where lead_id='${LEAD_ID}';" 2>&1 || true)"
 IN_SEL_N="$(echo "$IN_SEL" | tail -n1 | tr -d '[:space:]')"
-if [[ "$IN_SEL_N" == "0" ]]; then
-  echo "PASS inactive_select_zero_rows" | tee -a "$RESULTS"
-else
-  echo "FAIL inactive_select expected 0 got=$IN_SEL" | tee -a "$RESULTS"
-  exit 1
-fi
-IN_INS="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "insert into public.sourcing_market_comparisons (lead_id, status, created_by) values ('${LEAD_ID}','failed','${SPOOF_UID}') returning id;" 2>&1 || true)"
-assert_fail "inactive_insert_denied" "$IN_INS"
+assert_eq "inactive_dir_select_count" "2" "$IN_SEL_N"
+IN_INS="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "insert into public.sourcing_market_comparisons (lead_id, status, created_by, error_message) values ('${LEAD_ID}','failed','${SPOOF_UID}','inactive-dir') returning id;" 2>&1 || true)"
+IN_INS_ID="$(echo "$IN_INS" | tail -n1 | tr -d '[:space:]')"
+IN_BY="$(psql_q -c "select created_by from public.sourcing_market_comparisons where id='${IN_INS_ID}';")"
+assert_eq "inactive_dir_insert_created_by" "$INACTIVE_UID" "$IN_BY"
 IN_UPD="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "update public.sourcing_market_comparisons set status='failed' where id='${SEED_CMP}' returning id;" 2>&1 || true)"
-assert_fail "inactive_update_denied" "$IN_UPD"
+assert_fail "inactive_dir_update_denied" "$IN_UPD"
 IN_DEL="$(run_as_capture authenticated "$INACTIVE_UID" "inactive@skl.example" "delete from public.sourcing_market_comparisons where id='${SEED_CMP}' returning id;" 2>&1 || true)"
 if [[ "$IN_DEL" == *ERROR* || "$IN_DEL" == *"permission denied"* ]]; then
-  echo "PASS inactive_delete_denied" | tee -a "$RESULTS"
+  echo "PASS inactive_dir_delete_denied" | tee -a "$RESULTS"
 else
   IN_LEFT="$(psql_q -c "select count(*)::text from public.sourcing_market_comparisons where id='${SEED_CMP}';")"
-  assert_eq "inactive_delete_no_effect" "1" "$IN_LEFT"
+  assert_eq "inactive_dir_delete_no_effect" "1" "$IN_LEFT"
 fi
-matrix_row "authenticated_inactive_staff|0_ROWS|DENIED|DENIED|DENIED"
+matrix_row "authenticated_inactive_directory|OK|OK_INSERT|DENIED|DENIED"
 
 # --- active authorized staff ---
-ACT_SEL="$(run_as_capture authenticated "$ACTIVE_UID" "active@skl.example" "select count(*)::text from public.sourcing_market_comparisons;" | tail -n1)"
-assert_eq "active_select_count" "1" "$ACT_SEL"
+ACT_SEL="$(run_as_capture authenticated "$ACTIVE_UID" "active@skl.example" "select count(*)::text from public.sourcing_market_comparisons where lead_id='${LEAD_ID}';" | tail -n1)"
+assert_eq "active_select_count" "3" "$ACT_SEL"
 
 ACT_INS_ID="$(run_as_capture authenticated "$ACTIVE_UID" "active@skl.example" "insert into public.sourcing_market_comparisons (lead_id, status, assessment, confidence, report, api_usage, error_message, created_by) values ('${LEAD_ID}','failed',null,null,null,'{\"provider\":\"mock\"}'::jsonb,'Provider failure: test','${SPOOF_UID}') returning id;" | tail -n1 | tr -d '[:space:]')"
 ACT_BY="$(psql_q -c "select created_by from public.sourcing_market_comparisons where id='${ACT_INS_ID}';")"
