@@ -7,6 +7,7 @@ import {
   buildWorkbookPreview,
   classifyPenskeUnitHyperlink,
   extractWorkbookHyperlinkTarget,
+  maskHyperlinkForDiagnostics,
   parseWorkbookBuffer,
   workbookRowsToIntake,
 } from "@/lib/sourcing/intake/workbook";
@@ -54,9 +55,12 @@ describe("classifyPenskeUnitHyperlink", () => {
     expect(classifyPenskeUnitHyperlink("http://www.penskeusedtrucks.com/unit-1/").reason).toMatch(
       /HTTP/i
     );
-    expect(classifyPenskeUnitHyperlink("https://evil.example.com/unit-1").reason).toMatch(
-      /unsupported hostname/i
+    const unsupported = classifyPenskeUnitHyperlink("https://evil.example.com/unit-1");
+    expect(unsupported.kind).toBe("rejected");
+    expect(unsupported.previewNote).toBe(
+      "Inspection hyperlink rejected — unsupported or credential-bearing destination"
     );
+    expect(unsupported.url).toBe("");
     expect(
       classifyPenskeUnitHyperlink("https://www.penskeusedtrucks.com/search-inventory/?q=x").reason
     ).toMatch(/search|hub/i);
@@ -66,6 +70,19 @@ describe("classifyPenskeUnitHyperlink", () => {
     expect(classifyPenskeUnitHyperlink("https://www.penskeusedtrucks.com/login").reason).toMatch(
       /login/i
     );
+  });
+
+  it("rejects beacon-style credential-bearing destinations without echoing the URL", () => {
+    const c = classifyPenskeUnitHyperlink(
+      "https://app.beaconinspection.com/launch/?co=1&id=2&guid=abc&key=secret"
+    );
+    expect(c.kind).toBe("rejected");
+    expect(c.url).toBe("");
+    expect(c.hostname).toBe("");
+    expect(c.previewNote).toBe(
+      "Inspection hyperlink rejected — unsupported or credential-bearing destination"
+    );
+    expect(JSON.stringify(c)).not.toMatch(/secret|guid=abc/i);
   });
 
   it("rejects credential-like query keys and JWT-like values", () => {
@@ -129,8 +146,53 @@ describe("extractWorkbookHyperlinkTarget", () => {
         f: '=HYPERLINK("https://www.penskeusedtrucks.com/unit-9/","9")',
       })
     ).toBe("https://www.penskeusedtrucks.com/unit-9/");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://example.test/a""b")',
+      })
+    ).toBe('https://example.test/a"b');
     expect(extractWorkbookHyperlinkTarget({ f: "SUM(A1:A2)" })).toBe("");
     expect(extractWorkbookHyperlinkTarget({ f: "" })).toBe("");
+  });
+
+  it("fails closed on DDE/external/concatenated/malformed formulas", () => {
+    expect(extractWorkbookHyperlinkTarget({ f: "=CMD|'/c calc'!A0" })).toBe("");
+    expect(extractWorkbookHyperlinkTarget({ f: "=DDE(\"app\",\"topic\",\"item\")" })).toBe("");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://reports.nationalinspect.com/1/2/abc/", TRIM(D2))',
+      })
+    ).toBe("https://reports.nationalinspect.com/1/2/abc/");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://www.penskeusedtrucks.com/unit-9/"&A1,"1")',
+      })
+    ).toBe("");
+    expect(extractWorkbookHyperlinkTarget({ f: "HYPERLINK(A1)" })).toBe("");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://www.penskeusedtrucks.com/unit-1/"',
+      })
+    ).toBe("");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: '=WEBSERVICE("https://evil.example.com/")',
+      })
+    ).toBe("");
+    expect(
+      extractWorkbookHyperlinkTarget({
+        f: 'HYPERLINK("https://www.penskeusedtrucks.com/unit-1/", CONCATENATE(A1,B1))',
+      })
+    ).toBe("");
+  });
+
+  it("masks opaque path segments in diagnostics", () => {
+    const masked = maskHyperlinkForDiagnostics(
+      "https://reports.nationalinspect.com/111/222/CapabilityTokenValueHere/"
+    );
+    expect(masked.hostname).toBe("reports.nationalinspect.com");
+    expect(masked.pathPattern).toBe("/{id}/{id}/{token}/");
+    expect(masked.pathPattern).not.toMatch(/CapabilityToken/i);
   });
 });
 
@@ -210,7 +272,9 @@ describe("Penske workbook Unit hyperlink extraction", () => {
     expect(byUnit.get("88003")?.specEvidence.hyperlinkDestinationType).toBe("missing");
     expect(byUnit.get("88011")?.sourceUrl).toBe("");
     expect(byUnit.get("88011")?.specEvidence.hyperlinkDestinationType).toBe("rejected");
-    expect(byUnit.get("88011")?.verificationNotes).toMatch(/Workbook hyperlink rejected/i);
+    expect(byUnit.get("88011")?.verificationNotes).toMatch(
+      /Inspection hyperlink rejected|Workbook hyperlink rejected/i
+    );
   });
 
   it("Preview and Import planning use identical validation (same buffer)", () => {

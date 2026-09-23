@@ -2,14 +2,25 @@
  * Classify Penske workbook Unit Number cell hyperlinks.
  * Never invents unit pages from unit numbers. Never rewrites unsafe URLs into safe ones.
  * Does not fetch or crawl destinations.
+ *
+ * Inspection URLs (e.g. National Inspect) are private sourcing data: path segments may be
+ * capability tokens even when not named "token". Never log or expose full inspection URLs
+ * outside authenticated sourcing-staff surfaces.
  */
 import { canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
+
+/** Formulas that must never be treated as extractable hyperlink sources. */
+const DANGEROUS_FORMULA_RE =
+  /\b(CMD|DDE|DDEAUTO|EXEC|WEBSERVICE|FILTERXML|IMPORTXML|INDIRECT|EXTERNAL|RTD)\b|^\s*=?\s*\|/i;
 
 /**
  * Extract a hyperlink Target from a SheetJS cell without evaluating formulas.
  * Prefer native `cell.l.Target` (xlsx hyperlink records). For BIFF/.xls workbooks that
  * store Excel `HYPERLINK("url",…)` as formula text in `cell.f`, parse the quoted URL
- * string only — never execute the formula.
+ * string only — never execute the formula. DDE/external/malformed formulas fail closed.
+ *
+ * Display argument (2nd) may be a quoted label, `TRIM(A1)`, or a simple cell ref — never
+ * concatenated into the URL and never evaluated.
  */
 export function extractWorkbookHyperlinkTarget(
   cell: { l?: { Target?: string } | unknown; f?: string } | null | undefined
@@ -21,9 +32,22 @@ export function extractWorkbookHyperlinkTarget(
   }
   const formula = typeof cell.f === "string" ? cell.f.trim() : "";
   if (!formula) return "";
-  // Optional leading "=", then HYPERLINK("url") or HYPERLINK("url","label")
-  const m = formula.match(/^=?\s*HYPERLINK\(\s*"((?:[^"]|"")*)"/i);
+  if (DANGEROUS_FORMULA_RE.test(formula)) return "";
+  // First argument must be a complete quoted URL literal. Optional display arg is ignored.
+  const m = formula.match(
+    /^=?\s*HYPERLINK\s*\(\s*"((?:[^"]|"")*)"\s*(?:,([\s\S]*))?\)\s*$/i
+  );
   if (!m) return "";
+  const displayArg = (m[2] ?? "").trim();
+  if (displayArg) {
+    if (DANGEROUS_FORMULA_RE.test(displayArg) || /&/.test(displayArg)) return "";
+    // Allow only a quoted label, TRIM(cell), or a simple A1-style ref — never evaluate.
+    if (
+      !/^"(?:[^"]|"")*"$|^TRIM\s*\(\s*[A-Z]{1,3}\d+\s*\)$|^[A-Z]{1,3}\d+$/i.test(displayArg)
+    ) {
+      return "";
+    }
+  }
   return m[1].replace(/""/g, '"').trim();
 }
 
@@ -32,6 +56,7 @@ export const PENSKE_LISTING_ALLOWED_HOSTS = new Set([
   "penskeusedtrucks.com",
   "www.penskeusedtrucks.com",
 ]);
+
 /**
  * Explicitly approved inspection/report hostnames for Penske unit-cell links.
  * Synthetic fixture host included for tests only.
@@ -52,9 +77,16 @@ export const PENSKE_INSPECTION_ALLOWED_HOSTS = [
 
 const UNIT_PATH_RE = /\/unit-(\d+)\/?/i;
 
+/** Staff-safe rejection for unsupported hosts or credential-bearing destinations. */
+export const INSPECTION_REJECT_UNSUPPORTED =
+  "unsupported or credential-bearing destination";
+
+export const INSPECTION_REJECT_UNSUPPORTED_NOTE =
+  "Inspection hyperlink rejected — unsupported or credential-bearing destination";
+
 /** Query keys that look like credentials / sessions / signed URLs. */
 const FORBIDDEN_QUERY_KEY_RE =
-  /^(authorization|auth|token|access[_-]?token|api[_-]?key|client[_-]?id|x-ibm-client-id|x-pnsk-client-id|session|asp\.net_sessionid|window_name|request[_-]?id|cookie|signature|sig|expires|expire|exp|jwt|id_token|refresh_token|x-amz-signature|x-amz-credential|x-amz-security-token)$/i;
+  /^(authorization|auth|token|access[_-]?token|api[_-]?key|client[_-]?id|x-ibm-client-id|x-pnsk-client-id|session|asp\.net_sessionid|window_name|request[_-]?id|cookie|signature|sig|expires|expire|exp|jwt|id_token|refresh_token|x-amz-signature|x-amz-credential|x-amz-security-token|key|guid)$/i;
 
 const FORBIDDEN_QUERY_KEY_PARTIAL_RE =
   /(token|auth|authorization|cookie|session|window_name|client-id|client_id|api[_-]?key|signature|signed)/i;
@@ -82,6 +114,16 @@ function safeReject(reason: string): PenskeUnitHyperlinkClassification {
     hostname: "",
     reason,
     previewNote: `Workbook hyperlink rejected: ${reason}`,
+  };
+}
+
+function rejectUnsupportedOrCredential(): PenskeUnitHyperlinkClassification {
+  return {
+    kind: "rejected",
+    url: "",
+    hostname: "",
+    reason: INSPECTION_REJECT_UNSUPPORTED,
+    previewNote: INSPECTION_REJECT_UNSUPPORTED_NOTE,
   };
 }
 
@@ -167,7 +209,8 @@ export function classifyPenskeUnitHyperlink(
 
   const cred = hasCredentialLikeQuery(parsed);
   if (cred) {
-    return safeReject(cred);
+    // Do not echo parameter values or full URL — staff-safe generic note.
+    return rejectUnsupportedOrCredential();
   }
 
   const host = parsed.hostname.toLowerCase();
@@ -202,6 +245,7 @@ export function classifyPenskeUnitHyperlink(
   }
 
   // Inspection: approved inspection host, not a hub/login/api
+  // Keep full URL for private staff storage only — path may contain capability tokens.
   if (hostAllowed(host, PENSKE_INSPECTION_ALLOWED_HOSTS)) {
     const out = new URL(parsed.toString());
     out.hash = "";
@@ -218,10 +262,13 @@ export function classifyPenskeUnitHyperlink(
     return safeReject("Penske URL is not an individual unit page");
   }
 
-  return safeReject("unsupported hostname");
+  return rejectUnsupportedOrCredential();
 }
 
-/** Staff-safe hostname for diagnostics (never logs full URL with secrets). */
+/**
+ * Staff-safe hostname/path diagnostics (never logs full URL with capability tokens).
+ * Opaque path segments (possible capability tokens) are masked.
+ */
 export function maskHyperlinkForDiagnostics(raw: string): {
   hostname: string;
   pathPattern: string;
@@ -230,7 +277,15 @@ export function maskHyperlinkForDiagnostics(raw: string): {
 } {
   try {
     const u = new URL(String(raw).trim());
-    const path = (u.pathname || "/").replace(/\/unit-\d+/gi, "/unit-{id}");
+    const path = (u.pathname || "/")
+      .replace(/\/unit-\d+/gi, "/unit-{id}")
+      .replace(
+        /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+        "/{uuid}"
+      )
+      .replace(/\/[0-9a-f]{16,}/gi, "/{hex}")
+      .replace(/\/[A-Za-z0-9_-]{16,}/g, "/{token}")
+      .replace(/\/\d{3,}/g, "/{id}");
     return {
       hostname: u.hostname.toLowerCase(),
       pathPattern: path,

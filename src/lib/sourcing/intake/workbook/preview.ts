@@ -186,10 +186,13 @@ export function buildWorkbookPreview(
       hyperlinkKind = "inspection";
       hyperlinkNote = "Inspection link found";
     } else if (plan.input.specEvidence?.hyperlinkDestinationType === "rejected") {
+      const validation = (plan.input.specEvidence.hyperlinkValidation || "").trim();
       hyperlinkNote =
-        plan.input.specEvidence.hyperlinkValidation
-          ? `Workbook hyperlink rejected: ${plan.input.specEvidence.hyperlinkValidation}`
-          : "Workbook hyperlink rejected";
+        !validation
+          ? "Workbook hyperlink rejected"
+          : /^(Inspection|Workbook) hyperlink rejected/i.test(validation)
+            ? validation
+            : `Workbook hyperlink rejected: ${validation}`;
     } else if (plan.input.specEvidence?.hyperlinkDestinationType === "missing") {
       hyperlinkNote = "No hyperlink provided";
     }

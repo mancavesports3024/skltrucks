@@ -150,7 +150,8 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
             ? "missing"
             : "rejected",
     hyperlinkHostname: hyperlink.hostname,
-    hyperlinkValidation: hyperlink.reason,
+    hyperlinkValidation:
+      hyperlink.kind === "rejected" ? hyperlink.previewNote : hyperlink.reason,
     workbookStatus: penskeStatus,
     salesTerms,
     penskeStatus,
