@@ -602,6 +602,51 @@ describe("provider structured output parsing", () => {
     expect(parsed.listings).toHaveLength(1);
     expect(parsed.listings[0].listingPageInspected).toBe(true);
   });
+
+  it("recovers complete comparables from truncated JSON (unterminated string)", () => {
+    const complete = {
+      listingUrl: "https://www.example.com/inventory/unit-1",
+      sourceName: "Dealer",
+      year: 2019,
+      makeModel: "Freightliner M2",
+      mileage: 100000,
+      askingPrice: 42000,
+      auctionCurrentBid: null,
+      boxLengthFt: 26,
+      bodyType: "dry van",
+      engine: "Cummins",
+      engineIsCummins: true,
+      transmission: "Auto",
+      transmissionIsAutomatic: true,
+      manufacturerGvwrLbs: 25500,
+      hasLiftgate: true,
+      location: "FL",
+      conditionNotes: "",
+      statusNotes: "",
+      evidenceNotes: "",
+      vin: "",
+      stockNumber: "1",
+      listingPageInspected: true,
+      fieldEvidence: {
+        askingPrice: "Asking $42,000",
+        year: "2019",
+        makeModel: "Freightliner M2",
+        mileage: "100000 miles",
+      },
+    };
+    // Simulate provider truncation mid-string in a later comparable (classic Unterminated string)
+    const truncated =
+      `{"queriesUsed":["freightliner m2"],"sourcesConsulted":["example.com"],"notes":"partial",` +
+      `"comparables":[${JSON.stringify(complete)},{"listingUrl":"https://www.example.com/inventory/unit-2","sourceName":"Dealer","evidenceNotes":"this string never clo`;
+
+    const parsed = parseComparableListingsJson(truncated);
+    expect(parsed.parseError).toBeUndefined();
+    expect(parsed.recoveredFromTruncation).toBe(true);
+    expect(parsed.listings).toHaveLength(1);
+    expect(parsed.listings[0].listingUrl).toBe(complete.listingUrl);
+    expect(parsed.listings[0].askingPrice).toBe(42000);
+    expect(parsed.notes).toMatch(/Recovered 1 complete comparable/i);
+  });
 });
 
 describe("duplicate-click lock", () => {
@@ -619,10 +664,14 @@ describe("duplicate-click lock", () => {
 });
 
 describe("cost ceiling honesty", () => {
-  it("documents a tool-call ceiling that can support verifying a few listings", () => {
+  it("documents a tool-call ceiling that can support verifying a few listings", async () => {
+    const { MARKET_COMPARISON_MAX_OUTPUT_TOKENS } = await import(
+      "@/lib/sourcing/market-comparison/types"
+    );
     expect(MARKET_COMPARISON_MAX_TOOL_CALLS).toBeGreaterThanOrEqual(12);
     expect(MARKET_COMPARISON_TARGET_VERIFIED_MAX).toBeLessThanOrEqual(6);
     expect(MARKET_COMPARISON_MAX_EXPECTED_COST_USD).toBeGreaterThanOrEqual(0.25);
+    expect(MARKET_COMPARISON_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(4096);
   });
 });
 
