@@ -1,6 +1,10 @@
 import { classifyLead } from "@/lib/sourcing/match";
 import { estimateDistanceFromLocation } from "@/lib/sourcing/distance/estimate-from-location";
 import {
+  resolveLeadCountry,
+  shouldSkipUsDistanceLookup,
+} from "@/lib/sourcing/location/country";
+import {
   findExistingLead,
   planIntakeRow,
   type IntakeApplyPlan,
@@ -135,10 +139,23 @@ export function buildWorkbookPreview(
       );
     }
 
-    const distanceEstimate = estimateDistanceFromLocation(plan.input.location);
-    const distanceNote = distanceEstimate.ok
-      ? `${distanceEstimate.methodLabel}: ${distanceEstimate.miles} mi → ${distanceEstimate.resolved.display}`
-      : `Distance unknown (${distanceEstimate.reason})`;
+    const countryResolution = resolveLeadCountry({
+      location: plan.input.location,
+      country: plan.input.specEvidence?.country,
+    });
+    let distanceNote: string;
+    let resolvedLocation: string | null = null;
+    if (shouldSkipUsDistanceLookup(countryResolution) && countryResolution.kind === "foreign") {
+      distanceNote =
+        plan.input.specEvidence?.distance ||
+        `Distance not evaluated — Outside allowed country: ${countryResolution.country}`;
+    } else {
+      const distanceEstimate = estimateDistanceFromLocation(plan.input.location);
+      distanceNote = distanceEstimate.ok
+        ? `${distanceEstimate.methodLabel}: ${distanceEstimate.miles} mi → ${distanceEstimate.resolved.display}`
+        : `Distance unknown (${distanceEstimate.reason})`;
+      resolvedLocation = distanceEstimate.ok ? distanceEstimate.resolved.display : null;
+    }
 
     previewRows.push({
       rowNumber: idx + 1,
@@ -149,7 +166,7 @@ export function buildWorkbookPreview(
       mileage: plan.input.mileage,
       price: plan.input.price,
       location: plan.input.location,
-      resolvedLocation: distanceEstimate.ok ? distanceEstimate.resolved.display : null,
+      resolvedLocation,
       estimatedDistanceMiles: plan.input.drivingDistanceMiles,
       distanceNote,
       gvwLbs: plan.input.manufacturerGvwrLbs ?? plan.input.listedWeightLbs,

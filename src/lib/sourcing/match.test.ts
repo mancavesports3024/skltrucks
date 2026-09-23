@@ -23,6 +23,7 @@ function baseLead(overrides: Partial<LeadMatchInput> = {}): LeadMatchInput {
     hasLiftgate: true,
     drivingDistanceMiles: 1080,
     price: 33900,
+    location: "Joplin, MO",
     ...overrides,
   };
 }

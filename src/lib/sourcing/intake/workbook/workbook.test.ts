@@ -136,6 +136,7 @@ describe("GVWR boundaries (≤26000 / ≥26001)", () => {
     hasLiftgate: true,
     drivingDistanceMiles: 500,
     price: 40000,
+    location: "Kansas City, MO",
   };
 
   it("25,999 → accepted on GVWR", () => {

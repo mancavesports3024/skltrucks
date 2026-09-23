@@ -4,6 +4,10 @@ import {
   canonicalizeListingUrl,
   normalizeVin,
 } from "@/lib/sourcing/duplicates";
+import {
+  UNITED_STATES,
+  resolveLeadCountry,
+} from "@/lib/sourcing/location/country";
 import type {
   BuyingProfileInput,
   ListedWeightTerm,
@@ -96,6 +100,19 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
         .filter(Boolean)
     : [];
 
+  const location = str(formData, "location");
+  const countryRaw = str(formData, "country");
+  const countryResolution = resolveLeadCountry({
+    location,
+    country: countryRaw || null,
+  });
+  const countryEvidence =
+    countryResolution.kind === "us"
+      ? UNITED_STATES
+      : countryResolution.kind === "foreign"
+        ? countryResolution.country
+        : undefined;
+
   return {
     seller,
     supplierContactId: str(formData, "supplierContactId") || null,
@@ -121,7 +138,7 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
     hasLiftgate: optionalBool(formData, "hasLiftgate"),
     liftgateNotes: str(formData, "liftgateNotes"),
     price: optionalNumber(formData, "price"),
-    location: str(formData, "location"),
+    location,
     drivingDistanceMiles: optionalNumber(formData, "drivingDistanceMiles"),
     distanceIsEstimate: checkbox(formData, "distanceIsEstimate"),
     dateLastChecked: str(formData, "dateLastChecked") || null,
@@ -136,6 +153,7 @@ export function parseTruckLeadForm(formData: FormData): TruckLeadInput {
       transmission: str(formData, "evidenceTransmission"),
       boxLength: str(formData, "evidenceBoxLength"),
       gvwr: str(formData, "evidenceGvwr"),
+      ...(countryEvidence ? { country: countryEvidence } : {}),
     },
   };
 }

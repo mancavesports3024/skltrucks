@@ -83,6 +83,11 @@ export interface SpecEvidence {
    * Never describes driving distance. Stored in jsonb — no migration.
    */
   distance?: string;
+  /**
+   * Resolved country label when known (United States / Canada / …).
+   * Stored in jsonb — no migration. Used for US-only classification audit.
+   */
+  country?: string;
 }
 
 export interface TruckLead {

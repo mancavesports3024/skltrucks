@@ -3,6 +3,13 @@
  * No LLM / OpenAI / Tavily — spreadsheet values only.
  */
 
+import {
+  CANADA,
+  UNITED_STATES,
+  normalizeCanadianProvince,
+  resolveLeadCountry,
+} from "@/lib/sourcing/location/country";
+
 const MAKE_ALIASES: Record<string, string> = {
   ftl: "Freightliner",
   freightliner: "Freightliner",
@@ -192,33 +199,58 @@ export function parseLiftgate(raw: string | null | undefined): LiftgateParse {
   return { hasLiftgate: true, notes: text };
 }
 
-/** `31 - Kansas City, MO` → city/state label; Canadian provinces left as unknown distance. */
+/** `31 - Kansas City, MO` → city/state label; Canadian provinces flagged via shared resolver. */
 export function parseOsLocation(raw: string): {
   location: string;
   city: string;
   state: string;
   looksCanadian: boolean;
+  country: string | null;
 } {
   const text = String(raw ?? "").trim();
-  if (!text) return { location: "", city: "", state: "", looksCanadian: false };
+  if (!text) {
+    return { location: "", city: "", state: "", looksCanadian: false, country: null };
+  }
 
   const stripped = text.replace(/^\d+\s*[-–—]\s*/, "").trim();
-  const looksCanadian =
-    /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/.test(stripped) ||
-    /\b(Canada|Ontario|Alberta|Quebec|British Columbia|Manitoba|Saskatchewan)\b/i.test(
-      stripped
-    );
+  const resolved = resolveLeadCountry({ location: stripped });
+  const looksCanadian = resolved.kind === "foreign" && resolved.country === CANADA;
+  const country =
+    resolved.kind === "us"
+      ? UNITED_STATES
+      : resolved.kind === "foreign"
+        ? resolved.country
+        : null;
 
-  const m = stripped.match(/^(.+?),\s*([A-Z]{2})\s*$/);
+  const m = stripped.match(/^(.+?),\s*([A-Za-z]{2})\s*$/);
   if (m) {
     return {
-      location: `${m[1].trim()}, ${m[2]}`,
+      location: `${m[1].trim()}, ${m[2].toUpperCase()}`,
       city: m[1].trim(),
-      state: m[2],
+      state: m[2].toUpperCase(),
       looksCanadian,
+      country,
     };
   }
-  return { location: stripped || text, city: "", state: "", looksCanadian };
+
+  // City, ProvinceName or City, ST, Country
+  const comma = stripped.lastIndexOf(",");
+  if (comma > 0) {
+    const left = stripped.slice(0, comma).trim();
+    const right = stripped.slice(comma + 1).trim();
+    const province = normalizeCanadianProvince(right);
+    if (province) {
+      return {
+        location: `${left}, ${province}`,
+        city: left,
+        state: province,
+        looksCanadian: true,
+        country: CANADA,
+      };
+    }
+  }
+
+  return { location: stripped || text, city: "", state: "", looksCanadian, country };
 }
 
 export function headerKey(h: string): string {
