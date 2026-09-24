@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { calculateDrivingDistanceAction } from "@/app/admin/sourcing/actions";
+import { buildRouteCostDefaultsUpdate } from "@/components/admin/sourcing/route-cost-defaults";
 import {
   CITY_CENTER_CONFIRM_NOTICE,
   CITY_CENTER_DRIVING_LABEL,
@@ -22,6 +23,15 @@ import {
 
 export type CostSource = "google_calculated" | "profile_default" | "staff_override";
 
+export type RouteCostDefaultsUpdate = {
+  /** null = leave Transportation unchanged */
+  transportationUsd: number | null;
+  /** null = leave Inspection unchanged */
+  inspectionUsd: number | null;
+  transportationSource?: CostSource;
+  inspectionSource?: CostSource;
+};
+
 type Props = {
   leadId: string;
   initialCache: DrivingRouteCache | null;
@@ -31,8 +41,8 @@ type Props = {
   defaultInspectionCost: number;
   transportation: number;
   inspection: number;
-  onTransportationChange: (value: number, source: CostSource) => void;
-  onInspectionChange: (value: number, source: CostSource) => void;
+  /** Atomic parent update — must apply Transportation + Inspection in one dispatch. */
+  onApplyRouteCostDefaults: (update: RouteCostDefaultsUpdate) => void;
   transportationSource: CostSource;
   inspectionSource: CostSource;
 };
@@ -46,15 +56,16 @@ export default function DrivingDistanceControls({
   defaultInspectionCost,
   transportation,
   inspection,
-  onTransportationChange,
-  onInspectionChange,
+  onApplyRouteCostDefaults,
   transportationSource,
   inspectionSource,
 }: Props) {
   const rate = normalizeTransportationRatePerMile(transportationRatePerMile);
   const inspectionDefault = normalizeDefaultInspectionCost(defaultInspectionCost);
   const [pending, startTransition] = useTransition();
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(
+    initialCache ? DRIVING_DISTANCE_CACHED_LABEL : null
+  );
   const [error, setError] = useState<string | null>(null);
   const [cache, setCache] = useState<DrivingRouteCache | null>(initialCache);
   const [displayMiles, setDisplayMiles] = useState<number | null>(
@@ -62,13 +73,60 @@ export default function DrivingDistanceControls({
   );
   const [milesOverride, setMilesOverride] = useState<string>("");
   const submittedRef = useRef(false);
+  const appliedCacheKeyRef = useRef<string | null>(null);
+  const onApplyRef = useRef(onApplyRouteCostDefaults);
+  onApplyRef.current = onApplyRouteCostDefaults;
+  const transportationRef = useRef(transportation);
+  const inspectionRef = useRef(inspection);
+  const transportationSourceRef = useRef(transportationSource);
+  const inspectionSourceRef = useRef(inspectionSource);
+  transportationRef.current = transportation;
+  inspectionRef.current = inspection;
+  transportationSourceRef.current = transportationSource;
+  inspectionSourceRef.current = inspectionSource;
 
+  function currentDefaultsInput(
+    milesUnrounded: number,
+    mode: Parameters<typeof buildRouteCostDefaultsUpdate>[0]["mode"]
+  ) {
+    return buildRouteCostDefaultsUpdate({
+      milesUnrounded,
+      ratePerMile: rate,
+      inspectionDefaultUsd: inspectionDefault,
+      transportation: transportationRef.current,
+      inspection: inspectionRef.current,
+      transportationSource: transportationSourceRef.current,
+      inspectionSource: inspectionSourceRef.current,
+      mode,
+    });
+  }
+
+  // Seed / refresh Inspection from Buying Profile when not a staff override (incl. $0 override).
+  useEffect(() => {
+    onApplyRef.current(currentDefaultsInput(0, "seed_inspection_only"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectionDefault]);
+
+  // Load cached route + refresh google_calculated / profile_default when rate or
+  // inspection profile default changes. Zero Google calls.
   useEffect(() => {
     setCache(initialCache);
     setDisplayMiles(
       initialCache ? roundDrivingMilesForDisplay(initialCache.distanceMiles) : null
     );
-  }, [initialCache]);
+    if (!initialCache) {
+      appliedCacheKeyRef.current = null;
+      return;
+    }
+    const key = `${initialCache.calculatedAt}|${initialCache.distanceMiles}|${initialCache.destLat}|${initialCache.destLng}|${rate}|${inspectionDefault}`;
+    if (appliedCacheKeyRef.current === key) return;
+    appliedCacheKeyRef.current = key;
+    setStatus(DRIVING_DISTANCE_CACHED_LABEL);
+    setMilesOverride("");
+    onApplyRef.current(currentDefaultsInput(initialCache.distanceMiles, "cache_or_rate_change"));
+    // currentDefaultsInput reads latest refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCache, rate, inspectionDefault]);
 
   const effectiveMilesUnrounded = (() => {
     const raw = milesOverride.trim();
@@ -83,14 +141,6 @@ export default function DrivingDistanceControls({
     effectiveMilesUnrounded != null
       ? calculateTransportationUsd(effectiveMilesUnrounded, rate)
       : null;
-
-  function applyCalculatedDefaults(milesUnrounded: number, display: number) {
-    const transport = calculateTransportationUsd(milesUnrounded, rate);
-    onTransportationChange(transport, "google_calculated");
-    onInspectionChange(inspectionDefault, "profile_default");
-    setDisplayMiles(display);
-    setMilesOverride("");
-  }
 
   function onCalculate() {
     if (pending || submittedRef.current) return;
@@ -109,8 +159,12 @@ export default function DrivingDistanceControls({
         }
         setCache(result.cache);
         setDisplayMiles(result.displayMiles);
+        setMilesOverride("");
         setStatus(result.message || CITY_CENTER_DRIVING_LABEL);
-        applyCalculatedDefaults(result.distanceMilesUnrounded, result.displayMiles);
+        appliedCacheKeyRef.current = `${result.cache.calculatedAt}|${result.cache.distanceMiles}|${result.cache.destLat}|${result.cache.destLng}|${rate}|${inspectionDefault}`;
+        onApplyRef.current(
+          currentDefaultsInput(result.distanceMilesUnrounded, "calculate_success")
+        );
       } finally {
         submittedRef.current = false;
       }
@@ -118,12 +172,19 @@ export default function DrivingDistanceControls({
   }
 
   function resetTransportation() {
-    if (calculatedTransport == null) return;
-    onTransportationChange(calculatedTransport, "google_calculated");
+    if (effectiveMilesUnrounded == null) return;
+    // Local only — cached/override miles × current profile rate. Zero provider calls.
+    // This is the only action that replaces a Transportation staff override.
+    onApplyRef.current(currentDefaultsInput(effectiveMilesUnrounded, "force_reset_transport"));
   }
 
   function resetInspection() {
-    onInspectionChange(inspectionDefault, "profile_default");
+    // Only action that replaces an Inspection staff override (including $0).
+    onApplyRef.current({
+      transportationUsd: null,
+      inspectionUsd: inspectionDefault,
+      inspectionSource: "profile_default",
+    });
   }
 
   const formula =
@@ -134,6 +195,15 @@ export default function DrivingDistanceControls({
           calculatedTransport
         )
       : null;
+
+  const showTransportAmount =
+    transportationSource === "staff_override" ||
+    transportationSource === "google_calculated" ||
+    transportation > 0;
+  const showInspectionAmount =
+    inspectionSource === "staff_override" ||
+    inspectionSource === "google_calculated" ||
+    inspection > 0;
 
   return (
     <div
@@ -161,7 +231,7 @@ export default function DrivingDistanceControls({
 
       {status && (
         <p role="status" aria-live="polite" className="text-sm text-neutral-800">
-          {status === DRIVING_DISTANCE_CACHED_LABEL ? status : status}
+          {status}
         </p>
       )}
       {error && (
@@ -184,7 +254,11 @@ export default function DrivingDistanceControls({
                 const n = Number(String(e.target.value).replace(/,/g, ""));
                 if (Number.isFinite(n) && n >= 0) {
                   const transport = calculateTransportationUsd(n, rate);
-                  onTransportationChange(transport, "staff_override");
+                  onApplyRef.current({
+                    transportationUsd: transport,
+                    inspectionUsd: null,
+                    transportationSource: "staff_override",
+                  });
                 }
               }}
               className="mt-1 w-full border border-neutral-300 bg-white px-3 py-2"
@@ -217,6 +291,11 @@ export default function DrivingDistanceControls({
         </p>
       ) : null}
 
+      <p className="text-xs text-neutral-500" data-testid="cost-clear-behavior">
+        Clearing Transportation or Inspection (or typing 0) sets an explicit $0 staff override. Use
+        Reset to restore the calculated/profile default.
+      </p>
+
       <div className="flex flex-wrap gap-3 text-xs text-neutral-600">
         <span data-testid="transportation-source">
           Transportation source:{" "}
@@ -225,7 +304,7 @@ export default function DrivingDistanceControls({
             : transportationSource === "profile_default"
               ? "Profile default"
               : "Staff override"}
-          {transportation > 0 ? ` ($${transportation.toFixed(2)})` : ""}
+          {showTransportAmount ? ` ($${transportation.toFixed(2)})` : ""}
         </span>
         <span data-testid="inspection-source">
           Inspection source:{" "}
@@ -234,7 +313,7 @@ export default function DrivingDistanceControls({
             : inspectionSource === "google_calculated"
               ? "Google-calculated"
               : "Staff override"}
-          {inspection > 0 ? ` ($${inspection.toFixed(2)})` : ""}
+          {showInspectionAmount ? ` ($${inspection.toFixed(2)})` : ""}
         </span>
         {calculatedTransport != null && transportationSource === "staff_override" ? (
           <button

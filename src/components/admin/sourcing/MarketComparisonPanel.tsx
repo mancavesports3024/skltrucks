@@ -1,16 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useReducer, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import DrivingDistanceControls, {
   type CostSource,
+  type RouteCostDefaultsUpdate,
 } from "@/components/admin/sourcing/DrivingDistanceControls";
+import {
+  costDraftReducer,
+  costInputDisplayValue,
+  initialCostDraftState,
+  parseStaffCostInput,
+  type CostDraft,
+} from "@/components/admin/sourcing/cost-draft";
 import type { DrivingRouteCache } from "@/lib/sourcing/distance/google-routes";
 import { recalculateReportWithLandedCosts } from "@/lib/sourcing/market-comparison/build-report";
-import {
-  EMPTY_LANDED_COST_INPUT,
-  hasExpenseInputs,
-} from "@/lib/sourcing/market-comparison/landed-cost";
+import { hasExpenseInputs } from "@/lib/sourcing/market-comparison/landed-cost";
 import {
   MARKET_COMPARISON_CONFIRM_FIELD,
   MARKET_COMPARISON_CONFIRM_VALUE,
@@ -19,7 +24,6 @@ import {
   MARKET_COMPARISON_PENDING_LABEL,
   MARKET_COMPARISON_TYPICAL_COST_USD_MAX,
   MARKET_COMPARISON_TYPICAL_COST_USD_MIN,
-  type LandedCostInput,
   type MarketComparisonRecord,
   type MarketComparisonReport,
 } from "@/lib/sourcing/market-comparison/types";
@@ -73,8 +77,6 @@ function ComparePendingStatus() {
   );
 }
 
-type CostDraft = LandedCostInput;
-
 type Props = {
   leadId: string;
   eligible: boolean;
@@ -107,51 +109,56 @@ export default function MarketComparisonPanel({
   defaultInspectionCost,
 }: Props) {
   const baseReport = justCompleted || latest?.report || null;
-  const [costs, setCosts] = useState<CostDraft>(EMPTY_LANDED_COST_INPUT);
-  const [displayReport, setDisplayReport] = useState<MarketComparisonReport | null>(baseReport);
-  const [transportationSource, setTransportationSource] = useState<CostSource>("profile_default");
-  const [inspectionSource, setInspectionSource] = useState<CostSource>("profile_default");
 
-  useEffect(() => {
-    setDisplayReport(baseReport);
-    if (baseReport?.landedCost?.inputs) {
-      setCosts(baseReport.landedCost.inputs);
-      setTransportationSource(
-        baseReport.landedCost.inputs.transportation > 0 ? "staff_override" : "profile_default"
-      );
-      setInspectionSource(
-        baseReport.landedCost.inputs.inspection > 0 ? "staff_override" : "profile_default"
-      );
+  const [draft, dispatch] = useReducer(
+    costDraftReducer,
+    latest?.report?.landedCost?.inputs,
+    (inputs) => initialCostDraftState(inputs)
+  );
+  const { costs, transportationSource, inspectionSource } = draft;
+
+  // Derive display report — never call setState inside another updater.
+  // Local only: zero Google / OpenAI / Tavily calls.
+  const displayReport = useMemo(() => {
+    if (!baseReport) return null;
+    if (hasExpenseInputs(costs)) {
+      return recalculateReportWithLandedCosts(baseReport, costs);
     }
-  }, [baseReport]);
+    return baseReport;
+  }, [baseReport, costs]);
+
+  // Adopt a newly completed comparison once. Pure reducer — no nested setters.
+  const lastJustCompletedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!justCompleted?.landedCost?.inputs) return;
+    const key = justCompleted.comparedAt;
+    if (lastJustCompletedRef.current === key) return;
+    lastJustCompletedRef.current = key;
+    dispatch({
+      type: "adopt_just_completed",
+      comparedAt: key,
+      inputs: justCompleted.landedCost.inputs,
+    });
+  }, [justCompleted]);
+
+  function applyRouteCostDefaults(update: RouteCostDefaultsUpdate) {
+    const patch: Partial<CostDraft> = {};
+    const sources: Partial<{ transportation: CostSource; inspection: CostSource }> = {};
+    if (update.transportationUsd != null && Number.isFinite(update.transportationUsd)) {
+      patch.transportation = update.transportationUsd;
+      if (update.transportationSource) sources.transportation = update.transportationSource;
+    }
+    if (update.inspectionUsd != null && Number.isFinite(update.inspectionUsd)) {
+      patch.inspection = update.inspectionUsd;
+      if (update.inspectionSource) sources.inspection = update.inspectionSource;
+    }
+    if (Object.keys(patch).length === 0) return;
+    dispatch({ type: "patch", patch, sources });
+  }
 
   function updateCost<K extends keyof CostDraft>(key: K, raw: string) {
-    const n = Number(String(raw).replace(/[$,\s]/g, ""));
-    const next: CostDraft = {
-      ...costs,
-      [key]: Number.isFinite(n) && n > 0 ? n : 0,
-    };
-    setCosts(next);
-    if (key === "transportation") setTransportationSource("staff_override");
-    if (key === "inspection") setInspectionSource("staff_override");
-    if (baseReport) {
-      // Local recalculation — no paid search / no Google.
-      setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
-    }
-  }
-
-  function setTransportationFromDistance(value: number, source: CostSource) {
-    const next = { ...costs, transportation: value };
-    setCosts(next);
-    setTransportationSource(source);
-    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
-  }
-
-  function setInspectionFromDistance(value: number, source: CostSource) {
-    const next = { ...costs, inspection: value };
-    setCosts(next);
-    setInspectionSource(source);
-    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+    const value = parseStaffCostInput(raw);
+    dispatch({ type: "staff_field", field: key, value });
   }
 
   return (
@@ -187,8 +194,7 @@ export default function MarketComparisonPanel({
         defaultInspectionCost={defaultInspectionCost}
         transportation={costs.transportation}
         inspection={costs.inspection}
-        onTransportationChange={setTransportationFromDistance}
-        onInspectionChange={setInspectionFromDistance}
+        onApplyRouteCostDefaults={applyRouteCostDefaults}
         transportationSource={transportationSource}
         inspectionSource={inspectionSource}
       />
@@ -236,21 +242,34 @@ export default function MarketComparisonPanel({
                 ["otherCosts", "Other costs"],
                 ["desiredGrossMargin", "Desired gross margin"],
               ] as const
-            ).map(([name, label]) => (
-              <label key={name} className="block text-sm">
-                <span className="font-semibold text-neutral-800">{label} (optional)</span>
-                <input
-                  name={name}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={costs[name] || ""}
-                  onChange={(e) => updateCost(name, e.target.value)}
-                  className="mt-1 w-full border border-neutral-300 px-3 py-2"
-                  placeholder="0"
-                />
-              </label>
-            ))}
+            ).map(([name, label]) => {
+              const display =
+                name === "transportation"
+                  ? costInputDisplayValue(name, costs.transportation, transportationSource)
+                  : name === "inspection"
+                    ? costInputDisplayValue(name, costs.inspection, inspectionSource)
+                    : costs[name] || "";
+              return (
+                <label key={name} className="block text-sm">
+                  <span className="font-semibold text-neutral-800">{label} (optional)</span>
+                  <input
+                    name={name}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={display}
+                    onChange={(e) => updateCost(name, e.target.value)}
+                    className="mt-1 w-full border border-neutral-300 px-3 py-2"
+                    placeholder="0"
+                    data-testid={
+                      name === "transportation" || name === "inspection"
+                        ? `cost-input-${name}`
+                        : undefined
+                    }
+                  />
+                </label>
+              );
+            })}
           </div>
           {baseReport ? (
             <p className="text-sm text-neutral-700">
