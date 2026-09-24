@@ -69,6 +69,14 @@ export function parseBuyingProfileForm(formData: FormData): BuyingProfileInput {
     maxPrice: maxPrice != null && Number.isFinite(maxPrice) ? maxPrice : null,
     originLabel: str(formData, "originLabel") || "Joplin, Missouri",
     notes: str(formData, "notes"),
+    transportationRatePerMile: (() => {
+      const n = optionalNumber(formData, "transportationRatePerMile");
+      return n != null && n >= 0 ? n : 2.25;
+    })(),
+    defaultInspectionCost: (() => {
+      const n = optionalNumber(formData, "defaultInspectionCost");
+      return n != null && n >= 0 ? n : 230;
+    })(),
   };
 }
 

@@ -13,6 +13,10 @@ import type {
 } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 import { normalizeSpecEvidence } from "@/lib/sourcing/intake/sources";
+import {
+  normalizeDefaultInspectionCost,
+  normalizeTransportationRatePerMile,
+} from "@/lib/sourcing/market-comparison/cost-defaults";
 
 export interface DbBuyingProfile {
   id: string;
@@ -28,6 +32,9 @@ export interface DbBuyingProfile {
   max_price: number | null;
   origin_label: string;
   notes: string;
+  /** Optional additive columns — absent until SQL applied. */
+  transportation_rate_per_mile?: number | null;
+  default_inspection_cost?: number | null;
   updated_at?: string;
 }
 
@@ -114,6 +121,12 @@ export function rowToBuyingProfile(row: DbBuyingProfile): BuyingProfile {
     maxPrice: row.max_price == null ? null : Number(row.max_price),
     originLabel: row.origin_label || DEFAULT_BUYING_PROFILE.originLabel,
     notes: row.notes ?? "",
+    transportationRatePerMile: normalizeTransportationRatePerMile(
+      row.transportation_rate_per_mile ?? DEFAULT_BUYING_PROFILE.transportationRatePerMile
+    ),
+    defaultInspectionCost: normalizeDefaultInspectionCost(
+      row.default_inspection_cost ?? DEFAULT_BUYING_PROFILE.defaultInspectionCost
+    ),
     updatedAt: row.updated_at,
   };
 }
@@ -132,6 +145,10 @@ export function buyingProfileToRow(input: BuyingProfileInput) {
     max_price: input.maxPrice,
     origin_label: input.originLabel,
     notes: input.notes,
+    transportation_rate_per_mile: normalizeTransportationRatePerMile(
+      input.transportationRatePerMile
+    ),
+    default_inspection_cost: normalizeDefaultInspectionCost(input.defaultInspectionCost),
   };
 }
 

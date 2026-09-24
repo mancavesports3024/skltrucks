@@ -153,6 +153,46 @@ export default function BuyingProfileForm({ profile }: { profile: BuyingProfile 
             className={inputClass}
             defaultValue={profile.preferredMaxDrivingMiles}
           />
+          <p className="mt-1 text-xs text-neutral-500">
+            Classification preference only (straight-line today). Does not call Google Routes.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass} htmlFor="transportationRatePerMile">
+              Transportation rate per mile ($)
+            </label>
+            <input
+              id="transportationRatePerMile"
+              name="transportationRatePerMile"
+              type="number"
+              min={0}
+              step="0.01"
+              className={inputClass}
+              defaultValue={profile.transportationRatePerMile}
+            />
+            <p className="mt-1 text-xs text-neutral-500">
+              Market Comparison default. Transportation = driving miles × this rate. Default $2.25.
+            </p>
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="defaultInspectionCost">
+              Default inspection cost ($)
+            </label>
+            <input
+              id="defaultInspectionCost"
+              name="defaultInspectionCost"
+              type="number"
+              min={0}
+              step="0.01"
+              className={inputClass}
+              defaultValue={profile.defaultInspectionCost}
+            />
+            <p className="mt-1 text-xs text-neutral-500">
+              Prefills Market Comparison Inspection after driving distance is calculated. Default
+              $230.
+            </p>
+          </div>
         </div>
         <div>
           <label className={labelClass} htmlFor="originLabel">

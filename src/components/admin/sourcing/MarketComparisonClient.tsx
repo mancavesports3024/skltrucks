@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { compareMarketAction } from "@/app/admin/sourcing/actions";
 import MarketComparisonPanel from "@/components/admin/sourcing/MarketComparisonPanel";
+import type { DrivingRouteCache } from "@/lib/sourcing/distance/google-routes";
 import type {
   MarketComparisonRecord,
   MarketComparisonReport,
@@ -14,6 +15,11 @@ type Props = {
   missingRequired: string[];
   missingPreferred: string[];
   latest: MarketComparisonRecord | null;
+  drivingRouteCache: DrivingRouteCache | null;
+  straightLineMiles: number | null;
+  distanceIsEstimate: boolean;
+  transportationRatePerMile: number;
+  defaultInspectionCost: number;
 };
 
 export default function MarketComparisonClient(props: Props) {

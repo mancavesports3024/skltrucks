@@ -31,6 +31,13 @@ export interface BuyingProfile {
   maxPrice: number | null;
   originLabel: string;
   notes: string;
+  /**
+   * Market Comparison transportation rate ($/mi). App default 2.25 when missing.
+   * Persisted via optional additive columns (see sourcing-buying-profile-mc-cost-defaults.sql).
+   */
+  transportationRatePerMile: number;
+  /** Market Comparison default inspection cost ($). App default 230 when missing. */
+  defaultInspectionCost: number;
   updatedAt?: string;
 }
 
@@ -47,6 +54,8 @@ export interface BuyingProfileInput {
   maxPrice: number | null;
   originLabel: string;
   notes: string;
+  transportationRatePerMile: number;
+  defaultInspectionCost: number;
 }
 
 export interface MatchReason {
@@ -93,6 +102,11 @@ export interface SpecEvidence {
    * Never describes driving distance. Stored in jsonb — no migration.
    */
   distance?: string;
+  /**
+   * Cached Google Routes city-center driving-distance estimate for Market Comparison.
+   * Does not replace straight-line classification miles. Stored in jsonb — no migration.
+   */
+  drivingRoute?: import("@/lib/sourcing/distance/google-routes/types").DrivingRouteCache | null;
   /**
    * Resolved country label when known (United States / Canada / …).
    * Stored in jsonb — no migration. Used for US-only classification audit.
@@ -207,4 +221,6 @@ export const DEFAULT_BUYING_PROFILE: BuyingProfile = {
   originLabel: "Joplin, Missouri",
   notes:
     "Maximum manufacturer-rated GVWR is 26,000 lb (≤ 26,000 accepted; ≥ 26,001 rejected). Confirm from the door plate when possible. A listing field labeled GVW is not proof of GVWR unless taken from an authorized dealer workbook with retained evidence.",
+  transportationRatePerMile: 2.25,
+  defaultInspectionCost: 230,
 };

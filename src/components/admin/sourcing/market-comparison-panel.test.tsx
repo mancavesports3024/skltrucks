@@ -18,6 +18,22 @@ vi.mock("react-dom", async () => {
   };
 });
 
+vi.mock("@/app/admin/sourcing/actions", () => ({
+  calculateDrivingDistanceAction: vi.fn(async () => ({
+    ok: false,
+    error: "not configured in test",
+  })),
+  compareMarketAction: vi.fn(),
+}));
+
+const distanceProps = {
+  drivingRouteCache: null,
+  straightLineMiles: 140,
+  distanceIsEstimate: true,
+  transportationRatePerMile: 2.25,
+  defaultInspectionCost: 230,
+} as const;
+
 afterEach(() => {
   cleanup();
   useFormStatusMock.mockReset();
@@ -34,6 +50,7 @@ describe("MarketComparisonPanel", () => {
         missingPreferred={[]}
         latest={null}
         action={async () => undefined}
+        {...distanceProps}
       />
     );
     expect(screen.getByText(/Compare market is disabled/i)).toBeInTheDocument();
@@ -41,6 +58,7 @@ describe("MarketComparisonPanel", () => {
     expect(screen.getByText("Mileage")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Compare market/i })).not.toBeInTheDocument();
     expect(screen.getByText(MARKET_COMPARISON_DISCLAIMER)).toBeInTheDocument();
+    expect(screen.getByTestId("calculate-driving-distance")).toBeInTheDocument();
   });
 
   it("shows pending label and aria-busy while comparing", () => {
@@ -53,6 +71,7 @@ describe("MarketComparisonPanel", () => {
         missingPreferred={[]}
         latest={null}
         action={async () => undefined}
+        {...distanceProps}
       />
     );
     const btn = screen.getByRole("button", { name: MARKET_COMPARISON_PENDING_LABEL });
@@ -113,6 +132,7 @@ describe("MarketComparisonPanel", () => {
         latest={null}
         justCompleted={report}
         action={async () => undefined}
+        {...distanceProps}
       />
     );
     expect(screen.getByTestId("assessment-basis")).toHaveTextContent(/Purchase\/wholesale price/i);

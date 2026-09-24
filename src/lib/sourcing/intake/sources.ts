@@ -1,4 +1,5 @@
 import type { SpecEvidence } from "@/types/sourcing";
+import { parseDrivingRouteCache } from "@/lib/sourcing/distance/google-routes/cache";
 
 export const INTAKE_SOURCE_IDS = [
   "penske-used-trucks",
@@ -193,6 +194,7 @@ export function emptySpecEvidence(): SpecEvidence {
     penskeStatus: "",
     titleStatus: "",
     distance: "",
+    drivingRoute: null,
   };
 }
 
@@ -217,6 +219,7 @@ export function normalizeSpecEvidence(raw: unknown): SpecEvidence {
     penskeStatus: String(obj.penskeStatus ?? obj.penske_status ?? "").trim(),
     titleStatus: String(obj.titleStatus ?? obj.title_status ?? "").trim(),
     distance: String(obj.distance ?? obj.distance_evidence ?? "").trim(),
+    drivingRoute: parseDrivingRouteCache(obj.drivingRoute ?? obj.driving_route),
     country: String(obj.country ?? "").trim() || undefined,
   };
 }
