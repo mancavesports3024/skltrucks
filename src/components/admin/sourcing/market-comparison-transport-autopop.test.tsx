@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MarketComparisonPanel from "@/components/admin/sourcing/MarketComparisonPanel";
 import { buildDrivingRouteCache } from "@/lib/sourcing/distance/google-routes/cache";
@@ -29,15 +29,11 @@ const calculateMock = vi.mocked(calculateDrivingDistanceAction);
 const compareMock = vi.mocked(compareMarketAction);
 
 function transportInput(): HTMLInputElement {
-  const label = screen.getByText(/^Transportation \(optional\)$/i).closest("label");
-  expect(label).toBeTruthy();
-  return within(label as HTMLElement).getByRole("spinbutton") as HTMLInputElement;
+  return screen.getByTestId("cost-input-transportation") as HTMLInputElement;
 }
 
 function inspectionInput(): HTMLInputElement {
-  const label = screen.getByText(/^Inspection \(optional\)$/i).closest("label");
-  expect(label).toBeTruthy();
-  return within(label as HTMLElement).getByRole("spinbutton") as HTMLInputElement;
+  return screen.getByTestId("cost-input-inspection") as HTMLInputElement;
 }
 
 function mockRouteCache(milesUnrounded: number) {
@@ -497,6 +493,307 @@ describe("Market Comparison Transportation autopopulate", () => {
     expect(JSON.stringify(cache)).toBe(before);
     expect(cache.distanceMiles).toBeCloseTo(160, 10);
     expect(cache.provider).toBe("google_routes");
+  });
+
+  it("manual Transportation $0 survives Calculate; Reset restores calculated default", async () => {
+    const cache = mockRouteCache(160);
+    calculateMock.mockResolvedValue({
+      ok: true,
+      error: null,
+      message: null,
+      displayMiles: 160,
+      distanceMilesUnrounded: 160,
+      durationSeconds: 7200,
+      transportationDefaultUsd: 360,
+      inspectionDefaultUsd: 230,
+      ratePerMile: 2.25,
+      formula: "160 mi × $2.25/mi = $360.00",
+      methodLabel: "label",
+      confirmNotice: "confirm",
+      usage: {
+        provider: "google_routes",
+        cached: false,
+        requestCount: 1,
+        success: true,
+        failureCategory: null,
+        calculatedAt: cache.calculatedAt,
+      },
+      cache,
+      straightLineMiles: 140,
+    } as never);
+
+    render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={null}
+        {...baseDistanceProps}
+      />
+    );
+
+    fireEvent.change(transportInput(), { target: { value: "0" } });
+    expect(transportInput().value).toBe("0");
+    expect(screen.getByTestId("transportation-source")).toHaveTextContent(/Staff override/);
+    expect(screen.getByTestId("transportation-source")).toHaveTextContent("$0.00");
+
+    fireEvent.click(screen.getByTestId("calculate-driving-distance"));
+    await waitFor(() => {
+      expect(screen.getByTestId("transportation-formula")).toHaveTextContent(/160 mi/);
+    });
+    expect(transportInput().value).toBe("0");
+
+    calculateMock.mockClear();
+    fireEvent.click(screen.getByTestId("reset-transportation"));
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    expect(calculateMock).not.toHaveBeenCalled();
+  });
+
+  it("manual Inspection $0 survives Calculate; Reset restores profile default", async () => {
+    const cache = mockRouteCache(160);
+    calculateMock.mockResolvedValue({
+      ok: true,
+      error: null,
+      message: null,
+      displayMiles: 160,
+      distanceMilesUnrounded: 160,
+      durationSeconds: 7200,
+      transportationDefaultUsd: 360,
+      inspectionDefaultUsd: 230,
+      ratePerMile: 2.25,
+      formula: "160 mi × $2.25/mi = $360.00",
+      methodLabel: "label",
+      confirmNotice: "confirm",
+      usage: {
+        provider: "google_routes",
+        cached: false,
+        requestCount: 1,
+        success: true,
+        failureCategory: null,
+        calculatedAt: cache.calculatedAt,
+      },
+      cache,
+      straightLineMiles: 140,
+    } as never);
+
+    render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={null}
+        {...baseDistanceProps}
+      />
+    );
+
+    await waitFor(() => expect(inspectionInput().value).toBe("230"));
+    fireEvent.change(inspectionInput(), { target: { value: "0" } });
+    expect(inspectionInput().value).toBe("0");
+    expect(screen.getByTestId("inspection-source")).toHaveTextContent(/Staff override/);
+
+    fireEvent.click(screen.getByTestId("calculate-driving-distance"));
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    expect(inspectionInput().value).toBe("0");
+
+    fireEvent.click(screen.getByTestId("reset-inspection"));
+    await waitFor(() => expect(inspectionInput().value).toBe("230"));
+  });
+
+  it("cached route rate change recalculates google_calculated Transportation locally", async () => {
+    const cache = mockRouteCache(160);
+    const { rerender } = render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+        transportationRatePerMile={2.25}
+      />
+    );
+
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    expect(screen.getByTestId("transportation-formula")).toHaveTextContent(
+      "160 mi × $2.25/mi = $360.00"
+    );
+    calculateMock.mockClear();
+    compareMock.mockClear();
+
+    rerender(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+        transportationRatePerMile={3}
+      />
+    );
+
+    await waitFor(() => expect(transportInput().value).toBe("480"));
+    expect(screen.getByTestId("transportation-formula")).toHaveTextContent(
+      "160 mi × $3.00/mi = $480.00"
+    );
+    expect(screen.getByTestId("transportation-source")).toHaveTextContent(/Google-calculated/);
+    expect(calculateMock).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
+  });
+
+  it("rate change preserves Transportation staff_override", async () => {
+    const cache = mockRouteCache(160);
+    const { rerender } = render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+        transportationRatePerMile={2.25}
+      />
+    );
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    fireEvent.change(transportInput(), { target: { value: "500" } });
+
+    rerender(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+        transportationRatePerMile={3}
+      />
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("transportation-formula")).toHaveTextContent(/\$3\.00/);
+    });
+    expect(transportInput().value).toBe("500");
+    expect(calculateMock).not.toHaveBeenCalled();
+  });
+
+  it("previous report with zero costs does not wipe cached Google Transportation", async () => {
+    const report = await buildSampleReport();
+    const cache = mockRouteCache(160);
+    render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={{
+          id: "mc-1",
+          leadId: "lead-1",
+          createdAt: report.comparedAt,
+          report,
+        } as never}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+      />
+    );
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    await waitFor(() => expect(inspectionInput().value).toBe("230"));
+  });
+
+  it("previous report with saved costs seeds those amounts", async () => {
+    const report = await buildSampleReport();
+    const withCosts = {
+      ...report,
+      landedCost: {
+        ...report.landedCost!,
+        inputs: {
+          transportation: 400,
+          inspection: 250,
+          repairs: 0,
+          fees: 0,
+          otherCosts: 0,
+          desiredGrossMargin: 0,
+        },
+      },
+    };
+    // Recalculate so report is consistent
+    const { recalculateReportWithLandedCosts } = await import(
+      "@/lib/sourcing/market-comparison/build-report"
+    );
+    const saved = recalculateReportWithLandedCosts(report, withCosts.landedCost!.inputs);
+
+    render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={{
+          id: "mc-2",
+          leadId: "lead-1",
+          createdAt: saved.comparedAt,
+          report: saved,
+        } as never}
+        action={async () => undefined}
+        drivingRouteCache={null}
+        {...baseDistanceProps}
+      />
+    );
+    await waitFor(() => expect(transportInput().value).toBe("400"));
+    expect(inspectionInput().value).toBe("250");
+  });
+
+  it("just-completed zero-cost report does not clobber google-populated Transportation", async () => {
+    const report = await buildSampleReport();
+    const cache = mockRouteCache(160);
+    render(
+      <MarketComparisonPanel
+        leadId="lead-1"
+        eligible
+        missingRequired={[]}
+        missingPreferred={[]}
+        latest={null}
+        justCompleted={report}
+        action={async () => undefined}
+        drivingRouteCache={cache}
+        {...baseDistanceProps}
+      />
+    );
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+  });
+
+  it("Strict Mode double-mount still populates from cache once", async () => {
+    const cache = mockRouteCache(160);
+    render(
+      <React.StrictMode>
+        <MarketComparisonPanel
+          leadId="lead-1"
+          eligible
+          missingRequired={[]}
+          missingPreferred={[]}
+          latest={null}
+          action={async () => undefined}
+          drivingRouteCache={cache}
+          {...baseDistanceProps}
+        />
+      </React.StrictMode>
+    );
+    await waitFor(() => expect(transportInput().value).toBe("360"));
+    expect(inspectionInput().value).toBe("230");
+    expect(calculateMock).not.toHaveBeenCalled();
   });
 });
 

@@ -1,16 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useReducer, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import DrivingDistanceControls, {
   type CostSource,
+  type RouteCostDefaultsUpdate,
 } from "@/components/admin/sourcing/DrivingDistanceControls";
+import {
+  costDraftReducer,
+  costInputDisplayValue,
+  initialCostDraftState,
+  parseStaffCostInput,
+  type CostDraft,
+} from "@/components/admin/sourcing/cost-draft";
 import type { DrivingRouteCache } from "@/lib/sourcing/distance/google-routes";
 import { recalculateReportWithLandedCosts } from "@/lib/sourcing/market-comparison/build-report";
-import {
-  EMPTY_LANDED_COST_INPUT,
-  hasExpenseInputs,
-} from "@/lib/sourcing/market-comparison/landed-cost";
+import { hasExpenseInputs } from "@/lib/sourcing/market-comparison/landed-cost";
 import {
   MARKET_COMPARISON_CONFIRM_FIELD,
   MARKET_COMPARISON_CONFIRM_VALUE,
@@ -19,7 +24,6 @@ import {
   MARKET_COMPARISON_PENDING_LABEL,
   MARKET_COMPARISON_TYPICAL_COST_USD_MAX,
   MARKET_COMPARISON_TYPICAL_COST_USD_MIN,
-  type LandedCostInput,
   type MarketComparisonRecord,
   type MarketComparisonReport,
 } from "@/lib/sourcing/market-comparison/types";
@@ -73,8 +77,6 @@ function ComparePendingStatus() {
   );
 }
 
-type CostDraft = LandedCostInput;
-
 type Props = {
   leadId: string;
   eligible: boolean;
@@ -107,95 +109,39 @@ export default function MarketComparisonPanel({
   defaultInspectionCost,
 }: Props) {
   const baseReport = justCompleted || latest?.report || null;
-  const [costs, setCosts] = useState<CostDraft>(() => {
-    const seeded = latest?.report?.landedCost?.inputs;
-    return seeded && hasExpenseInputs(seeded) ? { ...EMPTY_LANDED_COST_INPUT, ...seeded } : EMPTY_LANDED_COST_INPUT;
-  });
-  const [displayReport, setDisplayReport] = useState<MarketComparisonReport | null>(baseReport);
-  const [transportationSource, setTransportationSource] = useState<CostSource>(() =>
-    (latest?.report?.landedCost?.inputs?.transportation ?? 0) > 0 ? "staff_override" : "profile_default"
-  );
-  const [inspectionSource, setInspectionSource] = useState<CostSource>(() =>
-    (latest?.report?.landedCost?.inputs?.inspection ?? 0) > 0 ? "staff_override" : "profile_default"
-  );
 
-  // Keep report view in sync with the latest comparison payload — do not clobber
-  // locally auto-populated Transportation/Inspection with stale zero inputs.
-  useEffect(() => {
-    setDisplayReport((prev) => {
-      if (!baseReport) return prev;
-      if (hasExpenseInputs(costs)) {
-        return recalculateReportWithLandedCosts(baseReport, costs);
-      }
-      return baseReport;
-    });
-    // Intentionally depends on baseReport only: cost-driven recalcs happen in applyCostPatch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseReport]);
+  const [draft, dispatch] = useReducer(
+    costDraftReducer,
+    latest?.report?.landedCost?.inputs,
+    (inputs) => initialCostDraftState(inputs)
+  );
+  const { costs, transportationSource, inspectionSource } = draft;
 
-  // Adopt inputs only when a NEW comparison completes (form-submitted costs).
-  // Do not wipe Transportation/Inspection that were auto-populated from Google/profile
-  // when the completed report still has zeros for those fields.
+  // Derive display report — never call setState inside another updater.
+  // Local only: zero Google / OpenAI / Tavily calls.
+  const displayReport = useMemo(() => {
+    if (!baseReport) return null;
+    if (hasExpenseInputs(costs)) {
+      return recalculateReportWithLandedCosts(baseReport, costs);
+    }
+    return baseReport;
+  }, [baseReport, costs]);
+
+  // Adopt a newly completed comparison once. Pure reducer — no nested setters.
+  const lastJustCompletedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!justCompleted?.landedCost?.inputs) return;
-    const inputs = justCompleted.landedCost.inputs;
-    setCosts((prev) => {
-      const next = {
-        ...EMPTY_LANDED_COST_INPUT,
-        ...inputs,
-        transportation: inputs.transportation > 0 ? inputs.transportation : prev.transportation,
-        inspection: inputs.inspection > 0 ? inputs.inspection : prev.inspection,
-      };
-      setDisplayReport(
-        hasExpenseInputs(next)
-          ? recalculateReportWithLandedCosts(justCompleted, next)
-          : justCompleted
-      );
-      return next;
+    const key = justCompleted.comparedAt;
+    if (lastJustCompletedRef.current === key) return;
+    lastJustCompletedRef.current = key;
+    dispatch({
+      type: "adopt_just_completed",
+      comparedAt: key,
+      inputs: justCompleted.landedCost.inputs,
     });
-    if (inputs.transportation > 0) setTransportationSource("staff_override");
-    if (inputs.inspection > 0) setInspectionSource("staff_override");
   }, [justCompleted]);
 
-  /**
-   * Single atomic cost write so Transportation + Inspection updates cannot
-   * clobber each other via stale React state closures.
-   */
-  function applyCostPatch(
-    patch: Partial<CostDraft>,
-    sources?: Partial<{ transportation: CostSource; inspection: CostSource }>
-  ) {
-    setCosts((prev) => {
-      const next: CostDraft = { ...prev, ...patch };
-      if (baseReport) {
-        // Local recalculation — no paid search / no Google / no Tavily.
-        setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
-      }
-      return next;
-    });
-    if (sources?.transportation) setTransportationSource(sources.transportation);
-    if (sources?.inspection) setInspectionSource(sources.inspection);
-  }
-
-  function updateCost<K extends keyof CostDraft>(key: K, raw: string) {
-    const n = Number(String(raw).replace(/[$,\s]/g, ""));
-    const value = Number.isFinite(n) && n > 0 ? n : 0;
-    applyCostPatch(
-      { [key]: value } as Partial<CostDraft>,
-      key === "transportation"
-        ? { transportation: "staff_override" }
-        : key === "inspection"
-          ? { inspection: "staff_override" }
-          : undefined
-    );
-  }
-
-  function applyRouteCostDefaults(update: {
-    transportationUsd: number | null;
-    inspectionUsd: number | null;
-    transportationSource?: CostSource;
-    inspectionSource?: CostSource;
-  }) {
+  function applyRouteCostDefaults(update: RouteCostDefaultsUpdate) {
     const patch: Partial<CostDraft> = {};
     const sources: Partial<{ transportation: CostSource; inspection: CostSource }> = {};
     if (update.transportationUsd != null && Number.isFinite(update.transportationUsd)) {
@@ -207,7 +153,12 @@ export default function MarketComparisonPanel({
       if (update.inspectionSource) sources.inspection = update.inspectionSource;
     }
     if (Object.keys(patch).length === 0) return;
-    applyCostPatch(patch, sources);
+    dispatch({ type: "patch", patch, sources });
+  }
+
+  function updateCost<K extends keyof CostDraft>(key: K, raw: string) {
+    const value = parseStaffCostInput(raw);
+    dispatch({ type: "staff_field", field: key, value });
   }
 
   return (
@@ -291,21 +242,34 @@ export default function MarketComparisonPanel({
                 ["otherCosts", "Other costs"],
                 ["desiredGrossMargin", "Desired gross margin"],
               ] as const
-            ).map(([name, label]) => (
-              <label key={name} className="block text-sm">
-                <span className="font-semibold text-neutral-800">{label} (optional)</span>
-                <input
-                  name={name}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={costs[name] || ""}
-                  onChange={(e) => updateCost(name, e.target.value)}
-                  className="mt-1 w-full border border-neutral-300 px-3 py-2"
-                  placeholder="0"
-                />
-              </label>
-            ))}
+            ).map(([name, label]) => {
+              const display =
+                name === "transportation"
+                  ? costInputDisplayValue(name, costs.transportation, transportationSource)
+                  : name === "inspection"
+                    ? costInputDisplayValue(name, costs.inspection, inspectionSource)
+                    : costs[name] || "";
+              return (
+                <label key={name} className="block text-sm">
+                  <span className="font-semibold text-neutral-800">{label} (optional)</span>
+                  <input
+                    name={name}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={display}
+                    onChange={(e) => updateCost(name, e.target.value)}
+                    className="mt-1 w-full border border-neutral-300 px-3 py-2"
+                    placeholder="0"
+                    data-testid={
+                      name === "transportation" || name === "inspection"
+                        ? `cost-input-${name}`
+                        : undefined
+                    }
+                  />
+                </label>
+              );
+            })}
           </div>
           {baseReport ? (
             <p className="text-sm text-neutral-700">

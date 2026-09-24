@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { calculateDrivingDistanceAction } from "@/app/admin/sourcing/actions";
+import { buildRouteCostDefaultsUpdate } from "@/components/admin/sourcing/route-cost-defaults";
 import {
   CITY_CENTER_CONFIRM_NOTICE,
   CITY_CENTER_DRIVING_LABEL,
@@ -40,15 +41,11 @@ type Props = {
   defaultInspectionCost: number;
   transportation: number;
   inspection: number;
-  /** Atomic parent update — must apply Transportation + Inspection in one setState. */
+  /** Atomic parent update — must apply Transportation + Inspection in one dispatch. */
   onApplyRouteCostDefaults: (update: RouteCostDefaultsUpdate) => void;
   transportationSource: CostSource;
   inspectionSource: CostSource;
 };
-
-function isBlankCost(value: number): boolean {
-  return !Number.isFinite(value) || value <= 0;
-}
 
 export default function DrivingDistanceControls({
   leadId,
@@ -77,7 +74,6 @@ export default function DrivingDistanceControls({
   const [milesOverride, setMilesOverride] = useState<string>("");
   const submittedRef = useRef(false);
   const appliedCacheKeyRef = useRef<string | null>(null);
-  const didSeedInspectionRef = useRef(false);
   const onApplyRef = useRef(onApplyRouteCostDefaults);
   onApplyRef.current = onApplyRouteCostDefaults;
   const transportationRef = useRef(transportation);
@@ -89,63 +85,30 @@ export default function DrivingDistanceControls({
   transportationSourceRef.current = transportationSource;
   inspectionSourceRef.current = inspectionSource;
 
-  /**
-   * Decide which cost fields to write.
-   * - Staff overrides are never silently overwritten.
-   * - Blank / profile_default / prior google_calculated values may be filled or refreshed.
-   */
-  function buildDefaultsUpdate(
+  function currentDefaultsInput(
     milesUnrounded: number,
-    opts: { refreshGoogleCalculated: boolean }
-  ): RouteCostDefaultsUpdate {
-    const transportUsd = calculateTransportationUsd(milesUnrounded, rate);
-    const update: RouteCostDefaultsUpdate = {
-      transportationUsd: null,
-      inspectionUsd: null,
-    };
-
-    const tSource = transportationSourceRef.current;
-    const tValue = transportationRef.current;
-    if (tSource === "staff_override" && !isBlankCost(tValue)) {
-      // Preserve manual Transportation.
-    } else if (
-      isBlankCost(tValue) ||
-      tSource === "profile_default" ||
-      (opts.refreshGoogleCalculated && tSource === "google_calculated")
-    ) {
-      update.transportationUsd = transportUsd;
-      update.transportationSource = "google_calculated";
-    }
-
-    const iSource = inspectionSourceRef.current;
-    const iValue = inspectionRef.current;
-    if (iSource === "staff_override" && !isBlankCost(iValue)) {
-      // Preserve manual Inspection.
-    } else if (isBlankCost(iValue) || iSource === "profile_default") {
-      update.inspectionUsd = inspectionDefault;
-      update.inspectionSource = "profile_default";
-    }
-
-    return update;
+    mode: Parameters<typeof buildRouteCostDefaultsUpdate>[0]["mode"]
+  ) {
+    return buildRouteCostDefaultsUpdate({
+      milesUnrounded,
+      ratePerMile: rate,
+      inspectionDefaultUsd: inspectionDefault,
+      transportation: transportationRef.current,
+      inspection: inspectionRef.current,
+      transportationSource: transportationSourceRef.current,
+      inspectionSource: inspectionSourceRef.current,
+      mode,
+    });
   }
 
-  // Seed Inspection from the saved Buying Profile when the field is still blank.
+  // Seed / refresh Inspection from Buying Profile when not a staff override (incl. $0 override).
   useEffect(() => {
-    if (didSeedInspectionRef.current) return;
-    didSeedInspectionRef.current = true;
-    if (
-      inspectionSourceRef.current !== "staff_override" &&
-      isBlankCost(inspectionRef.current)
-    ) {
-      onApplyRef.current({
-        transportationUsd: null,
-        inspectionUsd: inspectionDefault,
-        inspectionSource: "profile_default",
-      });
-    }
+    onApplyRef.current(currentDefaultsInput(0, "seed_inspection_only"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectionDefault]);
 
-  // Load / refresh cached Google route into miles + blank Transportation (0 Google calls).
+  // Load cached route + refresh google_calculated / profile_default when rate or
+  // inspection profile default changes. Zero Google calls.
   useEffect(() => {
     setCache(initialCache);
     setDisplayMiles(
@@ -160,10 +123,8 @@ export default function DrivingDistanceControls({
     appliedCacheKeyRef.current = key;
     setStatus(DRIVING_DISTANCE_CACHED_LABEL);
     setMilesOverride("");
-    onApplyRef.current(
-      buildDefaultsUpdate(initialCache.distanceMiles, { refreshGoogleCalculated: false })
-    );
-    // buildDefaultsUpdate reads refs + rate/inspectionDefault from closure
+    onApplyRef.current(currentDefaultsInput(initialCache.distanceMiles, "cache_or_rate_change"));
+    // currentDefaultsInput reads latest refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCache, rate, inspectionDefault]);
 
@@ -200,11 +161,9 @@ export default function DrivingDistanceControls({
         setDisplayMiles(result.displayMiles);
         setMilesOverride("");
         setStatus(result.message || CITY_CENTER_DRIVING_LABEL);
-        appliedCacheKeyRef.current = `${result.cache.calculatedAt}|${result.cache.distanceMiles}|${result.cache.destLat}|${result.cache.destLng}`;
+        appliedCacheKeyRef.current = `${result.cache.calculatedAt}|${result.cache.distanceMiles}|${result.cache.destLat}|${result.cache.destLng}|${rate}|${inspectionDefault}`;
         onApplyRef.current(
-          buildDefaultsUpdate(result.distanceMilesUnrounded, {
-            refreshGoogleCalculated: true,
-          })
+          currentDefaultsInput(result.distanceMilesUnrounded, "calculate_success")
         );
       } finally {
         submittedRef.current = false;
@@ -213,16 +172,14 @@ export default function DrivingDistanceControls({
   }
 
   function resetTransportation() {
-    if (calculatedTransport == null) return;
-    // Local only — uses cached/override miles × current profile rate. Zero provider calls.
-    onApplyRef.current({
-      transportationUsd: calculatedTransport,
-      inspectionUsd: null,
-      transportationSource: "google_calculated",
-    });
+    if (effectiveMilesUnrounded == null) return;
+    // Local only — cached/override miles × current profile rate. Zero provider calls.
+    // This is the only action that replaces a Transportation staff override.
+    onApplyRef.current(currentDefaultsInput(effectiveMilesUnrounded, "force_reset_transport"));
   }
 
   function resetInspection() {
+    // Only action that replaces an Inspection staff override (including $0).
     onApplyRef.current({
       transportationUsd: null,
       inspectionUsd: inspectionDefault,
@@ -238,6 +195,15 @@ export default function DrivingDistanceControls({
           calculatedTransport
         )
       : null;
+
+  const showTransportAmount =
+    transportationSource === "staff_override" ||
+    transportationSource === "google_calculated" ||
+    transportation > 0;
+  const showInspectionAmount =
+    inspectionSource === "staff_override" ||
+    inspectionSource === "google_calculated" ||
+    inspection > 0;
 
   return (
     <div
@@ -325,6 +291,11 @@ export default function DrivingDistanceControls({
         </p>
       ) : null}
 
+      <p className="text-xs text-neutral-500" data-testid="cost-clear-behavior">
+        Clearing Transportation or Inspection (or typing 0) sets an explicit $0 staff override. Use
+        Reset to restore the calculated/profile default.
+      </p>
+
       <div className="flex flex-wrap gap-3 text-xs text-neutral-600">
         <span data-testid="transportation-source">
           Transportation source:{" "}
@@ -333,7 +304,7 @@ export default function DrivingDistanceControls({
             : transportationSource === "profile_default"
               ? "Profile default"
               : "Staff override"}
-          {transportation > 0 ? ` ($${transportation.toFixed(2)})` : ""}
+          {showTransportAmount ? ` ($${transportation.toFixed(2)})` : ""}
         </span>
         <span data-testid="inspection-source">
           Inspection source:{" "}
@@ -342,7 +313,7 @@ export default function DrivingDistanceControls({
             : inspectionSource === "google_calculated"
               ? "Google-calculated"
               : "Staff override"}
-          {inspection > 0 ? ` ($${inspection.toFixed(2)})` : ""}
+          {showInspectionAmount ? ` ($${inspection.toFixed(2)})` : ""}
         </span>
         {calculatedTransport != null && transportationSource === "staff_override" ? (
           <button
