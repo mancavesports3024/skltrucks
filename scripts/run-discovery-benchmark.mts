@@ -6,15 +6,14 @@
  * Live / compare require BOTH:
  *   --confirm-live
  *   --i-authorize-live-provider-calls
- * and will still STOP at preflight unless those flags are present.
  *
- * Never prints API key values. Never inserts leads/contacts.
+ * Never prints API key values, unsafe raw URLs, or credential-like query strings.
+ * Never inserts leads/contacts.
  *
  * Examples:
  *   npx tsx scripts/run-discovery-benchmark.mts
  *   npx tsx --env-file=.env.local scripts/run-discovery-benchmark.mts --preflight
  *   npx tsx --env-file=.env.local scripts/run-discovery-benchmark.mts --mode=live_tavily --confirm-live --i-authorize-live-provider-calls
- *   npx tsx --env-file=.env.local scripts/run-discovery-benchmark.mts --mode=compare --confirm-live --i-authorize-live-provider-calls
  */
 import Module from "node:module";
 
@@ -51,6 +50,7 @@ async function main() {
     createTavilyBasicSearchClient,
     runDiscoveryBenchmark,
     DEFAULT_DISCOVERY_BENCHMARK_CEILINGS,
+    DISCOVERY_BENCHMARK_SUCCESS_THRESHOLD,
   } = await import("../src/lib/sourcing/search/discovery-benchmark/index.ts");
   const { createTavilyClient, getTavilyApiKey } = await import(
     "../src/lib/sourcing/search/providers/tavily.ts"
@@ -93,16 +93,14 @@ async function main() {
         tavilyExtract: preflight.tavilyExtract,
         estimatedMaxCostUsd: preflight.estimatedMaxCostUsd,
         queryIds: preflight.queryIds,
+        queries: preflight.queries,
+        successThreshold: DISCOVERY_BENCHMARK_SUCCESS_THRESHOLD,
         ceilings,
       },
       null,
       2
     )
   );
-
-  if (preflightOnly && !wantLive) {
-    // Mock can still run after preflight when not --preflight-only with live
-  }
 
   if (preflightOnly && wantLive) {
     console.log(
@@ -121,14 +119,15 @@ async function main() {
     console.log("OpenAI will be called:", preflight.openaiWillBeCalled);
     console.log("DB writes disabled:", true);
     console.log("Estimated maximum cost (USD):", preflight.estimatedMaxCostUsd);
+    console.log("\nQueries that would run:");
+    for (const q of preflight.queries) {
+      console.log(`  [${q.id}] ${q.query}`);
+    }
     console.log(
       "\nNo live Tavily/OpenAI call was made. To authorize a single controlled run after explicit approval:"
     );
     console.log(
       "  npx tsx --env-file=.env.local scripts/run-discovery-benchmark.mts --mode=live_tavily --confirm-live --i-authorize-live-provider-calls"
-    );
-    console.log(
-      "  npx tsx --env-file=.env.local scripts/run-discovery-benchmark.mts --mode=compare --confirm-live --i-authorize-live-provider-calls"
     );
     process.exit(0);
   }
@@ -164,7 +163,6 @@ async function main() {
     process.exit(0);
   }
 
-  // compare: Tavily discovery + existing OpenAI discovery (one controlled run each)
   if (!tavilyKeyPresent || !openAiKeyPresent) {
     console.error("compare requires both TAVILY_API_KEY and OPENAI_API_KEY — aborting.");
     process.exit(2);
@@ -208,27 +206,43 @@ function printReport(report: {
   tavily: null | {
     provider: string;
     queriesRun: number;
-    totalResultUrls: number;
-    uniqueUrls: number;
+    metrics: {
+      rawResultUrls: number;
+      uniqueCanonicalUrlsAllBuckets: number;
+      uniqueIndividualUrls: number;
+      uniqueLikelyUrls: number;
+      uniqueHubUrls: number;
+      uniqueUnsafeUrls: number;
+      retainedUrls: number;
+      duplicateRawHits: number;
+      retentionCapDrops: number;
+    };
     byBucket: Record<string, number>;
-    duplicateRawHits: number;
     domains: string[];
     creditsOrToolCalls: number;
     estimatedCostUsd: number;
-    retained: Array<{ canonicalUrl: string; bucket: string; provenance: unknown[] }>;
-    rejectedUnsafe: unknown[];
+    retained: Array<{
+      canonicalUrl: string;
+      bucket: string;
+      title?: string;
+      provenance: Array<{
+        queryId: string;
+        query: string;
+        title?: string;
+      }>;
+    }>;
+    rejectedUnsafeCount: number;
   };
   openai: null | {
     provider: string;
     queriesRun: number;
-    totalResultUrls: number;
-    uniqueUrls: number;
+    metrics: Record<string, number>;
     byBucket: Record<string, number>;
-    duplicateRawHits: number;
     domains: string[];
     creditsOrToolCalls: number;
     estimatedCostUsd: number;
     retained: Array<{ canonicalUrl: string; bucket: string }>;
+    rejectedUnsafeCount: number;
   };
   comparison: unknown;
   notes: string[];
@@ -247,31 +261,34 @@ function printReport(report: {
         tavily: t
           ? {
               queriesRun: t.queriesRun,
-              totalResultUrls: t.totalResultUrls,
-              uniqueUrls: t.uniqueUrls,
-              byBucket: t.byBucket,
-              duplicateRawHits: t.duplicateRawHits,
+              metrics: t.metrics,
+              byBucketRawHits: t.byBucket,
               domains: t.domains,
               creditsOrToolCalls: t.creditsOrToolCalls,
               estimatedCostUsd: t.estimatedCostUsd,
-              retainedListingUrls: t.retained.map((r) => ({
-                url: r.canonicalUrl,
+              rejectedUnsafeCount: t.rejectedUnsafeCount,
+              retained: t.retained.map((r) => ({
+                canonicalUrl: r.canonicalUrl,
                 bucket: r.bucket,
-                provenanceCount: r.provenance.length,
+                title: r.title ?? null,
+                provenance: r.provenance.map((p) => ({
+                  queryId: p.queryId,
+                  query: p.query,
+                  title: p.title ?? null,
+                })),
               })),
-              rejectedUnsafeCount: t.rejectedUnsafe.length,
             }
           : null,
         openai: report.openai
           ? {
               queriesRun: report.openai.queriesRun,
-              totalResultUrls: report.openai.totalResultUrls,
-              uniqueUrls: report.openai.uniqueUrls,
-              byBucket: report.openai.byBucket,
+              metrics: report.openai.metrics,
+              byBucketRawHits: report.openai.byBucket,
               domains: report.openai.domains,
               creditsOrToolCalls: report.openai.creditsOrToolCalls,
               estimatedCostUsd: report.openai.estimatedCostUsd,
-              retainedListingUrls: report.openai.retained.map((r) => r.canonicalUrl),
+              retainedCanonicalUrls: report.openai.retained.map((r) => r.canonicalUrl),
+              rejectedUnsafeCount: report.openai.rejectedUnsafeCount,
             }
           : null,
         comparison: report.comparison,

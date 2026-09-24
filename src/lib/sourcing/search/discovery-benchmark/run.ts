@@ -10,6 +10,7 @@ import type {
   DiscoveryProviderStats,
   DiscoverySearchClient,
   DiscoverySearchHit,
+  DiscoveryUrlMetrics,
   RetainedDiscoveryUrl,
 } from "@/lib/sourcing/search/discovery-benchmark/types";
 import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery-benchmark/types";
@@ -17,7 +18,7 @@ import { estimateTavilyCostUsd } from "@/lib/sourcing/search/types";
 import type { BuyingProfile } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 
-/** Social / non-dealer hosts already excluded by the production Tavily pilot. */
+/** Social / non-dealer / high-noise hosts excluded from Tavily discovery requests. */
 const DEFAULT_EXCLUDE_DOMAINS = [
   "youtube.com",
   "youtu.be",
@@ -29,6 +30,10 @@ const DEFAULT_EXCLUDE_DOMAINS = [
   "x.com",
   "c-span.org",
   "wikipedia.org",
+  // Live run 1 noise / category-heavy surfaces
+  "ebay.com",
+  "soarr.com",
+  "cummins.com",
 ] as const;
 
 const EMPTY_BUCKETS = (): DiscoveryProviderStats["byBucket"] => ({
@@ -38,8 +43,45 @@ const EMPTY_BUCKETS = (): DiscoveryProviderStats["byBucket"] => ({
   unsupported_or_unsafe: 0,
 });
 
-function usableListingCount(stats: DiscoveryProviderStats): number {
-  return stats.byBucket.individual_listing + stats.byBucket.likely_listing_needs_inspection;
+function emptyUniqueBucketSets() {
+  return {
+    individual_listing: new Set<string>(),
+    likely_listing_needs_inspection: new Set<string>(),
+    hub_or_category: new Set<string>(),
+    unsupported_or_unsafe: new Set<string>(),
+  };
+}
+
+function usableRetainedCount(stats: DiscoveryProviderStats): number {
+  return stats.retained.filter(
+    (r) =>
+      r.bucket === "individual_listing" ||
+      r.bucket === "likely_listing_needs_inspection"
+  ).length;
+}
+
+function buildMetrics(args: {
+  rawResultUrls: number;
+  uniqueByBucket: ReturnType<typeof emptyUniqueBucketSets>;
+  retainedUrls: number;
+  duplicateRawHits: number;
+  retentionCapDrops: number;
+}): DiscoveryUrlMetrics {
+  const all = new Set<string>();
+  for (const set of Object.values(args.uniqueByBucket)) {
+    for (const u of set) if (u) all.add(u);
+  }
+  return {
+    rawResultUrls: args.rawResultUrls,
+    uniqueCanonicalUrlsAllBuckets: all.size,
+    uniqueIndividualUrls: args.uniqueByBucket.individual_listing.size,
+    uniqueLikelyUrls: args.uniqueByBucket.likely_listing_needs_inspection.size,
+    uniqueHubUrls: args.uniqueByBucket.hub_or_category.size,
+    uniqueUnsafeUrls: args.uniqueByBucket.unsupported_or_unsafe.size,
+    retainedUrls: args.retainedUrls,
+    duplicateRawHits: args.duplicateRawHits,
+    retentionCapDrops: args.retentionCapDrops,
+  };
 }
 
 /**
@@ -51,7 +93,10 @@ export function createTavilyBasicSearchClient(args: {
   search: (
     query: string,
     options?: Record<string, unknown>
-  ) => Promise<{ results?: Array<{ url?: string; title?: string; content?: string }>; usage?: { credits?: number } }>;
+  ) => Promise<{
+    results?: Array<{ url?: string; title?: string; content?: string }>;
+    usage?: { credits?: number };
+  }>;
 }): DiscoverySearchClient {
   return {
     async search(query, options) {
@@ -83,7 +128,8 @@ export function createTavilyBasicSearchClient(args: {
 }
 
 /**
- * Mock Tavily-like client: deterministic URLs per query id keyword.
+ * Mock Tavily-like client: deterministic URLs per unit-oriented query keywords.
+ * Includes first-run hub false positives to prove they no longer fill retention.
  * Zero network. Safe for CI.
  */
 export function createMockDiscoverySearchClient(): DiscoverySearchClient {
@@ -92,51 +138,74 @@ export function createMockDiscoverySearchClient(): DiscoverySearchClient {
       const max = options?.maxResults ?? 10;
       const q = query.toLowerCase();
       const hits: DiscoverySearchHit[] = [];
-      if (q.includes("freightliner")) {
+
+      // Proven unit VDPs for VIN/stock-oriented queries
+      if (q.includes("freightliner") && (q.includes("vin") || q.includes("stock"))) {
         hits.push({
           url: "https://www.debarytrucksales.com/inventory/used-2019-freightliner-m2-106-box-9001",
           title: "2019 Freightliner M2 box",
         });
         hits.push({
-          url: "https://www.commercialtrucktrader.com/trucks-for-sale",
-          title: "Hub",
+          url: "https://www.penskeusedtrucks.com/truck-types/light-and-medium-duty/medium-duty-box-trucks/unit-228474",
+          title: "Penske unit",
         });
       }
-      if (q.includes("international")) {
+      if (q.includes("international") && (q.includes("vin") || q.includes("stock"))) {
         hits.push({
           url: "https://www.mylittlesalesman.com/inventory/used-2020-international-mv-26ft-8002",
           title: "2020 International MV",
         });
       }
-      if (q.includes("kenworth")) {
+      if (q.includes("kenworth") && q.includes("stock")) {
         hits.push({
-          url: "https://www.example-dealer.com/inventory/used-2018-kenworth-t270-box-7003",
-          title: "2018 Kenworth T270",
+          url: "https://www.stapletonmotors.com/inventory/2019-kenworth-t270-/917966",
+          title: "2019 Kenworth T270",
         });
       }
-      if (q.includes("26 foot") || q.includes("26'")) {
+      if (q.includes("26 foot") || q.includes("stock number")) {
         hits.push({
           url: "https://www.debarytrucksales.com/inventory/used-2021-freightliner-m2-26ft-9004",
           title: "26ft box",
         });
       }
-      if (q.includes("missouri") || q.includes("kansas")) {
+      if (q.includes("cummins") && q.includes("allison") && q.includes("vin")) {
         hits.push({
-          url: "https://www.truckandvanoutlet.com/inventory/used-2019-freightliner-box-missouri-5001",
-          title: "Regional listing",
+          url: "https://www.example-dealer.com/inventory/used-2018-kenworth-t270-box-7003",
+          title: "Cummins Allison unit",
         });
       }
-      // Unsafe / session-shaped — must be rejected by classifier
+
+      // First-run hub shapes — must classify as hub and not fill retention
+      hits.push({
+        url: "https://www.freightlinerfl.com/delivery-moving-straight-box-trucks-for-sale-i2c44f0m0",
+        title: "DealerCenter category",
+      });
+      hits.push({
+        url: "https://www.soarr.com/for-sale/trucks/10/freightliner/m2/box-trucks-for-sale",
+        title: "SOARR hub",
+      });
+      hits.push({
+        url: "https://www.ebay.com/b/box-trucks-cube-vans/80762/bn_16581769",
+        title: "eBay browse",
+      });
+      hits.push({
+        url: "https://www.commercialtrucktrader.com/trucks-for-sale",
+        title: "CTT hub",
+      });
+
+      // Unsafe / session-shaped — rejected; never printed as raw in CLI
       hits.push({
         url: "https://evil.example/listing?session=abc&token=secret",
         title: "unsafe",
       });
       hits.push({
-        url: "https://user:pass@dealer.example/inventory/unit-1",
+        url: "https://user:pass@dealer.example/inventory/unit-9001",
         title: "userinfo",
       });
-      // Dedup pressure
+
+      // Dedup pressure on first good hit
       if (hits[0]) hits.push({ ...hits[0], title: "dup" });
+
       return { results: hits.slice(0, max), creditsCharged: 1 };
     },
   };
@@ -149,7 +218,11 @@ export type RunDiscoveryBenchmarkInput = {
   /** Injected client for mock/tests/live. */
   tavilyClient?: DiscoverySearchClient;
   /** Optional OpenAI discovery URL fetcher for compare mode (tests inject). */
-  openAiDiscovery?: () => Promise<{ urls: string[]; toolCalls: number; estimatedCostUsd: number }>;
+  openAiDiscovery?: () => Promise<{
+    urls: string[];
+    toolCalls: number;
+    estimatedCostUsd: number;
+  }>;
   /** When false (default), live network clients must not be used. */
   allowLiveNetwork?: boolean;
 };
@@ -178,6 +251,7 @@ export async function runDiscoveryBenchmark(
     "U.S.-only, GVWR, mileage, and distance remain inspection/classification rules.",
     "DB writes are disabled for this benchmark.",
     "Tavily extract is disabled (basic search only).",
+    "individual_listing requires positive unit-level VDP evidence; hubs never fill retention.",
   ];
 
   if (input.mode === "live_tavily" && !input.allowLiveNetwork) {
@@ -212,13 +286,16 @@ export async function runDiscoveryBenchmark(
   if (input.mode === "compare" && input.openAiDiscovery) {
     openaiCalled = true;
     const oa = await input.openAiDiscovery();
-    openai = foldUrlListToStats("openai", oa.urls, oa.toolCalls, oa.estimatedCostUsd, ceilings);
+    openai = foldUrlListToStats(
+      "openai",
+      oa.urls,
+      oa.toolCalls,
+      oa.estimatedCostUsd,
+      ceilings
+    );
   }
 
-  const comparison =
-    tavily && openai
-      ? buildComparison(tavily, openai)
-      : null;
+  const comparison = tavily && openai ? buildComparison(tavily, openai) : null;
 
   return {
     mode: input.mode,
@@ -243,10 +320,12 @@ async function runProviderDiscovery(args: {
 }): Promise<DiscoveryProviderStats> {
   const { provider, plans, ceilings, client } = args;
   const byCanonical = new Map<string, RetainedDiscoveryUrl>();
-  const rejectedUnsafe: DiscoveryProviderStats["rejectedUnsafe"] = [];
+  const uniqueByBucket = emptyUniqueBucketSets();
   const byBucket = EMPTY_BUCKETS();
   let totalResultUrls = 0;
   let duplicateRawHits = 0;
+  let retentionCapDrops = 0;
+  let rejectedUnsafeCount = 0;
   let credits = 0;
   let queriesRun = 0;
   const domains = new Set<string>();
@@ -269,20 +348,24 @@ async function runProviderDiscovery(args: {
       const classified = classifyDiscoveryUrl(hit.url);
       byBucket[classified.bucket] += 1;
       if (classified.hostname) domains.add(classified.hostname);
+      const uniqueKey =
+        classified.canonicalUrl ||
+        (classified.bucket === "unsupported_or_unsafe"
+          ? `unsafe:${classified.hostname}:${classified.reason}:${classified.rawUrl.split("?")[0]}`
+          : "");
+      if (uniqueKey) {
+        uniqueByBucket[classified.bucket].add(uniqueKey);
+      }
 
       if (classified.bucket === "unsupported_or_unsafe") {
-        rejectedUnsafe.push(classified);
+        rejectedUnsafeCount += 1;
         continue;
       }
 
-      if (
-        classified.bucket === "hub_or_category" ||
-        !classified.canonicalUrl
-      ) {
+      if (classified.bucket === "hub_or_category" || !classified.canonicalUrl) {
         continue;
       }
 
-      // Retain only individual + likely listing URLs, capped
       const isRetainable =
         classified.bucket === "individual_listing" ||
         classified.bucket === "likely_listing_needs_inspection";
@@ -300,7 +383,10 @@ async function runProviderDiscovery(args: {
         continue;
       }
 
-      if (byCanonical.size >= ceilings.maxRetainedListingUrls) continue;
+      if (byCanonical.size >= ceilings.maxRetainedListingUrls) {
+        retentionCapDrops += 1;
+        continue;
+      }
 
       byCanonical.set(classified.canonicalUrl, {
         ...classified,
@@ -318,22 +404,27 @@ async function runProviderDiscovery(args: {
   }
 
   const retained = [...byCanonical.values()];
+  const metrics = buildMetrics({
+    rawResultUrls: totalResultUrls,
+    uniqueByBucket,
+    retainedUrls: retained.length,
+    duplicateRawHits,
+    retentionCapDrops,
+  });
+
   return {
     provider,
     queriesRun,
-    totalResultUrls,
-    uniqueUrls: new Set(
-      [...retained.map((r) => r.canonicalUrl), ...rejectedUnsafe.map((r) => r.canonicalUrl)].filter(
-        Boolean
-      )
-    ).size,
+    totalResultUrls: metrics.rawResultUrls,
+    uniqueUrls: metrics.uniqueCanonicalUrlsAllBuckets,
+    metrics,
     byBucket,
     duplicateRawHits,
     domains: [...domains].sort(),
     creditsOrToolCalls: credits,
     estimatedCostUsd: estimateTavilyCostUsd(credits),
     retained,
-    rejectedUnsafe,
+    rejectedUnsafeCount,
   };
 }
 
@@ -345,17 +436,27 @@ function foldUrlListToStats(
   ceilings: DiscoveryBenchmarkCeilings
 ): DiscoveryProviderStats {
   const byBucket = EMPTY_BUCKETS();
+  const uniqueByBucket = emptyUniqueBucketSets();
   const byCanonical = new Map<string, RetainedDiscoveryUrl>();
-  const rejectedUnsafe: DiscoveryProviderStats["rejectedUnsafe"] = [];
-  const domains = new Set<string>();
   let duplicateRawHits = 0;
+  let retentionCapDrops = 0;
+  let rejectedUnsafeCount = 0;
+  const domains = new Set<string>();
 
   for (const url of urls) {
     const classified = classifyDiscoveryUrl(url);
     byBucket[classified.bucket] += 1;
     if (classified.hostname) domains.add(classified.hostname);
+    const uniqueKey =
+      classified.canonicalUrl ||
+      (classified.bucket === "unsupported_or_unsafe"
+        ? `unsafe:${classified.hostname}:${classified.reason}:${classified.rawUrl.split("?")[0]}`
+        : "");
+    if (uniqueKey) {
+      uniqueByBucket[classified.bucket].add(uniqueKey);
+    }
     if (classified.bucket === "unsupported_or_unsafe") {
-      rejectedUnsafe.push(classified);
+      rejectedUnsafeCount += 1;
       continue;
     }
     if (
@@ -369,25 +470,40 @@ function foldUrlListToStats(
       duplicateRawHits += 1;
       continue;
     }
-    if (byCanonical.size >= ceilings.maxRetainedListingUrls) continue;
+    if (byCanonical.size >= ceilings.maxRetainedListingUrls) {
+      retentionCapDrops += 1;
+      continue;
+    }
     byCanonical.set(classified.canonicalUrl, {
       ...classified,
-      provenance: [{ queryId: "openai-discovery", query: "openai-discovery", rawUrl: url }],
+      provenance: [
+        { queryId: "openai-discovery", query: "openai-discovery", rawUrl: url },
+      ],
     });
   }
+
+  const retained = [...byCanonical.values()];
+  const metrics = buildMetrics({
+    rawResultUrls: urls.length,
+    uniqueByBucket,
+    retainedUrls: retained.length,
+    duplicateRawHits,
+    retentionCapDrops,
+  });
 
   return {
     provider,
     queriesRun: toolCalls,
-    totalResultUrls: urls.length,
-    uniqueUrls: byCanonical.size + rejectedUnsafe.length,
+    totalResultUrls: metrics.rawResultUrls,
+    uniqueUrls: metrics.uniqueCanonicalUrlsAllBuckets,
+    metrics,
     byBucket,
     duplicateRawHits,
     domains: [...domains].sort(),
     creditsOrToolCalls: toolCalls,
     estimatedCostUsd,
-    retained: [...byCanonical.values()],
-    rejectedUnsafe,
+    retained,
+    rejectedUnsafeCount,
   };
 }
 
@@ -397,8 +513,8 @@ function buildComparison(tavily: DiscoveryProviderStats, openai: DiscoveryProvid
   const overlap = [...tSet].filter((u) => oSet.has(u));
   const tOnly = [...tSet].filter((u) => !oSet.has(u));
   const oOnly = [...oSet].filter((u) => !tSet.has(u));
-  const tUsable = usableListingCount(tavily);
-  const oUsable = usableListingCount(openai);
+  const tUsable = usableRetainedCount(tavily);
+  const oUsable = usableRetainedCount(openai);
   return {
     tavilyOnlyCanonical: tOnly,
     openaiOnlyCanonical: oOnly,
@@ -428,6 +544,7 @@ export function buildDiscoveryBenchmarkPreflight(args: {
   tavilyExtract: false;
   estimatedMaxCostUsd: number;
   queryIds: string[];
+  queries: Array<{ id: string; query: string; purpose: string }>;
 } {
   const ceilings = { ...DEFAULT_DISCOVERY_BENCHMARK_CEILINGS, ...args.ceilings };
   const plans = buildDiscoveryQueryMatrix(args.profile ?? DEFAULT_BUYING_PROFILE, {
@@ -450,5 +567,6 @@ export function buildDiscoveryBenchmarkPreflight(args: {
     tavilyExtract: false,
     estimatedMaxCostUsd: estimateTavilyCostUsd(ceilings.maxTavilyCredits),
     queryIds: plans.map((p) => p.id),
+    queries: plans.map((p) => ({ id: p.id, query: p.query, purpose: p.purpose })),
   };
 }

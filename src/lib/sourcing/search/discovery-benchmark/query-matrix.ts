@@ -1,13 +1,20 @@
 /**
  * Deterministic discovery query matrix for SKL internet truck-listing search.
- * Discovery queries stay broad: find plausible unit URLs.
- * GVWR, mileage, liftgate, and distance are inspection/classification fields —
- * they are intentionally NOT forced into every discovery query.
+ *
+ * Discovery stays relaxed on inspection fields (GVWR, mileage, liftgate, distance)
+ * but is oriented toward unit-level pages (VIN / Stock # / unit terminology)
+ * after live run 1 retained almost only category hubs.
  */
+import { earliestAcceptedModelYear } from "@/lib/sourcing/match";
 import { TRUCK_SALE_DOMAINS } from "@/lib/sourcing/search/queries";
 import type { BuyingProfile } from "@/types/sourcing";
 
-export type DiscoveryQueryPurpose = "make_model" | "box_spec" | "powertrain" | "regional" | "domain_targeted";
+export type DiscoveryQueryPurpose =
+  | "make_model"
+  | "box_spec"
+  | "powertrain"
+  | "year_model"
+  | "domain_targeted";
 
 export type DiscoveryQueryPlan = {
   id: string;
@@ -18,8 +25,8 @@ export type DiscoveryQueryPlan = {
 };
 
 /**
- * States reasonably within ~1,200 mi of Joplin, MO for regional variants.
- * Not every state is placed into every query.
+ * States reasonably within ~1,200 mi of Joplin, MO (reference set for future regional variants).
+ * Not every state is placed into every query; run-2 matrix prioritizes unit/VIN/stock terms.
  */
 export const JOINT_RADIUS_STATES = [
   "Missouri",
@@ -49,21 +56,27 @@ function boxLengths(profile: BuyingProfile): number[] {
 }
 
 /**
- * Build ~10–15 smaller discovery queries from the saved buying profile.
- * Does not require every qualification field in each query.
+ * Build ≤12 unit-oriented discovery queries from the saved buying profile.
+ * Does not force GVWR/mileage/liftgate/distance into every query.
  */
 export function buildDiscoveryQueryMatrix(
   profile: BuyingProfile,
-  options?: { maxQueries?: number; includeDomainTargeted?: boolean }
+  options?: { maxQueries?: number; includeDomainTargeted?: boolean; asOf?: Date }
 ): DiscoveryQueryPlan[] {
   const maxQueries = Math.max(1, Math.min(30, options?.maxQueries ?? DEFAULT_DISCOVERY_QUERY_CEILING));
   const includeDomain = options?.includeDomainTargeted !== false;
   const boxes = boxLengths(profile);
+  const midBox = boxes[1] ?? boxes[0] ?? 26;
   const engine = profile.requireCummins ? "Cummins" : "diesel";
-  const trans = profile.requireAutomatic ? "automatic" : "";
+  const earliest = earliestAcceptedModelYear(profile, options?.asOf ?? new Date());
   const plans: DiscoveryQueryPlan[] = [];
 
-  const push = (id: string, purpose: DiscoveryQueryPurpose, query: string, includeDomains?: string[]) => {
+  const push = (
+    id: string,
+    purpose: DiscoveryQueryPurpose,
+    query: string,
+    includeDomains?: string[]
+  ) => {
     if (plans.length >= maxQueries) return;
     plans.push({
       id,
@@ -73,67 +86,77 @@ export function buildDiscoveryQueryMatrix(
     });
   };
 
-  // Make / model family queries (high-yield discovery)
-  push("mm-freightliner-m2-106", "make_model", "Freightliner M2 106 box truck for sale");
-  push("mm-international-mv", "make_model", "International MV box truck for sale");
-  push("mm-kenworth-t270", "make_model", "Kenworth T270 box truck for sale");
-
-  // Box-length × powertrain (one query per required length)
-  for (const ft of boxes.slice(0, 3)) {
-    push(
-      `box-${ft}ft-cummins-auto`,
-      "box_spec",
-      `${ft} foot box truck ${engine} ${trans} for sale`
-    );
-  }
-
-  // Powertrain / CDL-adjacent phrasing (still discovery — not GVWR/mileage dumps)
-  push("pt-cummins-allison", "powertrain", "Cummins Allison box truck for sale");
-  push("pt-under-cdl-cummins", "powertrain", `under CDL box truck ${engine} for sale`);
+  // Make/model + unit identifiers (favor VDPs over category SEO)
   push(
-    "pt-medium-duty-cummins-auto",
-    "powertrain",
-    `medium duty box truck ${engine} ${trans} for sale`
+    "mm-fl-vin",
+    "make_model",
+    `"Freightliner M2 106" "VIN" "box truck" for sale`
+  );
+  push(
+    "mm-fl-stock",
+    "make_model",
+    `"Freightliner M2 106" "Stock #" "box truck"`
+  );
+  push(
+    "mm-intl-vin",
+    "make_model",
+    `"International MV" "VIN" "${midBox} ft box"`
+  );
+  push(
+    "mm-kw-stock",
+    "make_model",
+    `"Kenworth T270" "Stock #" "box truck"`
   );
 
-  // Optional domain-targeted queries using known dealer/marketplace domains already in-repo
-  // Placed before regional so the default 12-query ceiling still includes them.
+  // Box + stock / VIN phrasing
+  push(
+    "box-26-stock",
+    "box_spec",
+    `"26 foot box truck" "stock number" ${engine}`
+  );
+  push(
+    "box-24-vin",
+    "box_spec",
+    `"24 foot box truck" VIN ${engine} automatic`
+  );
+  push(
+    "box-28-stock",
+    "box_spec",
+    `"28 foot box truck" "Stock #" ${engine}`
+  );
+
+  // Powertrain + VIN (not bare "for sale" category bait)
+  push(
+    "pt-cummins-allison-vin",
+    "powertrain",
+    `"Cummins" "Allison" "VIN" "box truck"`
+  );
+
+  // Eligible year range + make/model
+  push(
+    "year-fl-vin",
+    "year_model",
+    `${earliest} Freightliner M2 106 box truck VIN`
+  );
+  push(
+    "year-intl-stock",
+    "year_model",
+    `${earliest} International MV box truck "stock"`
+  );
+
+  // Domain-targeted with VDP terminology (avoid eBay / SOARR / bare marketplace browse)
   if (includeDomain) {
     push(
-      "dom-fleet-remarketers",
+      "dom-penske-unit",
       "domain_targeted",
-      `${engine} box truck for sale`,
-      ["penskeusedtrucks.com", "usedtrucks.ryder.com", "trucksales.enterprise.com"]
+      `${engine} box truck unit VIN`,
+      ["penskeusedtrucks.com", "usedtrucks.ryder.com"]
     );
     push(
-      "dom-marketplaces",
+      "dom-dealer-stock",
       "domain_targeted",
-      `${engine} ${trans} box truck for sale`,
-      ["commercialtrucktrader.com", "truckpaper.com", "mylittlesalesman.com"]
-    );
-  }
-
-  // Regional variants — rotate a few states; do not embed all states in every query
-  const regionalStates = [
-    JOINT_RADIUS_STATES[0], // Missouri
-    JOINT_RADIUS_STATES[1], // Kansas
-    JOINT_RADIUS_STATES[4], // Texas
-  ];
-  for (const state of regionalStates) {
-    if (plans.length >= maxQueries) break;
-    push(
-      `reg-${state.toLowerCase().slice(0, 6)}-box`,
-      "regional",
-      `${engine} ${trans} box truck for sale ${state}`.replace(/\s+/g, " ")
-    );
-  }
-
-  if (includeDomain && plans.length < maxQueries) {
-    push(
-      "dom-regional-dealer",
-      "domain_targeted",
-      `${boxes[1] ?? 26} foot ${engine} box truck for sale`,
-      ["debarytrucksales.com"]
+      `"Stock #" ${engine} "${midBox} foot" box truck`,
+      ["debarytrucksales.com", "mylittlesalesman.com"]
     );
   }
 
@@ -143,12 +166,21 @@ export function buildDiscoveryQueryMatrix(
 /** Assert matrix does not force inspection-only fields into every discovery query. */
 export function discoveryQueriesAreRelaxed(plans: DiscoveryQueryPlan[]): boolean {
   const inspectionOnly = [/gvwr/i, /26,?000/i, /275,?000/i, /liftgate/i, /1,?200/i];
-  // At least half of queries must omit these forced inspection terms
   let relaxed = 0;
   for (const p of plans) {
     if (!inspectionOnly.some((re) => re.test(p.query))) relaxed += 1;
   }
   return relaxed >= Math.ceil(plans.length / 2);
+}
+
+/** True when the matrix emphasizes unit-page signals (VIN/stock/unit) over bare category bait. */
+export function discoveryQueriesPreferUnitPages(plans: DiscoveryQueryPlan[]): boolean {
+  const unitSignal = [/\bVIN\b/i, /stock\s*#/i, /stock number/i, /\bunit\b/i, /\bstock\b/i];
+  let withSignal = 0;
+  for (const p of plans) {
+    if (unitSignal.some((re) => re.test(p.query))) withSignal += 1;
+  }
+  return withSignal >= Math.ceil(plans.length * 0.6);
 }
 
 export function listKnownDiscoveryDomains(): readonly string[] {

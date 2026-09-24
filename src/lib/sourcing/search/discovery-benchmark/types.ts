@@ -33,18 +33,35 @@ export const DEFAULT_DISCOVERY_BENCHMARK_CEILINGS: DiscoveryBenchmarkCeilings = 
 
 export type DiscoveryBenchmarkMode = "mock" | "live_tavily" | "compare";
 
+/** Accurate URL accounting — hubs/categories included in unique totals. */
+export type DiscoveryUrlMetrics = {
+  rawResultUrls: number;
+  uniqueCanonicalUrlsAllBuckets: number;
+  uniqueIndividualUrls: number;
+  uniqueLikelyUrls: number;
+  uniqueHubUrls: number;
+  uniqueUnsafeUrls: number;
+  retainedUrls: number;
+  duplicateRawHits: number;
+  retentionCapDrops: number;
+};
+
 export type DiscoveryProviderStats = {
   provider: "tavily" | "openai" | "mock";
   queriesRun: number;
+  /** @deprecated Prefer metrics.rawResultUrls */
   totalResultUrls: number;
+  /** @deprecated Prefer metrics.uniqueCanonicalUrlsAllBuckets */
   uniqueUrls: number;
+  metrics: DiscoveryUrlMetrics;
   byBucket: Record<DiscoveryUrlBucket, number>;
   duplicateRawHits: number;
   domains: string[];
   creditsOrToolCalls: number;
   estimatedCostUsd: number;
   retained: RetainedDiscoveryUrl[];
-  rejectedUnsafe: DiscoveryUrlClassification[];
+  /** Count only in reports — never echo unsafe raw URLs or credential-like query strings. */
+  rejectedUnsafeCount: number;
 };
 
 export type DiscoveryBenchmarkReport = {
