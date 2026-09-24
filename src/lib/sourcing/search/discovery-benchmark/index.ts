@@ -1,3 +1,9 @@
+/**
+ * Benchmark package: re-exports shared discovery + benchmark-only fixtures/CLI runners.
+ * Production Preview imports from `@/lib/sourcing/search/discovery` and
+ * `@/lib/sourcing/search/discovery-inspect` — not this folder — so fixtures/CLI
+ * stay out of the runtime pathway.
+ */
 export {
   buildDiscoveryQueryMatrix,
   discoveryQueriesAreRelaxed,
@@ -5,16 +11,22 @@ export {
   listKnownDiscoveryDomains,
   JOINT_RADIUS_STATES,
   DEFAULT_DISCOVERY_QUERY_CEILING,
-  type DiscoveryQueryPlan,
-  type DiscoveryQueryPurpose,
-} from "@/lib/sourcing/search/discovery-benchmark/query-matrix";
-export {
   classifyDiscoveryUrl,
   detectDiscoveryHub,
   detectPositiveUnitEvidence,
+  DISCOVERY_NOISE_HOST_SUFFIXES,
+  DEFAULT_DISCOVERY_BENCHMARK_CEILINGS,
+  type DiscoveryQueryPlan,
+  type DiscoveryQueryPurpose,
   type DiscoveryUrlBucket,
   type DiscoveryUrlClassification,
-} from "@/lib/sourcing/search/discovery-benchmark/url-classify";
+  type DiscoveryBenchmarkCeilings,
+  type DiscoveryHitProvenance,
+  type RetainedDiscoveryUrl,
+  type DiscoveryUrlMetrics,
+  type DiscoverySearchClient,
+} from "@/lib/sourcing/search/discovery";
+
 export {
   runDiscoveryBenchmark,
   createMockDiscoverySearchClient,
@@ -22,19 +34,19 @@ export {
   buildDiscoveryBenchmarkPreflight,
   type RunDiscoveryBenchmarkInput,
 } from "@/lib/sourcing/search/discovery-benchmark/run";
-export {
-  DEFAULT_DISCOVERY_BENCHMARK_CEILINGS,
-  type DiscoveryBenchmarkCeilings,
-  type DiscoveryBenchmarkMode,
-  type DiscoveryBenchmarkReport,
-  type DiscoveryProviderStats,
-  type DiscoveryUrlMetrics,
+
+export type {
+  DiscoveryBenchmarkMode,
+  DiscoveryBenchmarkReport,
+  DiscoveryProviderStats,
 } from "@/lib/sourcing/search/discovery-benchmark/types";
+
 export {
   FIRST_RUN_RETAINED_URL_FIXTURES,
   PROVEN_UNIT_VDP_FIXTURES,
   AMBIGUOUS_UNIT_FIXTURES,
 } from "@/lib/sourcing/search/discovery-benchmark/first-run-fixtures";
+
 export {
   DISCOVERY_BENCHMARK_SUCCESS_THRESHOLD,
   evaluateDiscoveryBenchmarkSuccess,

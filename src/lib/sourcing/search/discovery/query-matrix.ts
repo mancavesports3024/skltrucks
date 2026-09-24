@@ -5,7 +5,11 @@
  * but is oriented toward unit-level pages (VIN / Stock # / unit terminology)
  * after live run 1 retained almost only category hubs.
  */
+/**
+ * Shared unit-oriented discovery query matrix (production Preview + benchmark).
+ */
 import { earliestAcceptedModelYear } from "@/lib/sourcing/match";
+import { DISCOVERY_MAX_QUERIES } from "@/lib/sourcing/search/discovery/ceilings";
 import { TRUCK_SALE_DOMAINS } from "@/lib/sourcing/search/queries";
 import type { BuyingProfile } from "@/types/sourcing";
 
@@ -44,7 +48,7 @@ export const JOINT_RADIUS_STATES = [
   "Louisiana",
 ] as const;
 
-export const DEFAULT_DISCOVERY_QUERY_CEILING = 12;
+export const DEFAULT_DISCOVERY_QUERY_CEILING = DISCOVERY_MAX_QUERIES;
 
 function normalizeSpaces(s: string): string {
   return s.replace(/\s+/g, " ").trim();

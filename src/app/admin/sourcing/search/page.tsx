@@ -1,3 +1,4 @@
+import DiscoveryInspectPreviewPanel from "@/components/admin/sourcing/DiscoveryInspectPreviewPanel";
 import PenskeUrlInspectionPanel from "@/components/admin/sourcing/PenskeUrlInspectionPanel";
 import RunSearchButton, {
   SearchReportPanel,
@@ -11,6 +12,8 @@ import {
   getConfiguredSearchProviderLabel,
   isLiveSearchConfigured,
 } from "@/lib/sourcing/search/providers";
+import { isOpenAiSearchConfigured } from "@/lib/sourcing/search/providers/openai";
+import { isTavilyConfigured } from "@/lib/sourcing/search/providers/tavily";
 import { listRecentSearchRuns } from "@/lib/sourcing/search/run";
 
 export default async function SourcingSearchPage() {
@@ -32,6 +35,8 @@ export default async function SourcingSearchPage() {
   const liveConfigured = isLiveSearchConfigured();
   const configuredProviderLabel = getConfiguredSearchProviderLabel();
   const penskeInspectionEnabled = isPenskeUrlInspectionEnabled();
+  const tavilyConfigured = isTavilyConfigured();
+  const openAiConfigured = isOpenAiSearchConfigured();
 
   return (
     <div>
@@ -40,10 +45,9 @@ export default async function SourcingSearchPage() {
         <div>
           <h2 className="text-lg font-bold">Internet search pilot</h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Staff-only “Run search now” discovers individual listings and seller call routes from the{" "}
-            <strong>active buying profile</strong>. Default live provider is{" "}
-            <strong>Tavily</strong> (OpenAI optional). Results land in Truck leads / Suppliers. No
-            cron, no email, keys stay on the server.
+            Staff-only discovery and inspection from the <strong>active buying profile</strong>.
+            Prefer the Discovery → Inspection Preview below for Tavily unit discovery with explicit
+            Import. Legacy “Run search now” still exists. No cron, no email, keys stay on the server.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Configured provider: <strong>{configuredProviderLabel}</strong>
@@ -62,6 +66,11 @@ export default async function SourcingSearchPage() {
             {profile.preferredMaxDrivingMiles.toLocaleString()} mi of {profile.originLabel}
           </p>
         </section>
+
+        <DiscoveryInspectPreviewPanel
+          tavilyConfigured={tavilyConfigured}
+          openAiConfigured={openAiConfigured}
+        />
 
         <RunSearchButton
           liveConfigured={liveConfigured}

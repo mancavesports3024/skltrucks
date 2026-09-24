@@ -1,19 +1,21 @@
 import {
   buildDiscoveryQueryMatrix,
   type DiscoveryQueryPlan,
-} from "@/lib/sourcing/search/discovery-benchmark/query-matrix";
-import { classifyDiscoveryUrl } from "@/lib/sourcing/search/discovery-benchmark/url-classify";
+} from "@/lib/sourcing/search/discovery/query-matrix";
+import { classifyDiscoveryUrl } from "@/lib/sourcing/search/discovery/url-classify";
 import type {
   DiscoveryBenchmarkCeilings,
-  DiscoveryBenchmarkMode,
-  DiscoveryBenchmarkReport,
-  DiscoveryProviderStats,
   DiscoverySearchClient,
   DiscoverySearchHit,
   DiscoveryUrlMetrics,
   RetainedDiscoveryUrl,
+} from "@/lib/sourcing/search/discovery/types";
+import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery/types";
+import type {
+  DiscoveryBenchmarkMode,
+  DiscoveryBenchmarkReport,
+  DiscoveryProviderStats,
 } from "@/lib/sourcing/search/discovery-benchmark/types";
-import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery-benchmark/types";
 import { estimateTavilyCostUsd } from "@/lib/sourcing/search/types";
 import type { BuyingProfile } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
@@ -34,6 +36,13 @@ const DEFAULT_EXCLUDE_DOMAINS = [
   "ebay.com",
   "soarr.com",
   "cummins.com",
+  "justanswer.com",
+  "cumminsforum.com",
+  "dieseltruckresource.com",
+  "expeditionportal.com",
+  "autohelperbot.com",
+  "epicvin.com",
+  "truckradar.ai",
 ] as const;
 
 const EMPTY_BUCKETS = (): DiscoveryProviderStats["byBucket"] => ({

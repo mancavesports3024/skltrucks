@@ -1,57 +1,19 @@
-import type { DiscoveryQueryPlan } from "@/lib/sourcing/search/discovery-benchmark/query-matrix";
+import type { DiscoveryQueryPlan } from "@/lib/sourcing/search/discovery/query-matrix";
 import type {
-  DiscoveryUrlBucket,
-  DiscoveryUrlClassification,
-} from "@/lib/sourcing/search/discovery-benchmark/url-classify";
-
-export type DiscoveryHitProvenance = {
-  queryId: string;
-  query: string;
-  rawUrl: string;
-  title?: string;
-};
-
-export type RetainedDiscoveryUrl = DiscoveryUrlClassification & {
-  provenance: DiscoveryHitProvenance[];
-  title?: string;
-};
-
-export type DiscoveryBenchmarkCeilings = {
-  maxQueries: number;
-  maxResultsPerQuery: number;
-  maxRetainedListingUrls: number;
-  /** Tavily basic search credits (1 per search). Discovery-only: no extract. */
-  maxTavilyCredits: number;
-};
-
-export const DEFAULT_DISCOVERY_BENCHMARK_CEILINGS: DiscoveryBenchmarkCeilings = {
-  maxQueries: 12,
-  maxResultsPerQuery: 10,
-  maxRetainedListingUrls: 20,
-  maxTavilyCredits: 12,
-};
+  DiscoveryBenchmarkCeilings,
+  DiscoverySearchClient,
+  DiscoveryUrlMetrics,
+  RetainedDiscoveryUrl,
+} from "@/lib/sourcing/search/discovery/types";
+import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery/types";
+import type { DiscoveryUrlBucket, DiscoveryUrlClassification } from "@/lib/sourcing/search/discovery/url-classify";
 
 export type DiscoveryBenchmarkMode = "mock" | "live_tavily" | "compare";
-
-/** Accurate URL accounting — hubs/categories included in unique totals. */
-export type DiscoveryUrlMetrics = {
-  rawResultUrls: number;
-  uniqueCanonicalUrlsAllBuckets: number;
-  uniqueIndividualUrls: number;
-  uniqueLikelyUrls: number;
-  uniqueHubUrls: number;
-  uniqueUnsafeUrls: number;
-  retainedUrls: number;
-  duplicateRawHits: number;
-  retentionCapDrops: number;
-};
 
 export type DiscoveryProviderStats = {
   provider: "tavily" | "openai" | "mock";
   queriesRun: number;
-  /** @deprecated Prefer metrics.rawResultUrls */
   totalResultUrls: number;
-  /** @deprecated Prefer metrics.uniqueCanonicalUrlsAllBuckets */
   uniqueUrls: number;
   metrics: DiscoveryUrlMetrics;
   byBucket: Record<DiscoveryUrlBucket, number>;
@@ -60,7 +22,6 @@ export type DiscoveryProviderStats = {
   creditsOrToolCalls: number;
   estimatedCostUsd: number;
   retained: RetainedDiscoveryUrl[];
-  /** Count only in reports — never echo unsafe raw URLs or credential-like query strings. */
   rejectedUnsafeCount: number;
 };
 
@@ -84,15 +45,11 @@ export type DiscoveryBenchmarkReport = {
   notes: string[];
 };
 
-export type DiscoverySearchHit = {
-  url: string;
-  title?: string;
-  content?: string;
+export type {
+  DiscoveryBenchmarkCeilings,
+  DiscoverySearchClient,
+  DiscoveryUrlMetrics,
+  RetainedDiscoveryUrl,
+  DiscoveryUrlClassification,
 };
-
-export type DiscoverySearchClient = {
-  search: (
-    query: string,
-    options?: { maxResults?: number; includeDomains?: string[]; searchDepth?: string }
-  ) => Promise<{ results: DiscoverySearchHit[]; creditsCharged: number }>;
-};
+export { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS };
