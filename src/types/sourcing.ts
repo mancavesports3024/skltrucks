@@ -141,7 +141,14 @@ export interface TruckLead {
   liftgateNotes: string;
   price: number | null;
   location: string;
+  /**
+   * Legacy column `driving_distance_miles`: currently stores offline Haversine
+   * straight-line miles from Joplin (Census gazetteer) when estimated.
+   * Used for the 1,200-mile classification preference — NOT Google driving miles.
+   * Market Comparison transportation must never multiply this by $/mi as if it were driving.
+   */
   drivingDistanceMiles: number | null;
+  /** True when `drivingDistanceMiles` is an offline straight-line estimate. */
   distanceIsEstimate: boolean;
   dateLastChecked: string | null;
   verificationNotes: string;

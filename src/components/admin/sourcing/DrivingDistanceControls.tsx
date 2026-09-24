@@ -142,7 +142,9 @@ export default function DrivingDistanceControls({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-neutral-900">Driving distance (Google Routes)</p>
+          <p className="text-sm font-semibold text-neutral-900">
+            Estimated city-center driving distance (Google Routes)
+          </p>
           <p className="mt-1 text-xs text-neutral-600">{CITY_CENTER_DRIVING_LABEL}</p>
         </div>
         <button
@@ -210,7 +212,7 @@ export default function DrivingDistanceControls({
 
       {straightLineMiles != null && distanceIsEstimate ? (
         <p className="text-xs text-neutral-600" data-testid="straight-line-reference">
-          Straight-line reference (classification only, not used for Transportation): ~
+          Estimated straight-line distance (classification only — never used for Transportation): ~
           {Math.round(straightLineMiles)} mi
         </p>
       ) : null}

@@ -1,6 +1,17 @@
 import "server-only";
 
-/** Configurable daily app-level ceiling (not a Google billing claim). */
+/**
+ * Per-instance best-effort guard for Google Routes calls.
+ *
+ * IMPORTANT (Vercel / serverless truth):
+ * This counter lives in process memory. Each serverless isolate has its own counter,
+ * which resets on cold start / redeploy. It is NOT a reliable application-wide daily
+ * hard cap across the fleet.
+ *
+ * Authoritative hard limits must be configured in Google Cloud (Routes API quotas +
+ * budget alerts). Configure `GOOGLE_ROUTES_DAILY_LIMIT` only as an optional soft guard
+ * inside one instance.
+ */
 export const GOOGLE_ROUTES_DAILY_LIMIT_ENV = "GOOGLE_ROUTES_DAILY_LIMIT";
 export const DEFAULT_GOOGLE_ROUTES_DAILY_LIMIT = 100;
 
@@ -34,8 +45,8 @@ export type DailyLimitResult =
   | { ok: false; message: string };
 
 /**
- * Reserve one provider call against the in-process daily ceiling.
- * Soft safeguard — not a substitute for Google Cloud quotas/budgets.
+ * Reserve one provider call against the in-process soft ceiling.
+ * Not a substitute for Google Cloud quotas/budgets.
  */
 export function tryConsumeGoogleRoutesDailyQuota(
   env: NodeJS.ProcessEnv = process.env,
@@ -50,7 +61,7 @@ export function tryConsumeGoogleRoutesDailyQuota(
     return {
       ok: false,
       message:
-        "Driving-distance daily application limit reached. Enter Transportation manually or try again tomorrow.",
+        "Driving-distance per-instance soft limit reached on this server. Enter Transportation manually, or raise Google Cloud Routes API quotas / try again later.",
     };
   }
   counter.count += 1;

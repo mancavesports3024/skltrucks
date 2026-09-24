@@ -64,7 +64,9 @@ export default function TruckLeadsList({ leads }: { leads: TruckLead[] }) {
               <span>{lead.price != null ? `$${lead.price.toLocaleString()}` : "—"}</span>
               <span>
                 {lead.drivingDistanceMiles != null
-                  ? `~${lead.drivingDistanceMiles} mi`
+                  ? lead.distanceIsEstimate
+                    ? `~${lead.drivingDistanceMiles} mi straight-line`
+                    : `~${lead.drivingDistanceMiles} mi`
                   : "distance unknown"}
               </span>
               <span className="text-neutral-500">{lead.dateLastChecked || "—"}</span>
@@ -91,7 +93,7 @@ export default function TruckLeadsList({ leads }: { leads: TruckLead[] }) {
               <th className="px-4 py-3">Seller</th>
               <th className="px-4 py-3">Match</th>
               <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Distance</th>
+              <th className="px-4 py-3">Straight-line mi</th>
               <th className="px-4 py-3">Checked</th>
             </tr>
           </thead>
@@ -118,7 +120,9 @@ export default function TruckLeadsList({ leads }: { leads: TruckLead[] }) {
                 </td>
                 <td className="px-4 py-3">
                   {lead.drivingDistanceMiles != null
-                    ? `~${lead.drivingDistanceMiles} mi`
+                    ? lead.distanceIsEstimate
+                      ? `~${lead.drivingDistanceMiles} mi est. straight-line`
+                      : `~${lead.drivingDistanceMiles} mi`
                     : "unknown"}
                 </td>
                 <td className="px-4 py-3">{lead.dateLastChecked || "—"}</td>

@@ -1,67 +1,110 @@
 # Google Routes driving distance (Market Comparison)
 
-Staff-only feature. Does **not** change the 1,200-mile sourcing classification rule
-(that still uses offline straight-line / Census miles on `driving_distance_miles`).
+Staff-only feature. Does **not** change the existing 1,200-mile sourcing classification rule
+(that still uses offline straight-line / Census miles on the legacy column
+`driving_distance_miles`).
+
+## Legacy field-name mismatch
+
+| Name | Meaning |
+|---|---|
+| DB `driving_distance_miles` / app `drivingDistanceMiles` | **Estimated straight-line** (Haversine) miles from Joplin when `distance_is_estimate` is true |
+| UI label (lead form / list) | **Estimated straight-line distance** |
+| `spec_evidence.drivingRoute` | **Estimated city-center driving distance** from Google Routes |
+| Market Comparison Transportation | Uses Google unrounded driving miles × profile rate — **never** multiplies straight-line miles by `$/mi` |
+
+No schema rename in this PR (risky). Terminology is clarified in UI and docs only.
+
+## Required production SQL
+
+Apply **before** deploying the app that persists rate/inspection and merges driving-route cache:
+
+`supabase/sourcing-mc-driving-distance-required.sql`
+
+Includes:
+
+1. `sourcing_buying_profile.transportation_rate_per_mile numeric(10,4)` default `2.25`
+2. `sourcing_buying_profile.default_inspection_cost numeric(12,2)` default `230.00`
+3. RPC `merge_sourcing_lead_driving_route(uuid, jsonb)` — atomic JSONB merge of `spec_evidence.drivingRoute`
+
+Idempotent / additive / backward-compatible. Old app code continues to work after SQL is applied
+(extra columns ignored until the new app reads/writes them). Null-only backfill never overwrites
+staff-configured values.
+
+### Production sequence
+
+1. Review exact SQL.
+2. Apply `sourcing-mc-driving-distance-required.sql` to production (safe to re-run).
+3. Confirm columns + RPC exist; confirm authorized Admin can still open `/admin/sourcing`.
+4. Merge/deploy application.
+5. Save buying-profile rate/inspection; reload; confirm persistence.
+6. Calculate driving distance once; confirm unrelated `spec_evidence` keys remain.
 
 ## Environment
 
 | Variable | Required | Notes |
 |---|---|---|
 | `GOOGLE_MAPS_ROUTES_API_KEY` | Yes (for live calculate) | Server-only. Never `NEXT_PUBLIC_*`. |
-| `GOOGLE_ROUTES_DAILY_LIMIT` | No | App soft ceiling (default `100`). Not a Google billing claim. |
+| `GOOGLE_ROUTES_DAILY_LIMIT` | No | **Per-instance best-effort soft guard** (default `100`). Process memory only — **not** a fleet-wide hard daily cap on Vercel. |
+
+### Authoritative quotas
+
+Configure **Google Cloud Routes API quotas + budget alerts** as the hard limit. Do not treat
+`GOOGLE_ROUTES_DAILY_LIMIT` as an application-wide daily hard cap.
 
 ### Google Cloud setup
 
-1. Enable **Routes API** on the GCP project.
-2. Create an API key restricted to Routes API (`computeRoutes`).
-3. Store the key in Vercel as a **server-only** environment variable (Production / Preview as needed).
-4. Configure Google Cloud **budget alerts** and API quotas — billing tiers and free allowances vary; do not assume a fixed per-call dollar cost in the product UI.
+1. Enable **Routes API**.
+2. API key restricted to Routes API (`computeRoutes`).
+3. Store key in Vercel as server-only.
+4. Budget alerts + API quotas.
 
-## API
+## API security
 
-- Endpoint: `POST https://routes.googleapis.com/directions/v2:computeRoutes`
-- Header: `X-Goog-Api-Key` (key only here)
+- Endpoint hardcoded: `POST https://routes.googleapis.com/directions/v2:computeRoutes`
+- No user-supplied URL is fetched
+- `redirect: "error"`
+- Timeout 8s; response body capped (~256 KiB)
 - Field mask: `routes.distanceMeters,routes.duration`
-- Mode: `DRIVE`, `routingPreference: TRAFFIC_UNAWARE`
-- Origin: `SKL_DISTANCE_ORIGIN` (Joplin city-center Census coords)
-- Destination: offline Census gazetteer coords from the lead `location` (no Google geocode)
+- `DRIVE` + `TRAFFIC_UNAWARE`
+- Distance must be finite, ≥ 0, ≤ 10_000_000 m
+- Duration validated when present (`3723s` form)
+- Multi-route responses: deterministic `routes[0]`
+- Key only in `X-Goog-Api-Key`; never logged
 
-Label shown to staff: **Estimated driving distance between city centers**
+Origin: `SKL_DISTANCE_ORIGIN` (Joplin). Destination: offline Census coords from lead `location`.
 
-## Cache (no migration)
+## Cache freshness (no wall-clock TTL)
 
-Stored in `spec_evidence.drivingRoute` jsonb:
+Fresh while **all** match:
 
-- `version`, `provider`, `distanceMeters`, `distanceMiles` (unrounded)
-- `durationSeconds`, origin/dest lat/lng, `calculatedAt`, `cityCenterEstimate`
+- Origin lat/lng (`SKL_DISTANCE_ORIGIN`)
+- Destination lat/lng (resolved Census coords)
+- Provider `google_routes`
+- Version `google_routes_v1`
 
-Fresh when origin, destination, provider, and version still match. Location/coord changes invalidate.
+Stale when location resolves to different coords, origin constants change, or version bumps.
+Age alone does **not** expire the cache.
 
-Updating the cache **does not**:
+**Calculate again** with a fresh cache → `Using saved driving-distance estimate` (0 Google calls).
+Concurrent same lead+route key → in-process lock (one Google call).
 
-- change `driving_distance_miles` / `distance_is_estimate`
-- bump `listing_last_changed_at`
-- create digest listing-change events
-- alter call notes or classification
+## Cache write safety
 
-## Cost defaults
+`merge_sourcing_lead_driving_route` merges only `drivingRoute` into `spec_evidence` jsonb.
+Does not erase `inspectionUrl`, country, GVWR, engine, transmission, box, workbook provenance, etc.
+Does not bump `listing_last_changed_at` (no digest listing-change).
+Does advance `updated_at` via existing trigger (operational).
 
-Application defaults (always, even if SQL not applied):
+## Cost defaults (validated server-side)
 
-- `transportationRatePerMile` = `2.25`
-- `defaultInspectionCost` = `230.00`
+| Field | Default | Max | Precision |
+|---|---|---|---|
+| `transportationRatePerMile` | 2.25 | 100 | 4 dp (`numeric(10,4)`) |
+| `defaultInspectionCost` | 230.00 | 100_000 | 2 dp / cents |
 
-Optional persistence: `supabase/sourcing-buying-profile-mc-cost-defaults.sql`
+Rejects negative, NaN/Infinity, malformed strings, excess precision, oversize values.
 
-Transportation = unrounded driving miles × rate, rounded to cents.
+Transportation = unrounded driving miles × rate → round to cents.
 Display miles = nearest whole mile.
-Example: 160 mi × $2.25 = $360.00
-
-## Safeguards
-
-- Explicit **Calculate driving distance** button — never on page render
-- At most **one** Google request per click (zero when cache fresh)
-- In-process lock: one active calculation per lead
-- Daily app limit + provider 429/timeout/auth handling
-- Fallback: keep straight-line; leave Transportation blank; show manual-entry message
-- Never multiply straight-line miles by the rate as if it were driving mileage
+Example: 160 × $2.25 = `$360.00`.

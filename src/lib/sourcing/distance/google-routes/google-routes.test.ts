@@ -351,13 +351,16 @@ describe("calculateDrivingDistanceForLead", () => {
     if (!missingKey.ok) expect(missingKey.failureCategory).toBe("missing_key");
   });
 
-  it("duplicate-click / concurrency lock protects one active calc per lead", async () => {
-    const lock1 = tryAcquireDrivingDistanceLock("lead-busy", "a@example.com");
+  it("duplicate-click / concurrency lock protects one active calc per lead+route", () => {
+    const key = "lead-busy|39.10000|-94.50000|google_routes_v1";
+    const lock1 = tryAcquireDrivingDistanceLock(key, "a@example.com");
     expect(lock1.ok).toBe(true);
-    const lock2 = tryAcquireDrivingDistanceLock("lead-busy", "b@example.com");
+    const lock2 = tryAcquireDrivingDistanceLock(key, "b@example.com");
     expect(lock2.ok).toBe(false);
-    releaseDrivingDistanceLock("lead-busy", "a@example.com");
-    const lock3 = tryAcquireDrivingDistanceLock("lead-busy", "b@example.com");
+    const lockDup = tryAcquireDrivingDistanceLock(key, "a@example.com");
+    expect(lockDup.ok).toBe(false);
+    releaseDrivingDistanceLock(key, "a@example.com");
+    const lock3 = tryAcquireDrivingDistanceLock(key, "b@example.com");
     expect(lock3.ok).toBe(true);
   });
 

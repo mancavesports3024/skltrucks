@@ -48,8 +48,10 @@ export async function updateBuyingProfileAction(formData: FormData) {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
 
-  const input = parseBuyingProfileForm(formData);
-  const result = await saveBuyingProfile(input);
+  const parsed = parseBuyingProfileForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
+
+  const result = await saveBuyingProfile(parsed.input);
   if (result.error) return { error: result.error };
 
   const reclass = await reclassifyAllLeads();

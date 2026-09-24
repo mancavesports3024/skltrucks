@@ -5,7 +5,7 @@ import type {
   GoogleRoutesFailureCategory,
 } from "@/lib/sourcing/distance/google-routes/types";
 
-/** Google Routes API computeRoutes endpoint. */
+/** Hardcoded Google Routes API computeRoutes endpoint — never user-supplied. */
 export const GOOGLE_ROUTES_COMPUTE_URL =
   "https://routes.googleapis.com/directions/v2:computeRoutes";
 
@@ -13,6 +13,15 @@ export const GOOGLE_ROUTES_COMPUTE_URL =
 export const GOOGLE_ROUTES_FIELD_MASK = "routes.distanceMeters,routes.duration";
 
 export const GOOGLE_ROUTES_TIMEOUT_MS = 8_000;
+
+/** Bound response body before JSON parse (~256 KiB). */
+export const GOOGLE_ROUTES_MAX_RESPONSE_BYTES = 262_144;
+
+/**
+ * Reject absurd distances (continental US city-center routes are far below this).
+ * ~6,213 miles ≈ 10,000 km.
+ */
+export const GOOGLE_ROUTES_MAX_DISTANCE_METERS = 10_000_000;
 
 export const GOOGLE_MAPS_ROUTES_API_KEY_ENV = "GOOGLE_MAPS_ROUTES_API_KEY";
 
@@ -46,7 +55,7 @@ function staffSafeHttpMessage(status: number, category: GoogleRoutesFailureCateg
     return "Driving-distance provider authentication failed. Check server configuration.";
   }
   if (category === "quota") {
-    return "Driving-distance daily or provider quota exceeded. Try again later or enter Transportation manually.";
+    return "Driving-distance provider quota exceeded. Try again later or enter Transportation manually.";
   }
   if (status === 0) {
     return "Driving-distance provider timed out. Enter Transportation manually.";
@@ -66,7 +75,10 @@ export type ComputeRoutesRequest = {
 
 /**
  * Call Google Routes computeRoutes (DRIVE, TRAFFIC_UNAWARE).
- * Sends the API key only in X-Goog-Api-Key. Never logs the key or headers.
+ * - Endpoint hostname/path are hardcoded constants.
+ * - API key sent only in X-Goog-Api-Key (never logged).
+ * - Redirects rejected; response size bounded; timeout enforced.
+ * - Only distanceMeters + duration accepted; multi-route responses use routes[0] deterministically.
  */
 export async function computeGoogleRoute(
   input: ComputeRoutesRequest
@@ -80,6 +92,7 @@ export async function computeGoogleRoute(
     const res = await fetchImpl(GOOGLE_ROUTES_COMPUTE_URL, {
       method: "POST",
       signal: controller.signal,
+      redirect: "error",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": input.apiKey,
@@ -112,11 +125,10 @@ export async function computeGoogleRoute(
 
     if (!res.ok) {
       const category = categorizeHttpStatus(res.status);
-      // Consume body without logging secrets.
       try {
         await res.text();
       } catch {
-        /* ignore */
+        /* ignore — never log body/headers */
       }
       return {
         ok: false,
@@ -125,9 +137,28 @@ export async function computeGoogleRoute(
       };
     }
 
+    let rawText: string;
+    try {
+      rawText = await res.text();
+    } catch {
+      return {
+        ok: false,
+        category: "malformed",
+        message: "Driving-distance provider returned an unreadable response.",
+      };
+    }
+
+    if (rawText.length > GOOGLE_ROUTES_MAX_RESPONSE_BYTES) {
+      return {
+        ok: false,
+        category: "malformed",
+        message: "Driving-distance provider returned an oversized response.",
+      };
+    }
+
     let json: unknown;
     try {
-      json = await res.json();
+      json = JSON.parse(rawText) as unknown;
     } catch {
       return {
         ok: false,
@@ -153,6 +184,8 @@ export async function computeGoogleRoute(
       };
     }
 
+    // Deterministic: always use first route when computeAlternativeRoutes is false
+    // (Google may still return a one-element array). Extra routes are ignored.
     const first = routes[0];
     if (!first || typeof first !== "object") {
       return {
@@ -163,26 +196,48 @@ export async function computeGoogleRoute(
     }
 
     const distanceMeters = Number((first as { distanceMeters?: unknown }).distanceMeters);
-    if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+    if (
+      !Number.isFinite(distanceMeters) ||
+      distanceMeters < 0 ||
+      distanceMeters > GOOGLE_ROUTES_MAX_DISTANCE_METERS
+    ) {
       return {
         ok: false,
         category: "malformed",
-        message: "Driving-distance provider returned an unreadable response.",
+        message: "Driving-distance provider returned an unusable distance.",
       };
     }
 
     const durationSeconds = parseGoogleDurationSeconds(
       (first as { duration?: unknown }).duration
     );
+    // Duration is optional; invalid format fails closed only when present and unparsable.
+    const durationRaw = (first as { duration?: unknown }).duration;
+    if (durationRaw != null && durationRaw !== "" && durationSeconds == null) {
+      return {
+        ok: false,
+        category: "malformed",
+        message: "Driving-distance provider returned an unreadable duration.",
+      };
+    }
 
     return { ok: true, distanceMeters, durationSeconds };
   } catch (err) {
     const name = err instanceof Error ? err.name : "";
+    const message = err instanceof Error ? err.message : "";
     if (name === "AbortError" || name === "TimeoutError") {
       return {
         ok: false,
         category: "timeout",
         message: staffSafeHttpMessage(0, "timeout"),
+      };
+    }
+    // redirect: 'error' surfaces as TypeError / Failed to fetch in some runtimes
+    if (/redirect/i.test(message)) {
+      return {
+        ok: false,
+        category: "provider",
+        message: "Driving-distance provider error. Enter Transportation manually.",
       };
     }
     return {

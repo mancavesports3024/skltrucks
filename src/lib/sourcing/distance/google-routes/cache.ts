@@ -109,7 +109,9 @@ export function parseDrivingRouteCache(raw: unknown): DrivingRouteCache | null {
 
 /**
  * Cache is fresh only when origin, destination, provider, and version still match.
- * Location/coord changes invalidate the cache.
+ * There is **no wall-clock TTL** — freshness does not expire by age alone.
+ * Location text changes matter only when resolved Census destination coords change.
+ * Bumping GOOGLE_ROUTES_CACHE_VERSION invalidates all prior caches.
  */
 export function isDrivingRouteCacheFresh(
   cache: DrivingRouteCache | null | undefined,

@@ -1,44 +1,60 @@
 import "server-only";
 
 /**
- * One active driving-distance calculation per lead (in-process).
- * Complements UI disabled state — does not replace auth.
+ * One active driving-distance calculation per lead+route key (in-process).
+ * Complements UI disabled state — does not replace auth or Google Cloud quotas.
+ *
+ * Concurrent tabs for the same lead/route key serialize here so only one Google
+ * call runs. Different destinations on the same lead use different keys.
  */
-const activeByLead = new Map<string, string>();
+const activeByKey = new Map<string, string>();
 
 export const DRIVING_DISTANCE_BUSY_MESSAGE =
-  "A driving-distance calculation is already running for this lead. Wait for it to finish, then try again.";
+  "A driving-distance calculation is already running for this lead/route. Wait for it to finish, then try again.";
 
 export type DrivingDistanceLockResult =
-  | { ok: true }
+  | { ok: true; lockKey: string }
   | { ok: false; message: string };
 
-export function tryAcquireDrivingDistanceLock(
+export function drivingDistanceLockKey(
   leadId: string,
+  destLat: number,
+  destLng: number,
+  version: string
+): string {
+  return `${leadId.trim()}|${destLat.toFixed(5)}|${destLng.toFixed(5)}|${version}`;
+}
+
+export function tryAcquireDrivingDistanceLock(
+  lockKey: string,
   holder: string
 ): DrivingDistanceLockResult {
-  const id = leadId.trim();
+  const key = lockKey.trim();
   const who = holder.trim().toLowerCase() || "anonymous";
-  if (!id) {
-    return { ok: false, message: "Missing lead id." };
+  if (!key) {
+    return { ok: false, message: "Missing lock key." };
   }
-  const current = activeByLead.get(id);
+  const current = activeByKey.get(key);
   if (current && current !== who) {
     return { ok: false, message: DRIVING_DISTANCE_BUSY_MESSAGE };
   }
-  activeByLead.set(id, who);
-  return { ok: true };
+  // Same holder re-entry (duplicate click): treat as busy if already held.
+  if (current === who) {
+    return { ok: false, message: DRIVING_DISTANCE_BUSY_MESSAGE };
+  }
+  activeByKey.set(key, who);
+  return { ok: true, lockKey: key };
 }
 
-export function releaseDrivingDistanceLock(leadId: string, holder: string): void {
-  const id = leadId.trim();
+export function releaseDrivingDistanceLock(lockKey: string, holder: string): void {
+  const key = lockKey.trim();
   const who = holder.trim().toLowerCase() || "anonymous";
-  if (activeByLead.get(id) === who) {
-    activeByLead.delete(id);
+  if (activeByKey.get(key) === who) {
+    activeByKey.delete(key);
   }
 }
 
 /** Test helper. */
 export function resetDrivingDistanceLocksForTests(): void {
-  activeByLead.clear();
+  activeByKey.clear();
 }

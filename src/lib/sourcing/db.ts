@@ -31,7 +31,6 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type {
   BuyingProfile,
   BuyingProfileInput,
-  SpecEvidence,
   SupplierContact,
   SupplierContactInput,
   TruckLead,
@@ -39,7 +38,6 @@ import type {
 } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 import type { DrivingRouteCache } from "@/lib/sourcing/distance/google-routes/types";
-import { normalizeSpecEvidence } from "@/lib/sourcing/intake/sources";
 
 export async function getBuyingProfile(): Promise<BuyingProfile> {
   if (!isSupabaseConfigured()) return { ...DEFAULT_BUYING_PROFILE };
@@ -68,39 +66,21 @@ export async function saveBuyingProfile(
   if (!access.ok) return { error: access.error };
 
   const fullRow = buyingProfileToRow(input);
-  let { data, error } = await access.supabase
+  const { data, error } = await access.supabase
     .from("sourcing_buying_profile")
     .upsert({ id: "default", ...fullRow })
     .select("*")
     .single();
 
-  // Optional additive columns may be absent until SQL is applied — retry without them.
-  if (
-    error &&
-    /transportation_rate_per_mile|default_inspection_cost|schema cache/i.test(error.message)
-  ) {
-    const legacyRow = { ...fullRow } as Record<string, unknown>;
-    delete legacyRow.transportation_rate_per_mile;
-    delete legacyRow.default_inspection_cost;
-    ({ data, error } = await access.supabase
-      .from("sourcing_buying_profile")
-      .upsert({ id: "default", ...legacyRow })
-      .select("*")
-      .single());
-    if (!error && data) {
-      const profile = rowToBuyingProfile(data as DbBuyingProfile);
-      // Preserve staff-entered defaults in the returned profile even when columns are absent.
+  if (error) {
+    if (/transportation_rate_per_mile|default_inspection_cost|schema cache|column/i.test(error.message)) {
       return {
-        profile: {
-          ...profile,
-          transportationRatePerMile: input.transportationRatePerMile,
-          defaultInspectionCost: input.defaultInspectionCost,
-        },
+        error:
+          "Buying-profile cost columns are missing. Apply required SQL migration supabase/sourcing-mc-driving-distance-required.sql before saving transportation rate or inspection defaults.",
       };
     }
+    return { error: error.message };
   }
-
-  if (error) return { error: error.message };
   return { profile: rowToBuyingProfile(data as DbBuyingProfile) };
 }
 
@@ -241,9 +221,18 @@ export async function deleteSupplierContact(id: string): Promise<{ error?: strin
 }
 
 /**
- * Persist Google Routes driving-distance cache into spec_evidence only.
- * Does not change driving_distance_miles, distance_is_estimate, listing timestamps,
- * classification, call notes, or listing-content fingerprint fields.
+ * Persist Google Routes driving-distance cache into `spec_evidence.drivingRoute` only.
+ *
+ * Uses atomic JSONB merge RPC `merge_sourcing_lead_driving_route` so concurrent
+ * evidence updates (inspectionUrl, country, workbook provenance, etc.) are not
+ * discarded by a stale read-modify-write.
+ *
+ * Does not change:
+ * - driving_distance_miles / distance_is_estimate (legacy Haversine classification field)
+ * - listing_last_changed_at (no digest listing-change event)
+ * - match classification, call notes, source evidence keys other than drivingRoute
+ *
+ * Does update `updated_at` via the existing set_updated_at trigger (operational timestamp).
  */
 export async function persistDrivingRouteCache(
   leadId: string,
@@ -252,23 +241,25 @@ export async function persistDrivingRouteCache(
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
 
-  const existing = await getTruckLeadById(leadId);
-  if (!existing) return { error: "Lead not found." };
-
-  const nextEvidence: SpecEvidence = normalizeSpecEvidence({
-    ...existing.specEvidence,
-    drivingRoute: cache,
+  const { data, error } = await access.supabase.rpc("merge_sourcing_lead_driving_route", {
+    p_lead_id: leadId,
+    p_driving_route: cache,
   });
 
-  const { data, error } = await access.supabase
-    .from("sourcing_truck_leads")
-    .update({ spec_evidence: nextEvidence })
-    .eq("id", leadId)
-    .select("*")
-    .single();
+  if (error) {
+    if (/merge_sourcing_lead_driving_route|Could not find the function|schema cache/i.test(error.message)) {
+      return {
+        error:
+          "Driving-route merge RPC is missing. Apply required SQL migration supabase/sourcing-mc-driving-distance-required.sql before calculating driving distance.",
+      };
+    }
+    return { error: error.message };
+  }
 
-  if (error) return { error: error.message };
-  return { lead: rowToTruckLead(data as DbTruckLead) };
+  // PostgREST may return a single object or a one-element array depending on config.
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { error: "Lead not found." };
+  return { lead: rowToTruckLead(row as DbTruckLead) };
 }
 
 /**

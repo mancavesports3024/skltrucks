@@ -14,6 +14,7 @@ import {
 } from "@/lib/sourcing/distance/google-routes/daily-limit";
 import {
   DRIVING_DISTANCE_BUSY_MESSAGE,
+  drivingDistanceLockKey,
   releaseDrivingDistanceLock,
   tryAcquireDrivingDistanceLock,
 } from "@/lib/sourcing/distance/google-routes/lock";
@@ -21,6 +22,7 @@ import {
   CITY_CENTER_DRIVING_LABEL,
   DRIVING_DISTANCE_CACHED_LABEL,
   DRIVING_DISTANCE_UNAVAILABLE_MESSAGE,
+  GOOGLE_ROUTES_CACHE_VERSION,
   GOOGLE_ROUTES_PROVIDER,
   type DrivingDistanceResult,
   type DrivingDistanceUsage,
@@ -42,7 +44,7 @@ import type { SpecEvidence } from "@/types/sourcing";
 export type CalculateDrivingDistanceInput = {
   leadId: string;
   location: string;
-  /** Existing straight-line miles (classification) — never overwritten. */
+  /** Legacy Haversine classification miles on driving_distance_miles — never overwritten. */
   straightLineMiles: number | null;
   specEvidence: SpecEvidence | null | undefined;
   transportationRatePerMile?: number;
@@ -86,6 +88,27 @@ function fail(
   };
 }
 
+function successFromCache(
+  existing: DrivingRouteCache,
+  rate: number
+): DrivingDistanceResult & { cacheToPersist?: DrivingRouteCache } {
+  const displayMiles = roundDrivingMilesForDisplay(existing.distanceMiles);
+  const transportationDefaultUsd = calculateTransportationUsd(existing.distanceMiles, rate);
+  return {
+    ok: true,
+    cache: existing,
+    displayMiles,
+    transportationDefaultUsd,
+    message: DRIVING_DISTANCE_CACHED_LABEL,
+    usage: usageBase({
+      cached: true,
+      requestCount: 0,
+      success: true,
+      calculatedAt: existing.calculatedAt,
+    }),
+  };
+}
+
 /**
  * Resolve Census destination coordinates from the lead location (offline).
  * Does not call Google Geocoding.
@@ -111,8 +134,13 @@ export function resolveDestinationCoordinates(location: string): {
 
 /**
  * Calculate or reuse cached Google Routes driving distance for Market Comparison.
- * Does not change classification miles (`driving_distance_miles`).
- * Max one Google request per successful invocation (zero when cache is fresh).
+ * Does not change classification miles (`driving_distance_miles` Haversine field).
+ * Max one Google request per successful provider invocation (zero when cache is fresh).
+ *
+ * Cache freshness policy (no wall-clock TTL):
+ * - Fresh while origin coords, destination coords, provider, and cache version match.
+ * - Stale after location/dest change, origin constant change, or version bump.
+ * - "Calculate again" with a fresh cache returns the saved estimate (0 Google calls).
  */
 export async function calculateDrivingDistanceForLead(
   input: CalculateDrivingDistanceInput
@@ -123,39 +151,37 @@ export async function calculateDrivingDistanceForLead(
   const straightLineMiles = input.straightLineMiles;
   const holder = input.holderEmail || "staff";
 
-  const lock = tryAcquireDrivingDistanceLock(input.leadId, holder);
+  const dest = resolveDestinationCoordinates(input.location);
+  if (!dest.ok) {
+    return fail(
+      "missing_destination",
+      "Destination coordinates unavailable for this lead location. Enter Transportation manually.",
+      straightLineMiles,
+      0
+    );
+  }
+
+  const existing = parseDrivingRouteCache(input.specEvidence?.drivingRoute);
+  if (isDrivingRouteCacheFresh(existing, dest.lat, dest.lng)) {
+    return successFromCache(existing, rate);
+  }
+
+  const lockKey = drivingDistanceLockKey(
+    input.leadId,
+    dest.lat,
+    dest.lng,
+    GOOGLE_ROUTES_CACHE_VERSION
+  );
+  const lock = tryAcquireDrivingDistanceLock(lockKey, holder);
   if (!lock.ok) {
     return fail("busy", lock.message || DRIVING_DISTANCE_BUSY_MESSAGE, straightLineMiles, 0);
   }
 
   try {
-    const dest = resolveDestinationCoordinates(input.location);
-    if (!dest.ok) {
-      return fail(
-        "missing_destination",
-        "Destination coordinates unavailable for this lead location. Enter Transportation manually.",
-        straightLineMiles,
-        0
-      );
-    }
-
-    const existing = parseDrivingRouteCache(input.specEvidence?.drivingRoute);
-    if (isDrivingRouteCacheFresh(existing, dest.lat, dest.lng)) {
-      const displayMiles = roundDrivingMilesForDisplay(existing.distanceMiles);
-      const transportationDefaultUsd = calculateTransportationUsd(existing.distanceMiles, rate);
-      return {
-        ok: true,
-        cache: existing,
-        displayMiles,
-        transportationDefaultUsd,
-        message: DRIVING_DISTANCE_CACHED_LABEL,
-        usage: usageBase({
-          cached: true,
-          requestCount: 0,
-          success: true,
-          calculatedAt: existing.calculatedAt,
-        }),
-      };
+    // Re-check after lock — another tab may have populated the cache.
+    const again = parseDrivingRouteCache(input.specEvidence?.drivingRoute);
+    if (isDrivingRouteCacheFresh(again, dest.lat, dest.lng)) {
+      return successFromCache(again, rate);
     }
 
     const env = input.env ?? process.env;
@@ -219,6 +245,6 @@ export async function calculateDrivingDistanceForLead(
       }),
     };
   } finally {
-    releaseDrivingDistanceLock(input.leadId, holder);
+    releaseDrivingDistanceLock(lockKey, holder);
   }
 }

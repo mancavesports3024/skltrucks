@@ -8,6 +8,12 @@ import {
   UNITED_STATES,
   resolveLeadCountry,
 } from "@/lib/sourcing/location/country";
+import {
+  DEFAULT_INSPECTION_COST_USD,
+  DEFAULT_TRANSPORTATION_RATE_PER_MILE,
+  parseDefaultInspectionCost,
+  parseTransportationRatePerMile,
+} from "@/lib/sourcing/market-comparison/cost-defaults";
 import type {
   BuyingProfileInput,
   ListedWeightTerm,
@@ -45,7 +51,11 @@ function checkbox(formData: FormData, key: string): boolean {
   return formData.get(key) === "on" || formData.get(key) === "true";
 }
 
-export function parseBuyingProfileForm(formData: FormData): BuyingProfileInput {
+export type ParseBuyingProfileResult =
+  | { ok: true; input: BuyingProfileInput }
+  | { ok: false; error: string };
+
+export function parseBuyingProfileForm(formData: FormData): ParseBuyingProfileResult {
   const boxRaw = str(formData, "requiredBoxLengthsFt");
   const requiredBoxLengthsFt = boxRaw
     .split(/[,\s]+/)
@@ -56,27 +66,35 @@ export function parseBuyingProfileForm(formData: FormData): BuyingProfileInput {
   const maxPrice =
     maxPriceRaw === "" ? null : Number(maxPriceRaw.replace(/,/g, "").replace(/^\$/, ""));
 
+  const rateRaw = str(formData, "transportationRatePerMile");
+  const inspectionRaw = str(formData, "defaultInspectionCost");
+  const rateParsed = parseTransportationRatePerMile(
+    rateRaw === "" ? DEFAULT_TRANSPORTATION_RATE_PER_MILE : rateRaw
+  );
+  if (!rateParsed.ok) return { ok: false, error: rateParsed.error };
+  const inspectionParsed = parseDefaultInspectionCost(
+    inspectionRaw === "" ? DEFAULT_INSPECTION_COST_USD : inspectionRaw
+  );
+  if (!inspectionParsed.ok) return { ok: false, error: inspectionParsed.error };
+
   return {
-    requireCummins: checkbox(formData, "requireCummins"),
-    requireAutomatic: checkbox(formData, "requireAutomatic"),
-    requiredBoxLengthsFt: requiredBoxLengthsFt.length ? requiredBoxLengthsFt : [24, 26, 28],
-    maxGvwrLbs: optionalInt(formData, "maxGvwrLbs") ?? 26000,
-    gvwrMustBeStrictlyBelow: checkbox(formData, "gvwrMustBeStrictlyBelow"),
-    maxMileage: optionalInt(formData, "maxMileage") ?? 275000,
-    maxAgeYears: optionalInt(formData, "maxAgeYears") ?? 9,
-    preferLiftgate: checkbox(formData, "preferLiftgate"),
-    preferredMaxDrivingMiles: optionalInt(formData, "preferredMaxDrivingMiles") ?? 1200,
-    maxPrice: maxPrice != null && Number.isFinite(maxPrice) ? maxPrice : null,
-    originLabel: str(formData, "originLabel") || "Joplin, Missouri",
-    notes: str(formData, "notes"),
-    transportationRatePerMile: (() => {
-      const n = optionalNumber(formData, "transportationRatePerMile");
-      return n != null && n >= 0 ? n : 2.25;
-    })(),
-    defaultInspectionCost: (() => {
-      const n = optionalNumber(formData, "defaultInspectionCost");
-      return n != null && n >= 0 ? n : 230;
-    })(),
+    ok: true,
+    input: {
+      requireCummins: checkbox(formData, "requireCummins"),
+      requireAutomatic: checkbox(formData, "requireAutomatic"),
+      requiredBoxLengthsFt: requiredBoxLengthsFt.length ? requiredBoxLengthsFt : [24, 26, 28],
+      maxGvwrLbs: optionalInt(formData, "maxGvwrLbs") ?? 26000,
+      gvwrMustBeStrictlyBelow: checkbox(formData, "gvwrMustBeStrictlyBelow"),
+      maxMileage: optionalInt(formData, "maxMileage") ?? 275000,
+      maxAgeYears: optionalInt(formData, "maxAgeYears") ?? 9,
+      preferLiftgate: checkbox(formData, "preferLiftgate"),
+      preferredMaxDrivingMiles: optionalInt(formData, "preferredMaxDrivingMiles") ?? 1200,
+      maxPrice: maxPrice != null && Number.isFinite(maxPrice) ? maxPrice : null,
+      originLabel: str(formData, "originLabel") || "Joplin, Missouri",
+      notes: str(formData, "notes"),
+      transportationRatePerMile: rateParsed.value,
+      defaultInspectionCost: inspectionParsed.value,
+    },
   };
 }
 
