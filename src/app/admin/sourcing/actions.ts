@@ -48,8 +48,10 @@ export async function updateBuyingProfileAction(formData: FormData) {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
 
-  const input = parseBuyingProfileForm(formData);
-  const result = await saveBuyingProfile(input);
+  const parsed = parseBuyingProfileForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
+
+  const result = await saveBuyingProfile(parsed.input);
   if (result.error) return { error: result.error };
 
   const reclass = await reclassifyAllLeads();
@@ -250,6 +252,8 @@ export async function importSeedResearchAction() {
     maxPrice: profile.maxPrice,
     originLabel: profile.originLabel,
     notes: profile.notes,
+    transportationRatePerMile: profile.transportationRatePerMile,
+    defaultInspectionCost: profile.defaultInspectionCost,
   });
 
   const companyToId = new Map<string, string>();
@@ -480,3 +484,95 @@ export async function compareMarketAction(formData: FormData) {
     comparisonId: result.comparisonId ?? null,
   };
 }
+
+/**
+ * Explicit Google Routes driving-distance calculation for Market Comparison.
+ * Does not run OpenAI/Tavily. Does not start market comparison.
+ * At most one Google request (zero when a fresh cache exists).
+ */
+export async function calculateDrivingDistanceAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) {
+    return {
+      error: access.error,
+      ok: false as const,
+      status: access.status,
+    };
+  }
+
+  const leadId = String(formData.get("leadId") ?? "").trim();
+  if (!leadId) return { error: "Missing lead id.", ok: false as const };
+
+  const { getBuyingProfile, getTruckLeadById, persistDrivingRouteCache } = await import(
+    "@/lib/sourcing/db"
+  );
+  const { calculateDrivingDistanceForLead } = await import(
+    "@/lib/sourcing/distance/google-routes/calculate"
+  );
+  const {
+    CITY_CENTER_CONFIRM_NOTICE,
+    CITY_CENTER_DRIVING_LABEL,
+  } = await import("@/lib/sourcing/distance/google-routes");
+  const {
+    formatTransportationFormula,
+    normalizeDefaultInspectionCost,
+  } = await import("@/lib/sourcing/market-comparison/cost-defaults");
+
+  const lead = await getTruckLeadById(leadId);
+  if (!lead) return { error: "Lead not found.", ok: false as const };
+
+  const profile = await getBuyingProfile();
+  const result = await calculateDrivingDistanceForLead({
+    leadId,
+    location: lead.location,
+    straightLineMiles: lead.drivingDistanceMiles,
+    specEvidence: lead.specEvidence,
+    transportationRatePerMile: profile.transportationRatePerMile,
+    holderEmail: access.user.email ?? access.user.id,
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      error: result.error,
+      failureCategory: result.failureCategory,
+      straightLineMiles: result.straightLineMiles,
+      usage: result.usage,
+      label: CITY_CENTER_DRIVING_LABEL,
+    };
+  }
+
+  if (result.cacheToPersist) {
+    const saved = await persistDrivingRouteCache(leadId, result.cacheToPersist);
+    if (saved.error) {
+      return { ok: false as const, error: saved.error };
+    }
+    revalidateSourcing();
+  }
+
+  const inspectionDefault = normalizeDefaultInspectionCost(profile.defaultInspectionCost);
+  const formula = formatTransportationFormula(
+    result.displayMiles,
+    profile.transportationRatePerMile,
+    result.transportationDefaultUsd
+  );
+
+  return {
+    ok: true as const,
+    error: null,
+    message: result.message,
+    displayMiles: result.displayMiles,
+    distanceMilesUnrounded: result.cache.distanceMiles,
+    durationSeconds: result.cache.durationSeconds,
+    transportationDefaultUsd: result.transportationDefaultUsd,
+    inspectionDefaultUsd: inspectionDefault,
+    ratePerMile: profile.transportationRatePerMile,
+    formula,
+    methodLabel: CITY_CENTER_DRIVING_LABEL,
+    confirmNotice: CITY_CENTER_CONFIRM_NOTICE,
+    usage: result.usage,
+    cache: result.cache,
+    straightLineMiles: lead.distanceIsEstimate ? lead.drivingDistanceMiles : lead.drivingDistanceMiles,
+  };
+}
+

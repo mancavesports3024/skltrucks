@@ -187,6 +187,14 @@ insert into public.sourcing_buying_profile (id)
 values ('default')
 on conflict (id) do nothing;
 
+-- Market Comparison cost defaults (also in sourcing-mc-driving-distance-required.sql).
+alter table public.sourcing_buying_profile
+  add column if not exists transportation_rate_per_mile numeric(10, 4)
+    not null default 2.25;
+alter table public.sourcing_buying_profile
+  add column if not exists default_inspection_cost numeric(12, 2)
+    not null default 230.00;
+
 alter table public.sourcing_buying_profile enable row level security;
 
 drop policy if exists "Authenticated manage sourcing buying profile"

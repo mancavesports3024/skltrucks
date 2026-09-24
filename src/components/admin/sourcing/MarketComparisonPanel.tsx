@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import DrivingDistanceControls, {
+  type CostSource,
+} from "@/components/admin/sourcing/DrivingDistanceControls";
+import type { DrivingRouteCache } from "@/lib/sourcing/distance/google-routes";
 import { recalculateReportWithLandedCosts } from "@/lib/sourcing/market-comparison/build-report";
 import {
   EMPTY_LANDED_COST_INPUT,
@@ -80,6 +84,11 @@ type Props = {
   action: (formData: FormData) => Promise<void>;
   error?: string | null;
   justCompleted?: MarketComparisonReport | null;
+  drivingRouteCache: DrivingRouteCache | null;
+  straightLineMiles: number | null;
+  distanceIsEstimate: boolean;
+  transportationRatePerMile: number;
+  defaultInspectionCost: number;
 };
 
 export default function MarketComparisonPanel({
@@ -91,15 +100,28 @@ export default function MarketComparisonPanel({
   action,
   error,
   justCompleted,
+  drivingRouteCache,
+  straightLineMiles,
+  distanceIsEstimate,
+  transportationRatePerMile,
+  defaultInspectionCost,
 }: Props) {
   const baseReport = justCompleted || latest?.report || null;
   const [costs, setCosts] = useState<CostDraft>(EMPTY_LANDED_COST_INPUT);
   const [displayReport, setDisplayReport] = useState<MarketComparisonReport | null>(baseReport);
+  const [transportationSource, setTransportationSource] = useState<CostSource>("profile_default");
+  const [inspectionSource, setInspectionSource] = useState<CostSource>("profile_default");
 
   useEffect(() => {
     setDisplayReport(baseReport);
     if (baseReport?.landedCost?.inputs) {
       setCosts(baseReport.landedCost.inputs);
+      setTransportationSource(
+        baseReport.landedCost.inputs.transportation > 0 ? "staff_override" : "profile_default"
+      );
+      setInspectionSource(
+        baseReport.landedCost.inputs.inspection > 0 ? "staff_override" : "profile_default"
+      );
     }
   }, [baseReport]);
 
@@ -110,10 +132,26 @@ export default function MarketComparisonPanel({
       [key]: Number.isFinite(n) && n > 0 ? n : 0,
     };
     setCosts(next);
+    if (key === "transportation") setTransportationSource("staff_override");
+    if (key === "inspection") setInspectionSource("staff_override");
     if (baseReport) {
-      // Local recalculation — no paid search.
+      // Local recalculation — no paid search / no Google.
       setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
     }
+  }
+
+  function setTransportationFromDistance(value: number, source: CostSource) {
+    const next = { ...costs, transportation: value };
+    setCosts(next);
+    setTransportationSource(source);
+    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+  }
+
+  function setInspectionFromDistance(value: number, source: CostSource) {
+    const next = { ...costs, inspection: value };
+    setCosts(next);
+    setInspectionSource(source);
+    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
   }
 
   return (
@@ -139,6 +177,21 @@ export default function MarketComparisonPanel({
       >
         {MARKET_COMPARISON_DISCLAIMER}
       </div>
+
+      <DrivingDistanceControls
+        leadId={leadId}
+        initialCache={drivingRouteCache}
+        straightLineMiles={straightLineMiles}
+        distanceIsEstimate={distanceIsEstimate}
+        transportationRatePerMile={transportationRatePerMile}
+        defaultInspectionCost={defaultInspectionCost}
+        transportation={costs.transportation}
+        inspection={costs.inspection}
+        onTransportationChange={setTransportationFromDistance}
+        onInspectionChange={setInspectionFromDistance}
+        transportationSource={transportationSource}
+        inspectionSource={inspectionSource}
+      />
 
       {!eligible ? (
         <div role="alert" className="border border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-800">
@@ -190,7 +243,7 @@ export default function MarketComparisonPanel({
                   name={name}
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.01"
                   value={costs[name] || ""}
                   onChange={(e) => updateCost(name, e.target.value)}
                   className="mt-1 w-full border border-neutral-300 px-3 py-2"
@@ -202,8 +255,8 @@ export default function MarketComparisonPanel({
           {baseReport ? (
             <p className="text-sm text-neutral-700">
               Changing expenses recalculates the assessment locally from the last verified
-              comparables — <strong>no additional paid search</strong>. Re-run Compare market only
-              when you need fresh listings (that incurs another charge).
+              comparables — <strong>no additional paid search</strong> and no Google Routes call.
+              Re-run Compare market only when you need fresh listings (that incurs another charge).
             </p>
           ) : null}
           {hasExpenseInputs(costs) ? (

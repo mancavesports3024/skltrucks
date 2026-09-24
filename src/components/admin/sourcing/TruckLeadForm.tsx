@@ -321,7 +321,7 @@ export default function TruckLeadForm({ lead, contacts }: TruckLeadFormProps) {
           </div>
           <div>
             <label className={labelClass} htmlFor="drivingDistanceMiles">
-              Driving distance from Joplin (miles)
+              Estimated straight-line distance from Joplin (miles)
             </label>
             <input
               id="drivingDistanceMiles"
@@ -331,6 +331,12 @@ export default function TruckLeadForm({ lead, contacts }: TruckLeadFormProps) {
               defaultValue={lead?.drivingDistanceMiles ?? ""}
               placeholder="Leave blank if unknown — do not invent"
             />
+            <p className="mt-1 text-xs text-neutral-500">
+              Legacy column <code className="font-mono">driving_distance_miles</code> stores
+              Haversine/Census straight-line miles for the 1,200-mile classification rule — not
+              Google city-center driving distance. Market Comparison transportation uses Google
+              Routes separately.
+            </p>
           </div>
           <label className="flex items-end gap-2 text-sm pb-3">
             <input
@@ -338,7 +344,7 @@ export default function TruckLeadForm({ lead, contacts }: TruckLeadFormProps) {
               name="distanceIsEstimate"
               defaultChecked={lead?.distanceIsEstimate ?? true}
             />
-            Distance is an estimate
+            Distance is an estimate (straight-line)
           </label>
           <div>
             <label className={labelClass} htmlFor="dateLastChecked">

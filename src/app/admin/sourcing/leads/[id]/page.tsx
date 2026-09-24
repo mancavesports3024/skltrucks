@@ -4,10 +4,12 @@ import MatchStatusBadge from "@/components/admin/sourcing/MatchStatusBadge";
 import SourcingNav from "@/components/admin/sourcing/SourcingNav";
 import TruckLeadForm from "@/components/admin/sourcing/TruckLeadForm";
 import {
+  getBuyingProfile,
   getSupplierContacts,
   getTruckLeadById,
   listMarketComparisonsForLead,
 } from "@/lib/sourcing/db";
+import { parseDrivingRouteCache } from "@/lib/sourcing/distance/google-routes";
 import {
   leadToComparisonSnapshot,
   missingPreferredLeadFields,
@@ -21,10 +23,11 @@ interface PageProps {
 
 export default async function EditTruckLeadPage({ params }: PageProps) {
   const { id } = await params;
-  const [lead, contacts, comparisons] = await Promise.all([
+  const [lead, contacts, comparisons, profile] = await Promise.all([
     getTruckLeadById(id),
     getSupplierContacts(),
     listMarketComparisonsForLead(id),
+    getBuyingProfile(),
   ]);
   if (!lead) notFound();
 
@@ -33,6 +36,7 @@ export default async function EditTruckLeadPage({ params }: PageProps) {
   const missingPreferred = missingPreferredLeadFields(snapshot);
   const eligible = isLeadEligibleForMarketComparison(snapshot);
   const latest = comparisons.find((c) => c.status === "completed" && c.report) ?? null;
+  const drivingRouteCache = parseDrivingRouteCache(lead.specEvidence?.drivingRoute);
 
   return (
     <div>
@@ -87,6 +91,11 @@ export default async function EditTruckLeadPage({ params }: PageProps) {
           missingRequired={missingRequired}
           missingPreferred={missingPreferred}
           latest={latest}
+          drivingRouteCache={drivingRouteCache}
+          straightLineMiles={lead.drivingDistanceMiles}
+          distanceIsEstimate={lead.distanceIsEstimate}
+          transportationRatePerMile={profile.transportationRatePerMile}
+          defaultInspectionCost={profile.defaultInspectionCost}
         />
 
         <TruckLeadForm lead={lead} contacts={contacts} />
