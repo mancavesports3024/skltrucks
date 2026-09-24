@@ -135,10 +135,12 @@ describe("MarketComparisonPanel", () => {
         {...distanceProps}
       />
     );
-    expect(screen.getByTestId("assessment-basis")).toHaveTextContent(/Purchase\/wholesale price/i);
+    expect(screen.getByTestId("assessment-basis")).toHaveTextContent(/Estimated landed cost/i);
     expect(
-      screen.getAllByText("Purchase-price comparison only — expenses not included").length
+      screen.getAllByText(/Expenses included in final assessment/i).length
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/Based on public asking prices/i).length).toBeGreaterThan(0);
+    // Profile inspection default ($230) is seeded into the cost form without a Google call.
+    expect(screen.getByTestId("inspection-source")).toHaveTextContent("$230.00");
   });
 });

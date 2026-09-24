@@ -107,51 +107,107 @@ export default function MarketComparisonPanel({
   defaultInspectionCost,
 }: Props) {
   const baseReport = justCompleted || latest?.report || null;
-  const [costs, setCosts] = useState<CostDraft>(EMPTY_LANDED_COST_INPUT);
+  const [costs, setCosts] = useState<CostDraft>(() => {
+    const seeded = latest?.report?.landedCost?.inputs;
+    return seeded && hasExpenseInputs(seeded) ? { ...EMPTY_LANDED_COST_INPUT, ...seeded } : EMPTY_LANDED_COST_INPUT;
+  });
   const [displayReport, setDisplayReport] = useState<MarketComparisonReport | null>(baseReport);
-  const [transportationSource, setTransportationSource] = useState<CostSource>("profile_default");
-  const [inspectionSource, setInspectionSource] = useState<CostSource>("profile_default");
+  const [transportationSource, setTransportationSource] = useState<CostSource>(() =>
+    (latest?.report?.landedCost?.inputs?.transportation ?? 0) > 0 ? "staff_override" : "profile_default"
+  );
+  const [inspectionSource, setInspectionSource] = useState<CostSource>(() =>
+    (latest?.report?.landedCost?.inputs?.inspection ?? 0) > 0 ? "staff_override" : "profile_default"
+  );
 
+  // Keep report view in sync with the latest comparison payload — do not clobber
+  // locally auto-populated Transportation/Inspection with stale zero inputs.
   useEffect(() => {
-    setDisplayReport(baseReport);
-    if (baseReport?.landedCost?.inputs) {
-      setCosts(baseReport.landedCost.inputs);
-      setTransportationSource(
-        baseReport.landedCost.inputs.transportation > 0 ? "staff_override" : "profile_default"
-      );
-      setInspectionSource(
-        baseReport.landedCost.inputs.inspection > 0 ? "staff_override" : "profile_default"
-      );
-    }
+    setDisplayReport((prev) => {
+      if (!baseReport) return prev;
+      if (hasExpenseInputs(costs)) {
+        return recalculateReportWithLandedCosts(baseReport, costs);
+      }
+      return baseReport;
+    });
+    // Intentionally depends on baseReport only: cost-driven recalcs happen in applyCostPatch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseReport]);
+
+  // Adopt inputs only when a NEW comparison completes (form-submitted costs).
+  // Do not wipe Transportation/Inspection that were auto-populated from Google/profile
+  // when the completed report still has zeros for those fields.
+  useEffect(() => {
+    if (!justCompleted?.landedCost?.inputs) return;
+    const inputs = justCompleted.landedCost.inputs;
+    setCosts((prev) => {
+      const next = {
+        ...EMPTY_LANDED_COST_INPUT,
+        ...inputs,
+        transportation: inputs.transportation > 0 ? inputs.transportation : prev.transportation,
+        inspection: inputs.inspection > 0 ? inputs.inspection : prev.inspection,
+      };
+      setDisplayReport(
+        hasExpenseInputs(next)
+          ? recalculateReportWithLandedCosts(justCompleted, next)
+          : justCompleted
+      );
+      return next;
+    });
+    if (inputs.transportation > 0) setTransportationSource("staff_override");
+    if (inputs.inspection > 0) setInspectionSource("staff_override");
+  }, [justCompleted]);
+
+  /**
+   * Single atomic cost write so Transportation + Inspection updates cannot
+   * clobber each other via stale React state closures.
+   */
+  function applyCostPatch(
+    patch: Partial<CostDraft>,
+    sources?: Partial<{ transportation: CostSource; inspection: CostSource }>
+  ) {
+    setCosts((prev) => {
+      const next: CostDraft = { ...prev, ...patch };
+      if (baseReport) {
+        // Local recalculation — no paid search / no Google / no Tavily.
+        setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+      }
+      return next;
+    });
+    if (sources?.transportation) setTransportationSource(sources.transportation);
+    if (sources?.inspection) setInspectionSource(sources.inspection);
+  }
 
   function updateCost<K extends keyof CostDraft>(key: K, raw: string) {
     const n = Number(String(raw).replace(/[$,\s]/g, ""));
-    const next: CostDraft = {
-      ...costs,
-      [key]: Number.isFinite(n) && n > 0 ? n : 0,
-    };
-    setCosts(next);
-    if (key === "transportation") setTransportationSource("staff_override");
-    if (key === "inspection") setInspectionSource("staff_override");
-    if (baseReport) {
-      // Local recalculation — no paid search / no Google.
-      setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+    const value = Number.isFinite(n) && n > 0 ? n : 0;
+    applyCostPatch(
+      { [key]: value } as Partial<CostDraft>,
+      key === "transportation"
+        ? { transportation: "staff_override" }
+        : key === "inspection"
+          ? { inspection: "staff_override" }
+          : undefined
+    );
+  }
+
+  function applyRouteCostDefaults(update: {
+    transportationUsd: number | null;
+    inspectionUsd: number | null;
+    transportationSource?: CostSource;
+    inspectionSource?: CostSource;
+  }) {
+    const patch: Partial<CostDraft> = {};
+    const sources: Partial<{ transportation: CostSource; inspection: CostSource }> = {};
+    if (update.transportationUsd != null && Number.isFinite(update.transportationUsd)) {
+      patch.transportation = update.transportationUsd;
+      if (update.transportationSource) sources.transportation = update.transportationSource;
     }
-  }
-
-  function setTransportationFromDistance(value: number, source: CostSource) {
-    const next = { ...costs, transportation: value };
-    setCosts(next);
-    setTransportationSource(source);
-    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
-  }
-
-  function setInspectionFromDistance(value: number, source: CostSource) {
-    const next = { ...costs, inspection: value };
-    setCosts(next);
-    setInspectionSource(source);
-    if (baseReport) setDisplayReport(recalculateReportWithLandedCosts(baseReport, next));
+    if (update.inspectionUsd != null && Number.isFinite(update.inspectionUsd)) {
+      patch.inspection = update.inspectionUsd;
+      if (update.inspectionSource) sources.inspection = update.inspectionSource;
+    }
+    if (Object.keys(patch).length === 0) return;
+    applyCostPatch(patch, sources);
   }
 
   return (
@@ -187,8 +243,7 @@ export default function MarketComparisonPanel({
         defaultInspectionCost={defaultInspectionCost}
         transportation={costs.transportation}
         inspection={costs.inspection}
-        onTransportationChange={setTransportationFromDistance}
-        onInspectionChange={setInspectionFromDistance}
+        onApplyRouteCostDefaults={applyRouteCostDefaults}
         transportationSource={transportationSource}
         inspectionSource={inspectionSource}
       />
