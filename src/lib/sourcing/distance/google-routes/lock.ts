@@ -1,11 +1,11 @@
 import "server-only";
 
 /**
- * One active driving-distance calculation per lead+route key (in-process).
- * Complements UI disabled state — does not replace auth or Google Cloud quotas.
+ * One active driving-distance calculation per lead+route key (in-process only).
  *
- * Concurrent tabs for the same lead/route key serialize here so only one Google
- * call runs. Different destinations on the same lead use different keys.
+ * Complements UI disabled state — does not replace auth or Google Cloud quotas.
+ * Not fleet-wide on Vercel: two isolates can each call Google before cache is saved.
+ * Acceptable for manual low-volume Market Comparison; Google quotas are the hard limit.
  */
 const activeByKey = new Map<string, string>();
 

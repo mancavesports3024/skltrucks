@@ -87,7 +87,20 @@ Stale when location resolves to different coords, origin constants change, or ve
 Age alone does **not** expire the cache.
 
 **Calculate again** with a fresh cache → `Using saved driving-distance estimate` (0 Google calls).
-Concurrent same lead+route key → in-process lock (one Google call).
+
+### Concurrency (honest Vercel limits)
+
+The in-process lead+route lock:
+
+- **Does** prevent common duplicate clicks / concurrent tabs within **one** Node isolate.
+- **Does not** coordinate across Vercel serverless instances. Two requests routed to different
+  instances for the same lead/route **can each call Google once** before either result is cached.
+- After one successful result is saved to `spec_evidence.drivingRoute`, subsequent calculates
+  normally reuse the cache (0 Google calls) on every instance.
+- **Google Cloud Routes API quotas / budget alerts** are the authoritative hard protection.
+- This is acceptable for the current **manual, low-volume** Market Comparison workflow.
+
+Do **not** claim exactly-once provider execution across the Vercel fleet.
 
 ## Cache write safety
 
