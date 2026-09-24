@@ -545,6 +545,14 @@ export async function calculateDrivingDistanceAction(formData: FormData) {
   if (result.cacheToPersist) {
     const saved = await persistDrivingRouteCache(leadId, result.cacheToPersist);
     if (saved.error) {
+      const { logGoogleRoutesFailure } = await import(
+        "@/lib/sourcing/distance/google-routes/diagnostics"
+      );
+      logGoogleRoutesFailure({
+        httpStatus: null,
+        failureStage: "cache_persistence",
+        googleErrorMessage: "cache_persist_failed",
+      });
       return { ok: false as const, error: saved.error };
     }
     revalidateSourcing();

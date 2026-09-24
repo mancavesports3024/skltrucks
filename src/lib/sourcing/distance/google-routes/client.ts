@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  logGoogleRoutesFailure,
+  parseGoogleErrorResponseText,
+} from "@/lib/sourcing/distance/google-routes/diagnostics";
 import type {
   GoogleRoutesComputeResult,
   GoogleRoutesFailureCategory,
@@ -125,11 +129,25 @@ export async function computeGoogleRoute(
 
     if (!res.ok) {
       const category = categorizeHttpStatus(res.status);
+      let googleErrorStatus: string | null = null;
+      let googleErrorReason: string | null = null;
+      let googleErrorMessage: string | null = null;
       try {
-        await res.text();
+        const errText = await res.text();
+        const extracted = parseGoogleErrorResponseText(errText);
+        googleErrorStatus = extracted.status;
+        googleErrorReason = extracted.reason;
+        googleErrorMessage = extracted.message;
       } catch {
         /* ignore — never log body/headers */
       }
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        googleErrorStatus,
+        googleErrorReason,
+        googleErrorMessage,
+        failureStage: "request",
+      });
       return {
         ok: false,
         category: category === "auth" || category === "quota" ? category : "provider",
@@ -141,6 +159,11 @@ export async function computeGoogleRoute(
     try {
       rawText = await res.text();
     } catch {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "unreadable_response_body",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -149,6 +172,11 @@ export async function computeGoogleRoute(
     }
 
     if (rawText.length > GOOGLE_ROUTES_MAX_RESPONSE_BYTES) {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "oversized_response",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -160,6 +188,11 @@ export async function computeGoogleRoute(
     try {
       json = JSON.parse(rawText) as unknown;
     } catch {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "invalid_json",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -168,6 +201,11 @@ export async function computeGoogleRoute(
     }
 
     if (!json || typeof json !== "object") {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "non_object_json",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -177,6 +215,11 @@ export async function computeGoogleRoute(
 
     const routes = (json as { routes?: unknown }).routes;
     if (!Array.isArray(routes) || routes.length === 0) {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "empty_routes",
+      });
       return {
         ok: false,
         category: "no_route",
@@ -188,6 +231,11 @@ export async function computeGoogleRoute(
     // (Google may still return a one-element array). Extra routes are ignored.
     const first = routes[0];
     if (!first || typeof first !== "object") {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "invalid_route_entry",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -201,6 +249,11 @@ export async function computeGoogleRoute(
       distanceMeters < 0 ||
       distanceMeters > GOOGLE_ROUTES_MAX_DISTANCE_METERS
     ) {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "unusable_distance",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -214,6 +267,11 @@ export async function computeGoogleRoute(
     // Duration is optional; invalid format fails closed only when present and unparsable.
     const durationRaw = (first as { duration?: unknown }).duration;
     if (durationRaw != null && durationRaw !== "" && durationSeconds == null) {
+      logGoogleRoutesFailure({
+        httpStatus: res.status,
+        failureStage: "response_validation",
+        googleErrorMessage: "unreadable_duration",
+      });
       return {
         ok: false,
         category: "malformed",
@@ -226,6 +284,11 @@ export async function computeGoogleRoute(
     const name = err instanceof Error ? err.name : "";
     const message = err instanceof Error ? err.message : "";
     if (name === "AbortError" || name === "TimeoutError") {
+      logGoogleRoutesFailure({
+        httpStatus: null,
+        failureStage: "request",
+        googleErrorMessage: "request_timeout",
+      });
       return {
         ok: false,
         category: "timeout",
@@ -234,12 +297,22 @@ export async function computeGoogleRoute(
     }
     // redirect: 'error' surfaces as TypeError / Failed to fetch in some runtimes
     if (/redirect/i.test(message)) {
+      logGoogleRoutesFailure({
+        httpStatus: null,
+        failureStage: "request",
+        googleErrorMessage: "redirect_rejected",
+      });
       return {
         ok: false,
         category: "provider",
         message: "Driving-distance provider error. Enter Transportation manually.",
       };
     }
+    logGoogleRoutesFailure({
+      httpStatus: null,
+      failureStage: "request",
+      googleErrorMessage: "request_exception",
+    });
     return {
       ok: false,
       category: "provider",

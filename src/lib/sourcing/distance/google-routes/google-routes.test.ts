@@ -158,6 +158,7 @@ describe("Google Routes client (mocked fetch)", () => {
   });
 
   it("categorizes 401/403, 429, 5xx, no route, malformed", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const cases: Array<{ status?: number; json?: unknown; category: string }> = [
       { status: 401, category: "auth" },
       { status: 403, category: "auth" },
@@ -185,9 +186,20 @@ describe("Google Routes client (mocked fetch)", () => {
       if (!result.ok) expect(result.category).toBe(c.category);
       expect(JSON.stringify(result)).not.toMatch(/GOOGLE_MAPS|apiKey|X-Goog/i);
     }
+    expect(consoleSpy.mock.calls.length).toBeGreaterThan(0);
+    for (const call of consoleSpy.mock.calls) {
+      const line = String(call[0] ?? "");
+      expect(line).not.toMatch(/X-Goog|apiKey|GOOGLE_MAPS/i);
+      if (line.includes("google_routes_failed")) {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        expect(parsed.event).toBe("google_routes_failed");
+        expect(parsed.provider).toBe("google_routes");
+      }
+    }
   });
 
   it("handles timeout via AbortError", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchImpl = vi.fn(async () => {
       const err = new Error("aborted");
       err.name = "AbortError";
@@ -203,6 +215,9 @@ describe("Google Routes client (mocked fetch)", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.category).toBe("timeout");
+    const line = String(consoleSpy.mock.calls[0]?.[0] ?? "");
+    expect(JSON.parse(line).failureStage).toBe("request");
+    expect(JSON.parse(line).httpStatus).toBeNull();
   });
 });
 

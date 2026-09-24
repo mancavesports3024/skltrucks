@@ -71,6 +71,10 @@ Configure **Google Cloud Routes API quotas + budget alerts** as the hard limit. 
 - Duration validated when present (`3723s` form)
 - Multi-route responses: deterministic `routes[0]`
 - Key only in `X-Goog-Api-Key`; never logged
+- On failure, server emits one structured `google_routes_failed` JSON log (HTTP status,
+  sanitized Google `status` / `reason` / `message`, failure stage, `VERCEL_ENV`, provider).
+  Never logs API key, headers, cookies, JWTs, request/response bodies, lead IDs, or coordinates.
+  Staff UI messages stay generic (no provider detail).
 
 Origin: `SKL_DISTANCE_ORIGIN` (Joplin). Destination: offline Census coords from lead `location`.
 
