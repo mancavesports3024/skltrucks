@@ -52,6 +52,7 @@ async function main() {
     profile: DEFAULT_BUYING_PROFILE,
     existingLeads: [],
     fetchImpl: createMockValidateFetchImpl(),
+    deadlineAt: Date.now() + 60_000,
   });
 
   const summary = {

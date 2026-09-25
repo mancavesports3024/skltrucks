@@ -27,6 +27,7 @@ import {
   isDeadlineExceeded,
   isPastDeadline,
   withDeadline,
+  PROVIDER_TIMEOUT_CHARGE_NOTE,
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 import type {
   DiscoveryInspectPreviewReport,
@@ -129,9 +130,12 @@ async function runDiscoveryRetain(args: {
   plans: ReturnType<typeof buildDiscoveryQueryMatrix>;
   retained: RetainedDiscoveryUrl[];
   metrics: DiscoveryUrlMetrics;
+  /** Conservatively counted attempts (includes timed-out calls that may still bill). */
   credits: number;
+  searchesAttempted: number;
   stoppedReason: string | null;
   skippedQueryIds: string[];
+  timeoutNotes: string[];
 }> {
   const plans = buildDiscoveryQueryMatrix(args.profile, {
     maxQueries: args.ceilings.maxQueries,
@@ -148,18 +152,26 @@ async function runDiscoveryRetain(args: {
   let duplicateRawHits = 0;
   let retentionCapDrops = 0;
   let credits = 0;
-  let queriesRun = 0;
+  let searchesAttempted = 0;
   let stoppedReason: string | null = null;
   const skippedQueryIds: string[] = [];
+  const timeoutNotes: string[] = [];
 
-  for (const plan of plans) {
+  for (let planIndex = 0; planIndex < plans.length; planIndex++) {
+    const plan = plans[planIndex];
     if (isPastDeadline(args.deadlineAt)) {
       stoppedReason = "preview deadline reached during discovery";
-      skippedQueryIds.push(...plans.slice(queriesRun).map((p) => p.id));
+      skippedQueryIds.push(...plans.slice(planIndex).map((p) => p.id));
       break;
     }
     if (credits >= args.ceilings.maxTavilyCredits) break;
-    if (queriesRun >= args.ceilings.maxQueries) break;
+    if (searchesAttempted >= args.ceilings.maxQueries) break;
+
+    // Count the attempt BEFORE awaiting. withDeadline does not cancel the HTTP
+    // call — a timeout may still consume one Tavily basic-search credit.
+    // Tavily SDK has no documented AbortSignal; we cannot abort in-flight work.
+    credits += 1;
+    searchesAttempted += 1;
 
     let res: { results: { url: string; title?: string; content?: string }[]; creditsCharged: number };
     try {
@@ -175,16 +187,22 @@ async function runDiscoveryRetain(args: {
     } catch (e) {
       if (isDeadlineExceeded(e)) {
         stoppedReason = "preview deadline reached during discovery";
-        skippedQueryIds.push(plan.id, ...plans.slice(queriesRun + 1).map((p) => p.id));
+        timeoutNotes.push(
+          `tavily search ${plan.id}: ${PROVIDER_TIMEOUT_CHARGE_NOTE}`
+        );
+        skippedQueryIds.push(...plans.slice(planIndex + 1).map((p) => p.id));
         break;
       }
       throw e;
     }
 
-    const charged = res.creditsCharged || 1;
-    if (credits + charged > args.ceilings.maxTavilyCredits) break;
-    credits += charged;
-    queriesRun += 1;
+    const reported = Math.max(1, res.creditsCharged || 1);
+    if (reported > 1) {
+      credits += reported - 1;
+    }
+    if (credits > args.ceilings.maxTavilyCredits) {
+      credits = args.ceilings.maxTavilyCredits;
+    }
 
     for (const hit of res.results) {
       rawResultUrls += 1;
@@ -243,8 +261,10 @@ async function runDiscoveryRetain(args: {
     plans,
     retained,
     credits,
+    searchesAttempted,
     stoppedReason,
     skippedQueryIds: [...new Set(skippedQueryIds)],
+    timeoutNotes,
     metrics: {
       rawResultUrls,
       uniqueCanonicalUrlsAllBuckets: all.size,
@@ -516,6 +536,9 @@ export async function runDiscoveryInspectPreview(
         } catch (e) {
           if (isDeadlineExceeded(e)) {
             rowReasons.push("skipped — preview deadline");
+            errors.push(
+              `openai inspect ${v.finalUrl}: ${PROVIDER_TIMEOUT_CHARGE_NOTE}`
+            );
             stoppedReason =
               stoppedReason || "preview deadline reached during OpenAI inspection";
           } else {
@@ -711,8 +734,9 @@ export async function runDiscoveryInspectPreview(
       Math.round((tavilyEstimatedCostUsd + openAiCost) * 10000) / 10000,
     // Accurate provenance: live Preview stays live; Import never copies this blob.
     live: input.mode === "live",
+    // Credits / searches include timed-out attempts (charge may still occur).
     creditsConsumed: discovery.credits,
-    searchesRun: discovery.plans.length,
+    searchesRun: discovery.searchesAttempted,
     extractsRun: 0,
   };
 
@@ -737,7 +761,7 @@ export async function runDiscoveryInspectPreview(
     validated: toInspect,
     rows,
     usage,
-    errors,
+    errors: [...errors, ...discovery.timeoutNotes],
     notes: [
       ...notes,
       `Worst-case ceiling ~$${costCeiling.combinedMaxUsd.toFixed(2)} (Tavily $${costCeiling.tavilyMaxUsd.toFixed(2)} + OpenAI $${costCeiling.openAiMaxUsd.toFixed(2)}).`,
@@ -745,7 +769,13 @@ export async function runDiscoveryInspectPreview(
       ...(discovery.skippedQueryIds.length
         ? [`Discovery queries skipped due to deadline: ${discovery.skippedQueryIds.join(", ")}.`]
         : []),
+      ...(discovery.timeoutNotes.length
+        ? [
+            "Tavily SDK has no AbortSignal; timed-out searches are counted as attempted credits because in-flight requests are not cancelled.",
+          ]
+        : []),
       "Import revalidates selected URLs server-side (deterministic only; zero Tavily/OpenAI).",
+      "Import deadline governs pre-write preparation only; once persistence begins it completes without Promise.race detachment.",
       "Lock is released in finally when the runtime allows; stale-lock takeover remains the backstop if the platform terminates the isolate.",
     ],
     previewId: randomUUID(),

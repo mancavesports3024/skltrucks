@@ -6,19 +6,26 @@
  *
  * Import path:
  * 1. Staff auth
- * 2. Hard selected-row cap
- * 3. Re-classify URL
- * 4. SSRF-safe validate + fetch
- * 5. Deterministic HTML extract only (zero Tavily / OpenAI)
- * 6. candidateToTruckLeadInput + classifyLead + dedupe against current DB
- * 7. Persist only Confirmed / Needs verification
+ * 2. Establish deadlineAt (before DB reads / lock)
+ * 3. Hard selected-row cap
+ * 4. Re-classify URL / SSRF-safe validate / deterministic extract
+ * 5. candidateToTruckLeadInput + classifyLead + dedupe against current DB
+ * 6. Pre-write deadline check — if expired, return partial with zero writes
+ * 7. Persist only Confirmed / Needs verification (persistence is NOT Promise.race'd)
+ *
+ * Deadline governs pre-write preparation only. Once applySearchProviderResult
+ * begins, it completes safely. Platform hard-kills can still skip `finally`;
+ * stale-lock takeover remains the backstop.
  */
 import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
 import { findExistingLead } from "@/lib/sourcing/intake/import";
 import { classifyLead } from "@/lib/sourcing/match";
 import { getBuyingProfile, getSupplierContacts, getTruckLeads } from "@/lib/sourcing/db";
-import { DISCOVERY_IMPORT_DEADLINE_MS, DISCOVERY_IMPORT_MAX_SELECTED } from "@/lib/sourcing/search/discovery/ceilings";
+import {
+  DISCOVERY_IMPORT_DEADLINE_MS,
+  DISCOVERY_IMPORT_MAX_SELECTED,
+} from "@/lib/sourcing/search/discovery/ceilings";
 import {
   isDeadlineExceeded,
   isPastDeadline,
@@ -40,7 +47,7 @@ import {
   SEARCH_ALREADY_RUNNING_MESSAGE,
   type SearchLockStore,
 } from "@/lib/sourcing/search/search-lock";
-import type { BuyingProfile, TruckLead } from "@/types/sourcing";
+import type { BuyingProfile, SupplierContact, TruckLead } from "@/types/sourcing";
 
 /** Re-export for callers — same as ceilings. */
 export { DISCOVERY_IMPORT_MAX_SELECTED, DISCOVERY_IMPORT_DEADLINE_MS };
@@ -67,6 +74,8 @@ export type ImportRevalidateResult = {
   deadlineAt: number;
 };
 
+export type ImportPersistFn = typeof applySearchProviderResult;
+
 function normalizeSelectedUrls(raw: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -91,22 +100,18 @@ function normalizeSelectedUrls(raw: string[]): string[] {
 /**
  * Pure revalidation core (no auth / no DB writes). Used by Import and tests.
  * Never accepts client truck/classification fields.
- * One overall Import deadline covers all selected URLs (not a fresh deadline per URL).
+ * Requires an absolute deadlineAt from the Import entry (same clock for the whole action).
  */
 export async function revalidateSelectedUrlsForImport(options: {
   selectedUrls: string[];
   profile: BuyingProfile;
   existingLeads: TruckLead[];
   fetchImpl?: typeof fetch;
-  /** Overall Import wall-clock budget (ms). */
-  importDeadlineMs?: number;
-  /** Absolute deadline; when set, overrides importDeadlineMs. */
-  deadlineAt?: number;
+  /** Absolute deadline shared with Import entry — required for production Import path. */
+  deadlineAt: number;
 }): Promise<ImportRevalidateResult> {
   const urls = normalizeSelectedUrls(options.selectedUrls);
-  const deadlineAt =
-    options.deadlineAt ??
-    Date.now() + (options.importDeadlineMs ?? DISCOVERY_IMPORT_DEADLINE_MS);
+  const { deadlineAt } = options;
   const rejected: ImportRevalidateRejection[] = [];
   const errors: string[] = [];
   const trucks: ExtractedTruckCandidate[] = [];
@@ -159,7 +164,6 @@ export async function revalidateSelectedUrlsForImport(options: {
       continue;
     }
 
-    // Final URL must still match the selection canonical (no silent substitution).
     const finalCanonical = canonicalizeListingUrl(validated.finalUrl);
     const selectedCanonical = canonicalizeListingUrl(url);
     if (finalCanonical && selectedCanonical && finalCanonical !== selectedCanonical) {
@@ -263,11 +267,61 @@ export type ImportSelectedResult = {
   rejected?: ImportRevalidateRejection[];
 };
 
+function emptyImportUsage(): SearchApiUsage {
+  return {
+    provider: "mock",
+    model: "discovery-inspect-import-revalidate",
+    webSearchCalls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    estimatedCostUsd: 0,
+    live: false,
+    creditsConsumed: 0,
+    searchesRun: 0,
+    extractsRun: 0,
+  };
+}
+
+function buildZeroWriteReport(args: {
+  profile: BuyingProfile;
+  revalidated: ImportRevalidateResult;
+  extraErrors?: string[];
+}): SearchRunReport {
+  const usage = emptyImportUsage();
+  return {
+    status: "completed",
+    generatedAt: new Date().toISOString(),
+    buyingProfile: args.profile,
+    queriesExecuted: [],
+    sourcesSearched: [],
+    resultsExamined: 0,
+    newLeadsSaved: 0,
+    confirmedMatches: 0,
+    needsVerification: 0,
+    duplicatesOrRejected: args.revalidated.rejected.length,
+    contactsSaved: 0,
+    apiUsage: usage,
+    errors: [
+      ...(args.extraErrors ?? []),
+      ...args.revalidated.errors,
+      ...args.revalidated.rejected.map((r) => `${r.url}: ${r.reason}`),
+    ],
+    trucksSaved: [],
+    contactsFound: [],
+  };
+}
+
+/**
+ * True when Import may begin persistence. Deadline governs preparation only;
+ * once persistence starts it is not raced/detached.
+ */
+export function importMayBeginPersistence(deadlineAt: number, nowMs = Date.now()): boolean {
+  return nowMs < deadlineAt;
+}
+
 /**
  * Staff Import: revalidate selected URLs server-side, then persist.
- * Zero Tavily / OpenAI. Search lock released in `finally` when the runtime
- * allows; if the platform hard-terminates the isolate, stale-lock takeover
- * (search-lock.ts) remains the operational backstop.
+ * Zero Tavily / OpenAI.
  */
 export async function importSelectedDiscoveryInspectRows(options: {
   selectedUrls: string[];
@@ -277,22 +331,39 @@ export async function importSelectedDiscoveryInspectRows(options: {
   lockStore?: SearchLockStore;
   fetchImpl?: typeof fetch;
   importDeadlineMs?: number;
+  /** Absolute deadline override (tests). */
+  deadlineAt?: number;
+  /** Clock override (tests). */
+  nowMs?: () => number;
+  /**
+   * Persistence seam (tests). Production uses applySearchProviderResult.
+   * Never Promise.race this — once invoked it must complete.
+   */
+  persistFn?: ImportPersistFn;
+  /** Test seam: skip requireSourcingStaff and supply access directly. */
+  accessOverride?: Awaited<ReturnType<typeof requireSourcingStaff>>;
+  profileOverride?: BuyingProfile;
+  existingLeadsOverride?: TruckLead[];
+  existingContactsOverride?: SupplierContact[];
 }): Promise<ImportSelectedResult> {
-  const access = await requireSourcingStaff();
+  const now = options.nowMs ?? Date.now;
+  const access = options.accessOverride ?? (await requireSourcingStaff());
   if (!access.ok) return { error: access.error };
 
   const urls = normalizeSelectedUrls(options.selectedUrls ?? []);
   if (urls.length === 0) {
     return { error: "Select at least one listing URL." };
   }
-  if ((options.selectedUrls?.length ?? 0) > DISCOVERY_IMPORT_MAX_SELECTED) {
-    // Cap silently via normalize; also surface if client sent excess.
-    // Still proceed with capped set — authoritative server limit.
-  }
 
-  const profile = await getBuyingProfile();
-  const existingLeads = await getTruckLeads();
-  const existingContacts = await getSupplierContacts();
+  // Establish the overall Import deadline BEFORE DB reads and lock acquisition.
+  const deadlineAt =
+    options.deadlineAt ??
+    now() + (options.importDeadlineMs ?? DISCOVERY_IMPORT_DEADLINE_MS);
+
+  const profile = options.profileOverride ?? (await getBuyingProfile());
+  const existingLeads = options.existingLeadsOverride ?? (await getTruckLeads());
+  const existingContacts =
+    options.existingContactsOverride ?? (await getSupplierContacts());
 
   const lock = options.lockStore ?? resolveSearchLockStore(access.supabase);
   const holderEmail = access.user.email ?? "";
@@ -306,36 +377,77 @@ export async function importSelectedDiscoveryInspectRows(options: {
     };
   }
 
+  const persist = options.persistFn ?? applySearchProviderResult;
+
   try {
+    // If deadline already expired during DB/lock setup, skip revalidation writes.
+    if (!importMayBeginPersistence(deadlineAt, now())) {
+      const rejected = urls.map((url) => ({
+        url,
+        reason: "skipped — import deadline",
+      }));
+      return {
+        error: "Import deadline expired before revalidation; zero writes.",
+        importedCount: 0,
+        rejected,
+        report: buildZeroWriteReport({
+          profile,
+          revalidated: {
+            trucks: [],
+            contacts: [],
+            rejected,
+            errors: [],
+            tavilyCalls: 0,
+            openAiCalls: 0,
+            stoppedReason: "import deadline reached",
+            deadlineAt,
+          },
+          extraErrors: ["Import deadline expired before revalidation; zero writes."],
+        }),
+      };
+    }
+
     const revalidated = await revalidateSelectedUrlsForImport({
       selectedUrls: urls,
       profile,
       existingLeads,
       fetchImpl: options.fetchImpl,
-      importDeadlineMs: options.importDeadlineMs,
+      deadlineAt,
     });
+
+    // Pre-write deadline check. Do not start persistence if expired.
+    // Deadline does NOT Promise.race / detach DB writes once they begin.
+    if (!importMayBeginPersistence(deadlineAt, now())) {
+      const skippedPrepared = revalidated.trucks.map((t) => ({
+        url: t.listingUrl,
+        reason: "skipped — import deadline before persist",
+      }));
+      const rejected = [...revalidated.rejected, ...skippedPrepared];
+      return {
+        error: "Import deadline expired before persistence; zero writes.",
+        importedCount: 0,
+        rejected,
+        report: buildZeroWriteReport({
+          profile,
+          revalidated: { ...revalidated, trucks: [], contacts: [], rejected },
+          extraErrors: [
+            "Import deadline expired before persistence; zero writes.",
+            "Deadline governs pre-write preparation only; persistence was not started.",
+          ],
+        }),
+      };
+    }
 
     if (revalidated.trucks.length === 0) {
       return {
         error: "No importable rows after server revalidation.",
         rejected: revalidated.rejected,
         importedCount: 0,
+        report: buildZeroWriteReport({ profile, revalidated }),
       };
     }
 
-    const usage: SearchApiUsage = {
-      // Import itself made zero paid-provider calls (do not copy Preview usage).
-      provider: "mock",
-      model: "discovery-inspect-import-revalidate",
-      webSearchCalls: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      estimatedCostUsd: 0,
-      live: false,
-      creditsConsumed: 0,
-      searchesRun: 0,
-      extractsRun: 0,
-    };
+    const usage = emptyImportUsage();
 
     const search: SearchProviderResult = {
       provider: "mock",
@@ -357,7 +469,7 @@ export async function importSelectedDiscoveryInspectRows(options: {
         ],
         queriesUsed: [],
         notes:
-          "Imported via Discovery → Inspection Import. Server revalidated URLs with deterministic extract only; zero Tavily/OpenAI calls during Import.",
+          "Imported via Discovery → Inspection Import. Server revalidated URLs with deterministic extract only; zero Tavily/OpenAI calls during Import. Deadline governed pre-write preparation only.",
       },
       usage,
       rawText: "",
@@ -386,7 +498,8 @@ export async function importSelectedDiscoveryInspectRows(options: {
       contactsFound: [],
     };
 
-    const applied = await applySearchProviderResult({
+    // Persistence begins — not raced against deadline; must complete safely.
+    const applied = await persist({
       access,
       profile,
       existingLeads,

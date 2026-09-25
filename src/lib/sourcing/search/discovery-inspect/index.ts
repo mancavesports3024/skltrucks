@@ -39,6 +39,7 @@ export {
   remainingMs,
   DeadlineExceededError,
   isDeadlineExceeded,
+  PROVIDER_TIMEOUT_CHARGE_NOTE,
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 export {
   createMockDiscoveryInspectSearchClient,
@@ -48,6 +49,7 @@ export {
 export {
   revalidateSelectedUrlsForImport,
   importSelectedDiscoveryInspectRows,
+  importMayBeginPersistence,
 } from "@/lib/sourcing/search/discovery-inspect/import-selected";
 export {
   DISCOVERY_INSPECT_CONFIRM_FIELD,

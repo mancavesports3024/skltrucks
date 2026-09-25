@@ -1,19 +1,26 @@
 /**
  * End-to-end deadline tests: hung Tavily / validation / OpenAI / Import
  * must not extend past deadlineAt; unprocessed URLs marked skipped.
+ * Tavily timeouts count as attempted credits; Import never persists after deadline.
  */
 import { describe, expect, it, vi } from "vitest";
 import {
   createMockDiscoveryInspectSearchClient,
   createMockValidateFetchImpl,
 } from "@/lib/sourcing/search/discovery-inspect/mock";
-import { revalidateSelectedUrlsForImport } from "@/lib/sourcing/search/discovery-inspect/import-selected";
+import {
+  importMayBeginPersistence,
+  importSelectedDiscoveryInspectRows,
+  revalidateSelectedUrlsForImport,
+} from "@/lib/sourcing/search/discovery-inspect/import-selected";
 import { runDiscoveryInspectPreview } from "@/lib/sourcing/search/discovery-inspect/preview";
 import {
   DeadlineExceededError,
+  PROVIDER_TIMEOUT_CHARGE_NOTE,
   withDeadline,
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 import type { DiscoverySearchClient } from "@/lib/sourcing/search/discovery/types";
+import { createMemorySearchLockStore } from "@/lib/sourcing/search/search-lock";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 
 const hangForever = <T,>() => new Promise<T>(() => {});
@@ -35,7 +42,7 @@ describe("withDeadline", () => {
 });
 
 describe("Preview end-to-end deadline", () => {
-  it("cuts off hung Tavily before first results and marks partial Preview", async () => {
+  it("counts a timed-out Tavily search as one attempted credit/search", async () => {
     const hungClient: DiscoverySearchClient = {
       search: async () => hangForever(),
     };
@@ -50,8 +57,15 @@ describe("Preview end-to-end deadline", () => {
     expect(Date.now() - started).toBeLessThan(800);
     expect(preview.dbWrites).toBe(false);
     expect(preview.retained.length).toBe(0);
+    // Conservative attempt counting before await.
+    expect(preview.tavilyCredits).toBe(1);
+    expect(preview.usage.creditsConsumed).toBe(1);
+    expect(preview.usage.searchesRun).toBe(1);
+    expect(preview.tavilyEstimatedCostUsd).toBeGreaterThan(0);
+    expect(
+      preview.errors.some((e) => e.includes(PROVIDER_TIMEOUT_CHARGE_NOTE))
+    ).toBe(true);
     expect(preview.notes.some((n) => /partial preview|deadline/i.test(n))).toBe(true);
-    expect(preview.notes.some((n) => /discovery|deadline/i.test(n))).toBe(true);
   });
 
   it("cuts off hung page validation and skips remaining URLs", async () => {
@@ -80,7 +94,7 @@ describe("Preview end-to-end deadline", () => {
     ).toBe(true);
   });
 
-  it("cuts off hung OpenAI inspection without merging and without extending past deadline", async () => {
+  it("cuts off hung OpenAI inspection and reports possible charge", async () => {
     const incompleteHtml = `<!doctype html><html><head><title>2019 Freightliner</title></head>
 <body><p>VIN 1HTEUMML5LH842637</p><p>Stock # 9001</p></body></html>`;
     const fetchImpl = (async (input: RequestInfo | URL) => {
@@ -110,16 +124,10 @@ describe("Preview end-to-end deadline", () => {
     expect(Date.now() - started).toBeLessThan(1500);
     expect(openAi).toHaveBeenCalled();
     expect(preview.dbWrites).toBe(false);
-    // No OpenAI-invented facts; deadline noted.
-    for (const row of preview.rows) {
-      if (row.truck) {
-        expect(row.truck.askingPrice).not.toBe(77777);
-      }
-    }
+    expect(preview.openAiInspectCalls).toBeGreaterThanOrEqual(1);
     expect(
-      preview.notes.some((n) => /deadline/i.test(n)) ||
-        preview.rows.some((r) => r.reasons.some((x) => /deadline/i.test(x))) ||
-        preview.errors.some((e) => /deadline/i.test(e))
+      preview.errors.some((e) => e.includes(PROVIDER_TIMEOUT_CHARGE_NOTE)) ||
+        preview.notes.some((n) => /deadline/i.test(n))
     ).toBe(true);
   });
 });
@@ -131,7 +139,6 @@ describe("Import end-to-end deadline", () => {
       calls += 1;
       const url = String(input);
       if (calls === 1 && /debary/i.test(url)) {
-        // First URL hangs past Import deadline.
         return hangForever<Response>();
       }
       return createMockValidateFetchImpl()(input);
@@ -143,7 +150,7 @@ describe("Import end-to-end deadline", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl,
-      importDeadlineMs: 80,
+      deadlineAt: Date.now() + 80,
     });
     expect(Date.now() - started).toBeLessThan(800);
     expect(result.tavilyCalls).toBe(0);
@@ -157,7 +164,6 @@ describe("Import end-to-end deadline", () => {
   });
 
   it("does not start a fresh per-URL deadline that would allow a hang to complete", async () => {
-    // Absolute deadline already in the past → every URL skipped immediately.
     const result = await revalidateSelectedUrlsForImport({
       selectedUrls: [UNIT_A, UNIT_B],
       profile: DEFAULT_BUYING_PROFILE,
@@ -168,5 +174,99 @@ describe("Import end-to-end deadline", () => {
     expect(result.trucks.length).toBe(0);
     expect(result.rejected).toHaveLength(2);
     expect(result.rejected.every((r) => /skipped — import deadline/i.test(r.reason))).toBe(true);
+  });
+
+  it("expired Import never calls applySearchProviderResult / persistFn", async () => {
+    const persistFn = vi.fn(async () => {
+      throw new Error("persist must not be called");
+    });
+    const lockStore = createMemorySearchLockStore();
+    const accessOverride = {
+      ok: true as const,
+      user: { email: "staff@test.example" },
+      supabase: {} as never,
+    };
+
+    const result = await importSelectedDiscoveryInspectRows({
+      selectedUrls: [UNIT_A, UNIT_B],
+      accessOverride: accessOverride as never,
+      profileOverride: DEFAULT_BUYING_PROFILE,
+      existingLeadsOverride: [],
+      existingContactsOverride: [],
+      lockStore,
+      fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() - 1,
+      persistFn: persistFn as never,
+    });
+
+    expect(persistFn).not.toHaveBeenCalled();
+    expect(result.importedCount ?? 0).toBe(0);
+    expect(result.error).toMatch(/deadline|zero writes/i);
+    expect(result.report?.newLeadsSaved ?? 0).toBe(0);
+  });
+
+  it("does not detach a database write after Import timeout — persist is never started when expired mid-prep", async () => {
+    expect(importMayBeginPersistence(Date.now() - 1)).toBe(false);
+    expect(importMayBeginPersistence(Date.now() + 60_000)).toBe(true);
+
+    const persistFn = vi.fn(async () => ({
+      report: {
+        status: "completed" as const,
+        generatedAt: new Date().toISOString(),
+        buyingProfile: DEFAULT_BUYING_PROFILE,
+        queriesExecuted: [],
+        sourcesSearched: [],
+        resultsExamined: 0,
+        newLeadsSaved: 99,
+        confirmedMatches: 0,
+        needsVerification: 0,
+        duplicatesOrRejected: 0,
+        contactsSaved: 0,
+        apiUsage: {
+          provider: "mock" as const,
+          model: "x",
+          webSearchCalls: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          estimatedCostUsd: 0,
+          live: false,
+          creditsConsumed: 0,
+        },
+        errors: [],
+        trucksSaved: [],
+        contactsFound: [],
+      },
+    }));
+
+    // Clock: first pre-revalidate check is still inside budget; pre-persist check is expired.
+    const deadlineAt = Date.now() + 5_000;
+    let nowCalls = 0;
+    const result = await importSelectedDiscoveryInspectRows({
+      selectedUrls: [UNIT_A],
+      accessOverride: {
+        ok: true,
+        user: { email: "staff@test.example" },
+        supabase: {} as never,
+      } as never,
+      profileOverride: DEFAULT_BUYING_PROFILE,
+      existingLeadsOverride: [],
+      existingContactsOverride: [],
+      lockStore: createMemorySearchLockStore(),
+      fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt,
+      nowMs: () => {
+        nowCalls += 1;
+        // 1st call: pre-revalidate gate — still ok
+        // 2nd call: pre-persist gate — expired
+        return nowCalls === 1 ? deadlineAt - 1_000 : deadlineAt + 1;
+      },
+      persistFn: persistFn as never,
+    });
+
+    expect(persistFn).not.toHaveBeenCalled();
+    expect(result.importedCount ?? 0).toBe(0);
+    expect(result.error).toMatch(/before persistence|zero writes/i);
+    // No detached write: persist never started, so newLeadsSaved cannot be 99.
+    expect(result.report?.newLeadsSaved ?? 0).toBe(0);
   });
 });

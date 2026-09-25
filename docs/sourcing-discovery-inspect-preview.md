@@ -28,7 +28,7 @@ Related: [`sourcing-search-discovery-benchmark.md`](./sourcing-search-discovery-
 | OpenAI exact-URL inspect calls | 10 max (0 if OpenAI unset) |
 | Validation concurrency | 3 |
 | Preview overall deadline | 90s (starts before first Tavily call; wraps every provider/fetch) |
-| Import overall deadline | 60s (covers all selected URL revalidation) |
+| Import overall deadline | 60s (absolute `deadlineAt` set before DB reads/lock; governs pre-write prep only) |
 | Per-URL fetch overall deadline | 20s (also capped by remaining Preview/Import budget) |
 | Response body max | 1.5 MB (Content-Length + stream abort) |
 | Tavily extract | **never** in this workflow |
@@ -50,7 +50,7 @@ Client sends **selected listing URLs only**. Server re-classifies, SSRF-fetches,
 3. **Inspect** — deterministic HTML/JSON-LD; OpenAI inspect only for missing evidence; **URL mismatch discards the entire OpenAI result**.
 4. **Classify** — existing `classifyLead` rules.
 5. **Preview** — read-only; `dbWrites: false`; `usage.live` reflects Preview mode; end-to-end `deadlineAt` from before first Tavily call; partial results when time expires.
-6. **Import** — selected URLs only; full revalidation under one Import deadline; Import usage reports zero provider calls (does not rewrite Preview live provenance).
+6. **Import** — selected URLs only; full revalidation under one Import `deadlineAt` created before DB/lock; **pre-write deadline check** — if expired, partial/skipped report with **zero writes**. Persistence is never `Promise.race`'d; once started it completes. Tavily SDK has no AbortSignal — timed-out searches are counted as attempted credits (`provider request timed out; charge may still occur`).
 
 Lock release uses `finally` when the runtime allows; if the platform terminates the isolate, **stale-lock takeover** remains the backstop.
 

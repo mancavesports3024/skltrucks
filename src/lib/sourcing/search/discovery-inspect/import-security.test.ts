@@ -120,6 +120,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl,
+      deadlineAt: Date.now() + 60_000,
     });
 
     expect(result.tavilyCalls).toBe(0);
@@ -155,6 +156,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl,
+      deadlineAt: Date.now() + 60_000,
     });
 
     // Even if a client claimed importEligible:true / needs_verification, server reclassifies.
@@ -168,6 +170,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() + 60_000,
     });
 
     expect(result.trucks.length).toBe(1);
@@ -189,6 +192,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() + 60_000,
     });
     expect(result.trucks.length).toBe(1);
     expect(result.trucks[0].listingUrl).toContain("debary");
@@ -205,6 +209,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() + 60_000,
     });
     expect(result.tavilyCalls).toBe(0);
     expect(result.openAiCalls).toBe(0);
@@ -218,6 +223,7 @@ describe("Import never trusts client Preview payload", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() + 60_000,
     });
     expect(first.trucks.length).toBe(1);
     const mappedVin = first.trucks[0].vin;
@@ -268,6 +274,7 @@ describe("Import never trusts client Preview payload", () => {
         } as import("@/types/sourcing").TruckLead,
       ],
       fetchImpl: createMockValidateFetchImpl(),
+      deadlineAt: Date.now() + 60_000,
     });
 
     expect(second.trucks.every((t) => t.vin !== mappedVin)).toBe(true);
