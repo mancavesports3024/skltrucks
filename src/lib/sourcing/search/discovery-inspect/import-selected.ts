@@ -32,6 +32,7 @@ import {
   withDeadline,
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 import { inspectListingHtmlDeterministic } from "@/lib/sourcing/search/discovery-inspect/deterministic-inspect";
+import { hasImportableUnitEvidence } from "@/lib/sourcing/search/discovery-inspect/listing-identity";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 import { candidateToTruckLeadInput } from "@/lib/sourcing/search/map-candidates";
 import { applySearchProviderResult } from "@/lib/sourcing/search/run";
@@ -211,6 +212,16 @@ export async function revalidateSelectedUrlsForImport(options: {
         url,
         reason: mapped.rejectReason || "candidate mapping rejected",
       });
+      continue;
+    }
+
+    const unitEvidence = hasImportableUnitEvidence({
+      truck,
+      finalUrl: validated.finalUrl,
+      html: validated.html,
+    });
+    if (!unitEvidence.ok) {
+      rejected.push({ url, reason: unitEvidence.reason });
       continue;
     }
 

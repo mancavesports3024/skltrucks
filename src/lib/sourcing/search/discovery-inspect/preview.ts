@@ -33,6 +33,7 @@ import type {
   DiscoveryInspectPreviewReport,
   DiscoveryInspectPreviewRow,
 } from "@/lib/sourcing/search/discovery-inspect/types";
+import { hasImportableUnitEvidence } from "@/lib/sourcing/search/discovery-inspect/listing-identity";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 import { emptySpecEvidenceFromCandidate } from "@/lib/sourcing/search/types";
 import {
@@ -634,8 +635,25 @@ export async function runDiscoveryInspectPreview(
       previewOutcome = "needs_verification";
     }
 
-    const importEligible =
+    const reasons = [...match.reasons.map((r) => r.label), ...rowReasons];
+    if (previewOutcome === "needs_verification") {
+      reasons.unshift(
+        "Needs verification — review all match reasons below before Import"
+      );
+    }
+
+    const unitEvidence = hasImportableUnitEvidence({
+      truck,
+      finalUrl: v.finalUrl,
+      html: v.html,
+    });
+    let importEligible =
       previewOutcome === "confirmed_match" || previewOutcome === "needs_verification";
+    if (!unitEvidence.ok) {
+      importEligible = false;
+      previewOutcome = "does_not_match";
+      reasons.unshift(unitEvidence.reason);
+    }
 
     return {
       id: rowId(v.canonicalUrl),
@@ -646,9 +664,9 @@ export async function runDiscoveryInspectPreview(
       title: v.title,
       validationOutcome: v.outcome,
       validationReason: v.reason,
-      matchStatus: match.status,
+      matchStatus: unitEvidence.ok ? match.status : "does_not_match",
       previewOutcome,
-      reasons: [...match.reasons.map((r) => r.label), ...rowReasons],
+      reasons,
       truck,
       contact,
       evidence,

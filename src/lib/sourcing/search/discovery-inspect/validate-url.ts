@@ -1,6 +1,7 @@
 /**
  * Live URL validation before inspection spend.
- * Rejects hubs, PDFs, bot challenges, redirect-to-category, SSRF targets.
+ * Rejects hubs, PDFs, bot challenges, redirect-to-category, SSRF targets,
+ * and redirects that lose individual listing identity.
  */
 import { canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
 import {
@@ -13,6 +14,11 @@ import {
   safeFetchPublicHtml,
   type SafeFetchResult,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
+import {
+  assertRedirectPreservesListingIdentity,
+  pathLooksLikeCategoryOrMarketplaceHub,
+  REDIRECT_LOST_LISTING_IDENTITY,
+} from "@/lib/sourcing/search/discovery-inspect/listing-identity";
 
 export type ValidationOutcome =
   | "validated"
@@ -72,17 +78,6 @@ export function staffValidationFailureReason(
   return { outcome: "unverified", reason: classified };
 }
 
-function pathLooksLikeCategory(path: string): boolean {
-  const p = path.replace(/\/+$/, "") || "/";
-  if (p === "/" || /\/(search|search-inventory|results|category|categories|inventory)\/?$/i.test(p)) {
-    return true;
-  }
-  if (/\/(box-trucks?-for-sale|trucks-for-sale|all-for-sale|medium-duty-box-trucks)\/?$/i.test(p)) {
-    return true;
-  }
-  return false;
-}
-
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
@@ -98,6 +93,7 @@ function titleFromHtml(html: string): string {
 
 /**
  * Validate one retained discovery candidate. Never treats 403/bot as verified.
+ * After redirects, rejects hubs and redirects that lose individual listing identity.
  */
 export async function validateDiscoveryCandidate(
   discoveryUrl: string,
@@ -153,15 +149,15 @@ export async function validateDiscoveryCandidate(
     }));
 
   if (!fetched.ok) {
-    const classified = staffValidationFailureReason(fetched);
+    const classifiedFetch = staffValidationFailureReason(fetched);
     return {
       discoveryUrl,
       finalUrl: fetched.finalUrl || discoveryUrl,
       canonicalUrl: canonicalizeListingUrl(fetched.finalUrl || discoveryUrl),
       hostname: hostOf(fetched.finalUrl || discoveryUrl),
       title: "",
-      outcome: classified.outcome,
-      reason: classified.reason,
+      outcome: classifiedFetch.outcome,
+      reason: classifiedFetch.reason,
       httpStatus: fetched.status,
     };
   }
@@ -175,7 +171,10 @@ export async function validateDiscoveryCandidate(
     /* ignore */
   }
 
-  if (finalClass.bucket === "hub_or_category" || pathLooksLikeCategory(finalPath)) {
+  if (
+    finalClass.bucket === "hub_or_category" ||
+    pathLooksLikeCategoryOrMarketplaceHub(finalPath)
+  ) {
     return {
       discoveryUrl,
       finalUrl,
@@ -206,7 +205,28 @@ export async function validateDiscoveryCandidate(
     };
   }
 
-  if (BOT_CHALLENGE_RE.test(fetched.bodyText) || BOT_CHALLENGE_RE.test(titleFromHtml(fetched.bodyText))) {
+  const identity = assertRedirectPreservesListingIdentity(
+    discoveryUrl,
+    finalUrl,
+    fetched.bodyText
+  );
+  if (!identity.ok) {
+    return {
+      discoveryUrl,
+      finalUrl,
+      canonicalUrl: canonicalizeListingUrl(finalUrl),
+      hostname: hostOf(finalUrl),
+      title: titleFromHtml(fetched.bodyText),
+      outcome: "rejected",
+      reason: identity.reason || REDIRECT_LOST_LISTING_IDENTITY,
+      httpStatus: fetched.status,
+    };
+  }
+
+  if (
+    BOT_CHALLENGE_RE.test(fetched.bodyText) ||
+    BOT_CHALLENGE_RE.test(titleFromHtml(fetched.bodyText))
+  ) {
     return {
       discoveryUrl,
       finalUrl,
