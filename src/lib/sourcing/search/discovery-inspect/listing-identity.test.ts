@@ -8,6 +8,8 @@ import {
   assertRedirectPreservesListingIdentity,
   extractListingIdentityKeys,
   hasImportableUnitEvidence,
+  isPageBackedStockEvidence,
+  isRejectedStockToken,
   pathLooksLikeCategoryOrMarketplaceHub,
   pickPageBackedIdentityFields,
   REDIRECT_LOST_LISTING_IDENTITY,
@@ -304,6 +306,7 @@ describe("Import rejects Proxibid hub URL submitted by client", () => {
   });
 });
 
+
 /**
  * Rhode Island identity contradiction regression (sanitized fixtures).
  * Live Preview showed OpenAI VIN/stock (VDXP3542) while the final HTML had
@@ -384,6 +387,165 @@ function riMatchLead(overrides: Partial<LeadMatchInput> = {}): LeadMatchInput {
     ...overrides,
   };
 }
+
+/**
+ * Stock-token page-backed evidence: reject label/generic words; require context.
+ * Live Preview produced stockNumber="Number" from "Stock Number" — must not qualify.
+ */
+describe("page-backed stock token validation", () => {
+  const genericUrl = "https://www.example-dealer.com/inventory/used-freightliner-m2-box";
+
+  function stockTruck(stock: string, overrides: Partial<ExtractedTruckCandidate> = {}) {
+    return baseTruck({
+      listingUrl: genericUrl,
+      vin: "N/A",
+      stockNumber: stock,
+      makeModel: "Freightliner M2 Box Truck",
+      year: 2027,
+      ...overrides,
+    });
+  }
+
+  it("rejects model stock Number when page only has label Stock Number", () => {
+    expect(isRejectedStockToken("Number")).toBe(true);
+    const html = `<html><body><p>Stock Number</p><p>Freightliner M2 Box Truck</p></body></html>`;
+    expect(isPageBackedStockEvidence("Number", genericUrl, html)).toBe(false);
+    const gate = hasImportableUnitEvidence({
+      truck: stockTruck("Number"),
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(gate.ok).toBe(false);
+
+    const picked = pickPageBackedIdentityFields({
+      deterministic: { vin: "", stockNumber: "" },
+      model: { vin: "", stockNumber: "Number" },
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(picked.stockNumber).toBe("");
+  });
+
+  it("rejects model stock Stock", () => {
+    const html = `<html><body><p>Stock available. Freightliner M2.</p></body></html>`;
+    expect(isRejectedStockToken("Stock")).toBe(true);
+    expect(isPageBackedStockEvidence("Stock", genericUrl, html)).toBe(false);
+    expect(
+      hasImportableUnitEvidence({
+        truck: stockTruck("Stock"),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(false);
+  });
+
+  it("rejects model stock M2 merely present in model name", () => {
+    const html = `<html><body><p>2027 Freightliner M2 Box Truck for sale</p></body></html>`;
+    expect(isPageBackedStockEvidence("M2", genericUrl, html)).toBe(false);
+    expect(
+      hasImportableUnitEvidence({
+        truck: stockTruck("M2"),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(false);
+
+    const picked = pickPageBackedIdentityFields({
+      deterministic: { vin: "", stockNumber: "" },
+      model: { vin: "", stockNumber: "M2" },
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(picked.stockNumber).toBe("");
+  });
+
+  it("accepts model stock VDXK3543 when page has Stock Number VDXK3543", () => {
+    const html = `<html><body><p>Stock Number VDXK3543</p><p>2027 Freightliner M2 Box Truck</p></body></html>`;
+    expect(isPageBackedStockEvidence("VDXK3543", genericUrl, html)).toBe(true);
+    expect(
+      hasImportableUnitEvidence({
+        truck: stockTruck("VDXK3543"),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(true);
+
+    const picked = pickPageBackedIdentityFields({
+      deterministic: { vin: "", stockNumber: "" },
+      model: { vin: "", stockNumber: "VDXK3543" },
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(picked.stockNumber).toBe("VDXK3543");
+  });
+
+  it("accepts deterministic stock VDXK3543 with labeled page evidence", () => {
+    const html = `<html><body><p>Stock # VDXK3543</p><p>2027 Freightliner M2</p></body></html>`;
+    const picked = pickPageBackedIdentityFields({
+      deterministic: { vin: "", stockNumber: "VDXK3543" },
+      model: { vin: "", stockNumber: "Number" },
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(picked.stockNumber).toBe("VDXK3543");
+    expect(
+      hasImportableUnitEvidence({
+        truck: stockTruck("VDXK3543"),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("accepts page-backed VIN without stock", () => {
+    const html = `<html><body><p>VIN ${RI_PAGE_VIN}</p><p>2027 Freightliner M2 Box Truck</p></body></html>`;
+    expect(
+      hasImportableUnitEvidence({
+        truck: baseTruck({
+          listingUrl: genericUrl,
+          vin: RI_PAGE_VIN,
+          stockNumber: "N/A",
+        }),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("accepts trailing listing ID 14437263 supported by page", () => {
+    expect(
+      hasImportableUnitEvidence({
+        truck: baseTruck({ vin: "N/A", stockNumber: "N/A" }),
+        finalUrl: RI_URL,
+        html: RI_HTML,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("rejects model-only mismatched VIN/stock", () => {
+    const html = `<html><body><p>Stock Number ${RI_PAGE_STOCK}</p><p>VIN ${RI_PAGE_VIN}</p><p>2027 Freightliner M2</p></body></html>`;
+    const picked = pickPageBackedIdentityFields({
+      deterministic: { vin: "", stockNumber: "" },
+      model: { vin: RI_MODEL_ONLY_VIN, stockNumber: RI_MODEL_ONLY_STOCK },
+      finalUrl: genericUrl,
+      html,
+    });
+    expect(picked.vin).toBe("");
+    expect(picked.stockNumber).toBe("");
+
+    expect(
+      hasImportableUnitEvidence({
+        truck: baseTruck({
+          listingUrl: genericUrl,
+          vin: RI_MODEL_ONLY_VIN,
+          stockNumber: RI_MODEL_ONLY_STOCK,
+        }),
+        finalUrl: genericUrl,
+        html,
+      }).ok
+    ).toBe(false);
+  });
+});
 
 describe("page-backed identity evidence (Rhode Island contradiction)", () => {
   it("extracts trailing listing id from dealer VDP slug", () => {

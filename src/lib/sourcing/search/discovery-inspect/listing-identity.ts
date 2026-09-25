@@ -136,10 +136,104 @@ function isPlaceholder(value: string | null | undefined): boolean {
   return !v || PLACEHOLDER_RE.test(v);
 }
 
+/** Escape a literal token before interpolating into a RegExp. */
+export function escapeRegExpLiteral(raw: string): string {
+  return String(raw).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Label / placeholder / generic tokens that must never count as stock/unit/lot IDs.
+ * Includes the live Preview failure mode where stockNumber="Number".
+ */
+const REJECTED_STOCK_TOKEN_RE =
+  /^(n\/?a|none|unknown|null|undefined|-|—|–|number|num|no|id|stock|stk|unit|lot|listing|truck|vehicle)$/i;
+
+/**
+ * True when a candidate stock/unit/lot token is unusable as identity evidence.
+ */
+export function isRejectedStockToken(raw: string | null | undefined): boolean {
+  const t = String(raw ?? "").trim();
+  if (!t || t.length < 2) return true;
+  return REJECTED_STOCK_TOKEN_RE.test(t);
+}
+
+function plainTextHaystack(haystack: string): string {
+  return haystack
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Model (and mapped) stock/unit/lot values require labeled or structured
+ * evidence on the final page — bare substring presence is not enough.
+ */
+export function hasContextualStockEvidence(
+  token: string,
+  haystack: string
+): boolean {
+  const t = String(token || "").trim();
+  if (isRejectedStockToken(t)) return false;
+
+  const escaped = escapeRegExpLiteral(t);
+  const plain = plainTextHaystack(haystack);
+
+  const labelPatterns: RegExp[] = [
+    // Stock # TOKEN / Stock Number TOKEN / Stk: TOKEN
+    new RegExp(
+      `\\b(?:stock|stk)\\s*(?:number|no\\.?|num|#)?\\s*[#:.]?\\s*${escaped}\\b`,
+      "i"
+    ),
+    // Unit # TOKEN / Unit Number TOKEN
+    new RegExp(
+      `\\bunit\\s*(?:number|no\\.?|num|#|id)?\\s*[#:.]?\\s*${escaped}\\b`,
+      "i"
+    ),
+    // Lot # TOKEN / Lot ID TOKEN
+    new RegExp(
+      `\\blot\\s*(?:number|no\\.?|num|#|id)?\\s*[#:.]?\\s*${escaped}\\b`,
+      "i"
+    ),
+    // Listing ID TOKEN / Listing # TOKEN
+    new RegExp(
+      `\\blisting\\s*(?:id|number|no\\.?|#)?\\s*[#:.]?\\s*${escaped}\\b`,
+      "i"
+    ),
+  ];
+  if (labelPatterns.some((re) => re.test(plain))) return true;
+
+  // Structured JSON-LD / JSON fields and data-* attributes (raw HTML).
+  const structuredPatterns: RegExp[] = [
+    new RegExp(
+      `"(?:sku|stockNumber|stock_number|stockNo|mpn)"\\s*:\\s*"${escaped}"`,
+      "i"
+    ),
+    new RegExp(
+      `\\b(?:data-stock|data-sku)(?:-?(?:number|id|no))?\\s*=\\s*["']${escaped}["']`,
+      "i"
+    ),
+  ];
+  return structuredPatterns.some((re) => re.test(haystack));
+}
+
+/**
+ * Shared page-backed stock gate for Preview merge and Import eligibility.
+ * Rejects label/generic tokens; requires contextual page evidence.
+ */
+export function isPageBackedStockEvidence(
+  token: string,
+  finalUrl: string,
+  html = ""
+): boolean {
+  return hasContextualStockEvidence(token, `${finalUrl}\n${html}`);
+}
+
 /**
  * Keep VIN / stock only when the token is present on the validated final page
  * (URL or HTML). Model-only identifiers never win over page-backed ones and
- * never survive alone.
+ * never survive alone. Model stock requires labeled/structured context — not
+ * a bare HTML substring.
  */
 export function pickPageBackedIdentityFields(args: {
   deterministic: Pick<ExtractedTruckCandidate, "vin" | "stockNumber">;
@@ -149,7 +243,6 @@ export function pickPageBackedIdentityFields(args: {
 }): { vin: string; stockNumber: string } {
   const haystack = `${args.finalUrl}\n${args.html || ""}`;
   const hayUpper = haystack.toUpperCase();
-  const hayLower = haystack.toLowerCase();
 
   const detVin = String(args.deterministic.vin || "").trim().toUpperCase();
   const modelVin = String(args.model?.vin || "").trim().toUpperCase();
@@ -160,14 +253,16 @@ export function pickPageBackedIdentityFields(args: {
 
   const detStock = String(args.deterministic.stockNumber || "").trim();
   const modelStock = String(args.model?.stockNumber || "").trim();
-  const detStockOk =
-    !isPlaceholder(detStock) &&
-    detStock.length >= 2 &&
-    hayLower.includes(detStock.toLowerCase());
-  const modelStockOk =
-    !isPlaceholder(modelStock) &&
-    modelStock.length >= 2 &&
-    hayLower.includes(modelStock.toLowerCase());
+  const detStockOk = isPageBackedStockEvidence(
+    detStock,
+    args.finalUrl,
+    args.html || ""
+  );
+  const modelStockOk = isPageBackedStockEvidence(
+    modelStock,
+    args.finalUrl,
+    args.html || ""
+  );
   const stockNumber = modelStockOk ? modelStock : detStockOk ? detStock : "";
 
   return { vin, stockNumber };
@@ -185,16 +280,12 @@ export function hasImportableUnitEvidence(args: {
 }): { ok: true } | { ok: false; reason: string } {
   const truck = args.truck;
   const haystack = `${args.finalUrl}\n${args.html || ""}`;
-  const haystackLower = haystack.toLowerCase();
 
   const vin = String(truck.vin || "").trim().toUpperCase();
   const validVin = VIN_RE.test(vin) && haystack.toUpperCase().includes(vin);
 
   const stock = String(truck.stockNumber || "").trim();
-  const stockOk =
-    !isPlaceholder(stock) &&
-    stock.length >= 2 &&
-    haystackLower.includes(stock.toLowerCase());
+  const stockOk = isPageBackedStockEvidence(stock, args.finalUrl, args.html || "");
 
   const urlIds = extractListingIdentityKeys(args.finalUrl);
   const urlIdSupported = urlIds.some((id) => {
@@ -203,9 +294,11 @@ export function hasImportableUnitEvidence(args: {
     // OR match truck stock when present.
     if (stockOk && id === normToken(stock)) return true;
     if (/^\d{5,}$/.test(id) || /^[a-f0-9-]{36}$/i.test(id)) {
+      const escaped = escapeRegExpLiteral(id);
       return (
-        new RegExp(`(?:lot|listing|lid|stock|unit)[^a-z0-9]{0,6}${id}\\b`, "i").test(haystack) ||
-        (args.html || "").toLowerCase().includes(id.toLowerCase())
+        new RegExp(`(?:lot|listing|lid|stock|unit)[^a-z0-9]{0,6}${escaped}\\b`, "i").test(
+          haystack
+        ) || (args.html || "").toLowerCase().includes(id.toLowerCase())
       );
     }
     return false;
