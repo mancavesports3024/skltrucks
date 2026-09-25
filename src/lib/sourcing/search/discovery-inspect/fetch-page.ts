@@ -17,8 +17,10 @@
  * - Errors/logs never include raw body text.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
+import type { LookupOptions } from "node:dns";
 import https from "node:https";
 import { isIP } from "node:net";
+import type { LookupFunction } from "node:net";
 import type { IncomingMessage } from "node:http";
 
 export const FETCH_TIMEOUT_MS = 15_000;
@@ -37,45 +39,44 @@ export type LookupImpl = (hostname: string) => Promise<ResolvedAddress[]>;
  * `callback(null, [{ address, family }])`. The single-address form is still
  * used when `all` is false/undefined.
  */
-export type PinnedLookupCallback = {
-  (err: NodeJS.ErrnoException | null, address: string, family: number): void;
-  (
-    err: NodeJS.ErrnoException | null,
-    addresses: Array<{ address: string; family: number }>
-  ): void;
-};
+export type PinnedLookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | Array<{ address: string; family: number }>,
+  family?: number
+) => void;
 
-export type PinnedLookupOptions = {
-  family?: number;
-  hints?: number;
-  all?: boolean;
-  verbatim?: boolean;
-};
+export type PinnedLookupOptions = LookupOptions;
 
 /**
  * Build a connection-pinned lookup that returns only the pre-validated public IP.
  * Supports both Node callback shapes so `options.all=true` never yields
  * `Invalid IP address: undefined`.
  */
-export function createPinnedLookup(pinned: ResolvedAddress): (
-  hostname: string,
-  options: PinnedLookupOptions | undefined,
-  callback: PinnedLookupCallback
-) => void {
+export function createPinnedLookup(pinned: ResolvedAddress): LookupFunction {
   const address = String(pinned?.address ?? "").trim();
-  const family = pinned?.family === 6 ? 6 : 4;
+  const family: 4 | 6 = pinned?.family === 6 ? 6 : 4;
   if (!address || isIP(address) === 0) {
     throw new Error("pinned lookup requires a concrete public IP address");
   }
 
   return function pinnedLookup(
     _hostname: string,
-    options: PinnedLookupOptions | undefined,
-    callback: PinnedLookupCallback
+    options: LookupOptions,
+    callback: (
+      err: NodeJS.ErrnoException | null,
+      address: string | Array<{ address: string; family: number }>,
+      family?: number
+    ) => void
   ): void {
     // Never allow undefined/empty into Node's connect path.
     if (!address) {
-      callback(Object.assign(new Error("pinned address missing"), { code: "EINVAL" }));
+      callback(
+        Object.assign(new Error("pinned address missing"), {
+          code: "EINVAL",
+        }) as NodeJS.ErrnoException,
+        "",
+        family
+      );
       return;
     }
     if (options?.all === true) {

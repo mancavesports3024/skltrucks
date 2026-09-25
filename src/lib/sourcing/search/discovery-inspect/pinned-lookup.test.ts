@@ -22,9 +22,9 @@ function invokeLookup(
   options: { all?: boolean } | undefined
 ): Promise<{ address?: string; family?: number; addresses?: Array<{ address: string; family: number }> }> {
   return new Promise((resolve, reject) => {
-    const cb: PinnedLookupCallback = ((
+    const cb: PinnedLookupCallback = (
       err: NodeJS.ErrnoException | null,
-      addressOrList?: string | Array<{ address: string; family: number }>,
+      addressOrList: string | Array<{ address: string; family: number }>,
       family?: number
     ) => {
       if (err) {
@@ -35,9 +35,9 @@ function invokeLookup(
         resolve({ addresses: addressOrList });
         return;
       }
-      resolve({ address: addressOrList as string, family: family as number });
-    }) as PinnedLookupCallback;
-    lookup("example.com", options, cb);
+      resolve({ address: addressOrList, family });
+    };
+    lookup("example.com", options ?? {}, cb);
   });
 }
 
@@ -244,7 +244,7 @@ describe("Node 22 https.request pinned lookup (local TLS)", () => {
           rejectUnauthorized: false,
           lookup(hostname, options, cb) {
             seen.push({ all: options?.all });
-            pinned(hostname, options, cb as PinnedLookupCallback);
+            pinned(hostname, options, cb);
           },
         },
         (res) => {
