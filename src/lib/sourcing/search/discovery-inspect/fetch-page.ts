@@ -31,6 +31,92 @@ export type ResolvedAddress = { address: string; family: 4 | 6 };
 
 export type LookupImpl = (hostname: string) => Promise<ResolvedAddress[]>;
 
+/**
+ * Node's `https.request` / `net.connect` custom `lookup` callback.
+ * Node 22 commonly invokes lookup with `options.all === true`, which requires
+ * `callback(null, [{ address, family }])`. The single-address form is still
+ * used when `all` is false/undefined.
+ */
+export type PinnedLookupCallback = {
+  (err: NodeJS.ErrnoException | null, address: string, family: number): void;
+  (
+    err: NodeJS.ErrnoException | null,
+    addresses: Array<{ address: string; family: number }>
+  ): void;
+};
+
+export type PinnedLookupOptions = {
+  family?: number;
+  hints?: number;
+  all?: boolean;
+  verbatim?: boolean;
+};
+
+/**
+ * Build a connection-pinned lookup that returns only the pre-validated public IP.
+ * Supports both Node callback shapes so `options.all=true` never yields
+ * `Invalid IP address: undefined`.
+ */
+export function createPinnedLookup(pinned: ResolvedAddress): (
+  hostname: string,
+  options: PinnedLookupOptions | undefined,
+  callback: PinnedLookupCallback
+) => void {
+  const address = String(pinned?.address ?? "").trim();
+  const family = pinned?.family === 6 ? 6 : 4;
+  if (!address || isIP(address) === 0) {
+    throw new Error("pinned lookup requires a concrete public IP address");
+  }
+
+  return function pinnedLookup(
+    _hostname: string,
+    options: PinnedLookupOptions | undefined,
+    callback: PinnedLookupCallback
+  ): void {
+    // Never allow undefined/empty into Node's connect path.
+    if (!address) {
+      callback(Object.assign(new Error("pinned address missing"), { code: "EINVAL" }));
+      return;
+    }
+    if (options?.all === true) {
+      callback(null, [{ address, family }]);
+      return;
+    }
+    callback(null, address, family);
+  };
+}
+
+/** Classify fetch failures for staff-facing validation reasons (no raw bodies). */
+export function classifySafeFetchFailureReason(raw: string): string {
+  const msg = String(raw || "").trim();
+  if (!msg) return "network/configuration failure";
+  if (/^timeout$/i.test(msg) || /aborted/i.test(msg)) return "timeout";
+  if (/Invalid IP address:\s*undefined/i.test(msg)) {
+    return "HTTPS connection configuration failure (pinned lookup callback shape)";
+  }
+  if (/Invalid IP address/i.test(msg)) {
+    return `HTTPS connection configuration failure: ${msg.slice(0, 120)}`;
+  }
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(msg)) {
+    return "DNS resolution failure";
+  }
+  if (/ECONNREFUSED|ECONNRESET|EPIPE|ETIMEDOUT|socket hang up/i.test(msg)) {
+    return `network connection failure: ${msg.slice(0, 120)}`;
+  }
+  if (/certificate|CERT_|SSL|TLS/i.test(msg)) {
+    return `TLS/certificate failure: ${msg.slice(0, 120)}`;
+  }
+  // Preserve known SSRF / policy reasons unchanged.
+  if (
+    /private|localhost|HTTPS required|userinfo|mixed public|DNS lookup|hostname resolves/i.test(
+      msg
+    )
+  ) {
+    return msg;
+  }
+  return `network/configuration failure: ${msg.slice(0, 160)}`;
+}
+
 const defaultLookup: LookupImpl = async (hostname) => {
   const records = await dnsLookup(hostname, { all: true, verbatim: true });
   return records.map((r) => ({
@@ -298,6 +384,7 @@ function pinnedHttpsRequest(args: {
       reject(new Error("aborted"));
       return;
     }
+    const lookup = createPinnedLookup(args.pinned);
     const req = https.request(
       {
         protocol: "https:",
@@ -310,9 +397,7 @@ function pinnedHttpsRequest(args: {
           ...args.headers,
           Host: args.url.hostname,
         },
-        lookup: (_hostname, _options, callback) => {
-          callback(null, args.pinned.address, args.pinned.family);
-        },
+        lookup,
       },
       (res) => {
         resolve({ status: res.statusCode || 0, headers: res.headers, body: res });
@@ -513,10 +598,15 @@ export async function safeFetchPublicHtml(
     const aborted =
       controller.signal.aborted ||
       (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message)));
+    const raw = aborted
+      ? "timeout"
+      : e instanceof Error
+        ? e.message.slice(0, 200)
+        : "fetch failed";
     return {
       ok: false,
       // Never include response bodies in error strings.
-      reason: aborted ? "timeout" : e instanceof Error ? e.message.slice(0, 200) : "fetch failed",
+      reason: classifySafeFetchFailureReason(raw),
       finalUrl: current,
     };
   } finally {

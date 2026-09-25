@@ -30,9 +30,12 @@ export {
   isBlockedIpAddress,
   resolvePublicHostAddresses,
   extractMappedIpv4,
+  createPinnedLookup,
+  classifySafeFetchFailureReason,
   FETCH_MAX_BYTES,
   FETCH_OVERALL_DEADLINE_MS,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
+export { staffValidationFailureReason } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 export {
   withDeadline,
   isPastDeadline,
