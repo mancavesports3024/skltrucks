@@ -10,6 +10,7 @@ import {
   parsePrice,
   parseWeightLbs,
   parseYear,
+  workbookBodyRejectReason,
   type BodyKind,
 } from "@/lib/sourcing/intake/workbook/normalize";
 import {
@@ -119,7 +120,7 @@ export function mapPenskePreauctionRow(row: Record<string, string>): PenskePreau
   let boxLengthRaw = boxFromDesc != null ? `${boxFromDesc}'` : description || type;
 
   if (bodyKind === "reefer" || bodyKind === "flatbed" || bodyKind === "other") {
-    bodyRejectReason = `${bodyKind.replace("_", " ")} body is not a qualifying dry van`;
+    bodyRejectReason = workbookBodyRejectReason(bodyKind);
     boxLengthFt = 0; // force box_length fail in classifier
     boxLengthRaw = bodyBlob.trim() || bodyKind;
   } else if (bodyKind === "dry_van" && boxLengthFt == null) {

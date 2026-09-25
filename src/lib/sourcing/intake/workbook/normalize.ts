@@ -121,17 +121,13 @@ export function isAutomaticTransmission(transText: string): boolean | null {
   return null;
 }
 
-export type BodyKind = "dry_van" | "reefer" | "flatbed" | "other" | "unknown";
-
-export function classifyBodyKind(typeOrDescription: string): BodyKind {
-  const t = typeOrDescription.trim().toLowerCase();
-  if (!t) return "unknown";
-  if (/\breefer\b|\brefrig/.test(t)) return "reefer";
-  if (/\bflat\s*bed\b|\bflatbed\b/.test(t)) return "flatbed";
-  if (/\bvan\b|\bbox\b|\bdry\b/.test(t) && !/\breefer\b/.test(t)) return "dry_van";
-  if (/\bother\b/.test(t)) return "other";
-  return "unknown";
-}
+export type { BodyKind } from "@/lib/sourcing/body-policy";
+export {
+  classifyBodyKind,
+  workbookBodyRejectReason,
+  hasPositiveRefrigeratedBodyEvidence,
+  REFRIGERATED_BODY_OUTSIDE_PROFILE,
+} from "@/lib/sourcing/body-policy";
 
 /** Extract 24 / 26 / 28 from descriptions like `26FT SAD MEDIUM VAN` or `26'`. */
 export function extractBoxLengthFt(text: string): number | null {
@@ -188,6 +184,13 @@ export function parseLiftgate(raw: string | null | undefined): LiftgateParse {
   }
   if (/\bramp\b/i.test(text)) {
     return { hasLiftgate: true, notes: `Ramp (${text})` };
+  }
+  if (
+    /\bpower\s+lift(?:\s*gate)?\b/i.test(text) ||
+    /\blift\s*gate\b/i.test(text) ||
+    /\btuck[-\s]?away\s+lift(?:\s*gate)?\b/i.test(text)
+  ) {
+    return { hasLiftgate: true, notes: text };
   }
   const cap = text.match(/(\d[\d,]*)/);
   if (cap) {

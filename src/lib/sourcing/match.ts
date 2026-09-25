@@ -4,6 +4,11 @@ import {
   countryRejectionReason,
   resolveLeadCountry,
 } from "@/lib/sourcing/location/country";
+import {
+  collectBodyEvidenceText,
+  hasPositiveRefrigeratedBodyEvidence,
+  refrigeratedBodyRejectReason,
+} from "@/lib/sourcing/body-policy";
 import type {
   BuyingProfile,
   ConstraintOutcome,
@@ -11,6 +16,7 @@ import type {
   MatchReason,
   MatchResult,
   MatchStatus,
+  SpecEvidence,
 } from "@/types/sourcing";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
 
@@ -39,6 +45,20 @@ export interface LeadMatchInput {
   country?: string | null;
   /** Separate state/province field; ambiguous `CA` means California. */
   stateOrProvince?: string | null;
+  /** Listing title / make-model string (reefer / dry-box evidence). */
+  makeModel?: string | null;
+  boxLengthRaw?: string | null;
+  verificationNotes?: string | null;
+  sklCallNotes?: string | null;
+  notes?: string | null;
+  liftgateNotes?: string | null;
+  engine?: string | null;
+  transmission?: string | null;
+  sourceUrl?: string | null;
+  /** Pre-concatenated body evidence when callers already assembled it. */
+  bodyEvidenceText?: string | null;
+  /** Spec evidence quotes used during Import / Preview. */
+  specEvidence?: Partial<SpecEvidence> | null;
 }
 
 export function earliestAcceptedModelYear(
@@ -132,6 +152,14 @@ export function classifyLead(
 ): MatchResult {
   const reasons: MatchReason[] = [];
   const earliestYear = earliestAcceptedModelYear(profile, asOf);
+
+  // --- Required: dry box only (reject refrigerated / reefer bodies) ---
+  {
+    const bodyText = collectBodyEvidenceText(lead);
+    if (hasPositiveRefrigeratedBodyEvidence(bodyText)) {
+      reasons.push(refrigeratedBodyRejectReason());
+    }
+  }
 
   // --- Required: Cummins ---
   if (profile.requireCummins) {
@@ -272,12 +300,9 @@ export function classifyLead(
   }
 
   // --- Required: United States only (before distance) ---
-  const leadWithEvidence = lead as LeadMatchInput & {
-    specEvidence?: { country?: string };
-  };
   const countryResolution = resolveLeadCountry({
     location: lead.location,
-    country: lead.country ?? leadWithEvidence.specEvidence?.country,
+    country: lead.country ?? lead.specEvidence?.country,
     stateOrProvince: lead.stateOrProvince,
   });
   {

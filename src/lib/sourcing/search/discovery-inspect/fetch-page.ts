@@ -92,6 +92,7 @@ export function classifySafeFetchFailureReason(raw: string): string {
   const msg = String(raw || "").trim();
   if (!msg) return "network/configuration failure";
   if (/^timeout$/i.test(msg) || /aborted/i.test(msg)) return "timeout";
+  if (/response too large/i.test(msg)) return "response too large";
   if (/Invalid IP address:\s*undefined/i.test(msg)) {
     return "HTTPS connection configuration failure (pinned lookup callback shape)";
   }

@@ -177,8 +177,17 @@ function findPrice(text: string): { askingPrice: number | null; auctionCurrentBi
 }
 
 function findLiftgate(text: string): boolean | null {
-  if (/\bno\s+lift\s*gate\b/i.test(text) || /\bwithout\s+lift\s*gate\b/i.test(text)) return false;
-  if (/\blift\s*gate\b/i.test(text)) return true;
+  if (/\bno\s+lift\s*gate\b/i.test(text) || /\bwithout\s+lift\s*gate\b/i.test(text)) {
+    return false;
+  }
+  // "power liftgate" / "power lift gate" / plain liftgate
+  if (
+    /\bpower\s+lift(?:\s*gate)?\b/i.test(text) ||
+    /\blift\s*gate\b/i.test(text) ||
+    /\btuck[-\s]?away\s+lift(?:\s*gate)?\b/i.test(text)
+  ) {
+    return true;
+  }
   return null;
 }
 

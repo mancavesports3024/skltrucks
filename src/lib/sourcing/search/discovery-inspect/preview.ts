@@ -35,6 +35,10 @@ import type {
 } from "@/lib/sourcing/search/discovery-inspect/types";
 import { hasImportableUnitEvidence } from "@/lib/sourcing/search/discovery-inspect/listing-identity";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
+import {
+  collectBodyEvidenceText,
+  hasPositiveRefrigeratedBodyEvidence,
+} from "@/lib/sourcing/body-policy";
 import { emptySpecEvidenceFromCandidate } from "@/lib/sourcing/search/types";
 import {
   candidateToTruckLeadInput,
@@ -499,8 +503,19 @@ export async function runDiscoveryInspectPreview(
       truck = det.truck;
       contact = det.contact;
 
+      const earlyBodyText = collectBodyEvidenceText({
+        title: v.title,
+        makeModel: truck?.makeModel,
+        notes: truck?.notes,
+        listingUrl: v.finalUrl,
+        sourceUrl: v.discoveryUrl,
+        boxLengthRaw: truck?.boxLengthEvidence,
+      });
+      const refrigeratedBody = hasPositiveRefrigeratedBodyEvidence(earlyBodyText);
+
       if (
         det.requiredEvidenceMissing &&
+        !refrigeratedBody &&
         input.openAiInspectUrl &&
         openAiInspectCalls < ceilings.maxOpenAiInspectCalls &&
         !isPastDeadline(deadlineAt)
