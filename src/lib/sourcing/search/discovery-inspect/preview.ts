@@ -9,6 +9,8 @@ import { classifyLead } from "@/lib/sourcing/match";
 import {
   clampDiscoveryInspectCeilings,
   DEFAULT_DISCOVERY_INSPECT_CEILINGS,
+  DISCOVERY_PREVIEW_DEADLINE_MS,
+  DISCOVERY_VALIDATE_CONCURRENCY,
   estimateDiscoveryInspectCombinedMaxCostUsd,
   type DiscoveryInspectCeilings,
 } from "@/lib/sourcing/search/discovery/ceilings";
@@ -252,6 +254,9 @@ export type RunDiscoveryInspectPreviewInput = {
   ) => Promise<{ truck: ExtractedTruckCandidate | null; rejectReason?: string }>;
   validateFetchImpl?: typeof fetch;
   allowLiveNetwork?: boolean;
+  /** Overall Preview wall-clock deadline (ms from now). */
+  previewDeadlineMs?: number;
+  validateConcurrency?: number;
 };
 
 /**
@@ -284,21 +289,70 @@ export async function runDiscoveryInspectPreview(
 
   const discovery = await runDiscoveryRetain({ client, profile, ceilings });
 
+  const previewDeadlineMs = input.previewDeadlineMs ?? DISCOVERY_PREVIEW_DEADLINE_MS;
+  const validateConcurrency = Math.max(
+    1,
+    Math.min(3, input.validateConcurrency ?? DISCOVERY_VALIDATE_CONCURRENCY)
+  );
+  const deadlineAt = Date.now() + previewDeadlineMs;
+  let stoppedReason: string | null = null;
+
   const rejectedBeforeInspect: DiscoveryInspectPreviewReport["rejectedBeforeInspect"] = [];
-  const validated = [];
-  for (const r of discovery.retained) {
-    const v = await validateDiscoveryCandidate(r.canonicalUrl || r.rawUrl, {
-      fetchImpl: input.validateFetchImpl,
-    });
-    if (v.outcome !== "validated") {
+  const validated: Awaited<ReturnType<typeof validateDiscoveryCandidate>>[] = [];
+  const retainedQueue = [...discovery.retained];
+
+  // Bounded-concurrency validation; stop once we have maxInspectCandidates or deadline.
+  while (
+    retainedQueue.length > 0 &&
+    validated.length < ceilings.maxInspectCandidates &&
+    Date.now() < deadlineAt
+  ) {
+    const batch = retainedQueue.splice(0, validateConcurrency);
+    const batchResults = await Promise.all(
+      batch.map((r) =>
+        validateDiscoveryCandidate(r.canonicalUrl || r.rawUrl, {
+          fetchImpl: input.validateFetchImpl,
+          deadlineAt,
+        }).then((v) => ({ retained: r, v }))
+      )
+    );
+    for (const { retained: r, v } of batchResults) {
+      if (v.outcome !== "validated") {
+        rejectedBeforeInspect.push({
+          url: r.canonicalUrl || r.rawUrl,
+          reason: v.reason,
+          outcome: v.outcome,
+        });
+        continue;
+      }
+      if (validated.length < ceilings.maxInspectCandidates) {
+        validated.push(v);
+      }
+    }
+  }
+  if (Date.now() >= deadlineAt && retainedQueue.length > 0) {
+    stoppedReason = "preview deadline reached during validation";
+    for (const r of retainedQueue) {
       rejectedBeforeInspect.push({
         url: r.canonicalUrl || r.rawUrl,
-        reason: v.reason,
-        outcome: v.outcome,
+        reason: "skipped — preview deadline",
+        outcome: "unverified",
       });
-      continue;
     }
-    validated.push(v);
+    retainedQueue.length = 0;
+  } else if (
+    validated.length >= ceilings.maxInspectCandidates &&
+    retainedQueue.length > 0
+  ) {
+    stoppedReason = "inspect candidate ceiling reached";
+    for (const r of retainedQueue) {
+      rejectedBeforeInspect.push({
+        url: r.canonicalUrl || r.rawUrl,
+        reason: "skipped — inspect candidate ceiling",
+        outcome: "rejected",
+      });
+    }
+    retainedQueue.length = 0;
   }
 
   const toInspect = validated.slice(0, ceilings.maxInspectCandidates);
@@ -336,13 +390,15 @@ export async function runDiscoveryInspectPreview(
   let openAiInspectCalls = 0;
   let openAiCost = 0;
 
-  for (const v of toInspect) {
+  async function inspectOne(
+    v: (typeof toInspect)[number]
+  ): Promise<DiscoveryInspectPreviewRow> {
     const provenance =
-      discovery.retained.find((r) => r.canonicalUrl === v.canonicalUrl)?.provenance ??
-      [];
+      discovery.retained.find((r) => r.canonicalUrl === v.canonicalUrl)?.provenance ?? [];
     let truck: ExtractedTruckCandidate | null = null;
     let contact = null;
     let inspectFailed = false;
+    const rowReasons: string[] = [];
 
     try {
       const det = inspectListingHtmlDeterministic({
@@ -356,7 +412,8 @@ export async function runDiscoveryInspectPreview(
       if (
         det.requiredEvidenceMissing &&
         input.openAiInspectUrl &&
-        openAiInspectCalls < ceilings.maxOpenAiInspectCalls
+        openAiInspectCalls < ceilings.maxOpenAiInspectCalls &&
+        Date.now() < deadlineAt
       ) {
         openAiInspectCalls += 1;
         openAiCost += estimateOpenAiSearchCostUsd({
@@ -366,12 +423,19 @@ export async function runDiscoveryInspectPreview(
         });
         const oa = await input.openAiInspectUrl(v.finalUrl);
         if (oa.truck) {
-          // Bind URL — never allow OpenAI to substitute.
-          if (canonicalizeListingUrl(oa.truck.listingUrl) !== canonicalizeListingUrl(v.finalUrl)) {
-            oa.truck.listingUrl = v.finalUrl;
-            oa.truck.evidenceUrl = v.finalUrl;
+          const oaCanon = canonicalizeListingUrl(oa.truck.listingUrl || "");
+          const finalCanon = canonicalizeListingUrl(v.finalUrl);
+          if (!oaCanon || oaCanon !== finalCanon) {
+            rowReasons.push("inspection URL mismatch");
+            errors.push(`inspect:${v.finalUrl}: inspection URL mismatch`);
+          } else {
+            truck = {
+              ...det.truck,
+              ...oa.truck,
+              listingUrl: v.finalUrl,
+              evidenceUrl: v.finalUrl,
+            };
           }
-          truck = { ...det.truck, ...oa.truck, listingUrl: v.finalUrl, evidenceUrl: v.finalUrl };
         } else if (oa.rejectReason) {
           errors.push(`inspect:${v.finalUrl}: ${oa.rejectReason}`);
         }
@@ -384,7 +448,7 @@ export async function runDiscoveryInspectPreview(
     }
 
     if (inspectFailed || !truck) {
-      rows.push({
+      return {
         id: rowId(v.canonicalUrl),
         discoveryUrl: v.discoveryUrl,
         finalUrl: v.finalUrl,
@@ -395,20 +459,19 @@ export async function runDiscoveryInspectPreview(
         validationReason: v.reason,
         matchStatus: "inspect_failed",
         previewOutcome: "inspect_failed",
-        reasons: ["Inspection failed or produced no truck"],
+        reasons: ["Inspection failed or produced no truck", ...rowReasons],
         truck: null,
         contact: null,
         evidence: {},
         alreadyInSkl: false,
         importEligible: false,
         provenance,
-      });
-      continue;
+      };
     }
 
     const mapped = candidateToTruckLeadInput(truck);
     if (mapped.rejectReason) {
-      rows.push({
+      return {
         id: rowId(v.canonicalUrl),
         discoveryUrl: v.discoveryUrl,
         finalUrl: v.finalUrl,
@@ -419,20 +482,19 @@ export async function runDiscoveryInspectPreview(
         validationReason: v.reason,
         matchStatus: "does_not_match",
         previewOutcome: "does_not_match",
-        reasons: [mapped.rejectReason],
+        reasons: [mapped.rejectReason, ...rowReasons],
         truck,
         contact,
         evidence: emptySpecEvidenceFromCandidate(truck),
         alreadyInSkl: false,
         importEligible: false,
         provenance,
-      });
-      continue;
+      };
     }
 
     const existing = findExistingLead(existingLeads, mapped.input);
     if (existing) {
-      rows.push({
+      return {
         id: rowId(v.canonicalUrl),
         discoveryUrl: v.discoveryUrl,
         finalUrl: v.finalUrl,
@@ -443,15 +505,14 @@ export async function runDiscoveryInspectPreview(
         validationReason: v.reason,
         matchStatus: "duplicate",
         previewOutcome: "duplicate",
-        reasons: ["Already in SKL (VIN / listing id / canonical URL)"],
+        reasons: ["Already in SKL (VIN / listing id / canonical URL)", ...rowReasons],
         truck,
         contact,
         evidence: emptySpecEvidenceFromCandidate(truck),
         alreadyInSkl: true,
         importEligible: false,
         provenance,
-      });
-      continue;
+      };
     }
 
     const match = classifyLead(mapped.input, profile);
@@ -470,7 +531,7 @@ export async function runDiscoveryInspectPreview(
     const importEligible =
       previewOutcome === "confirmed_match" || previewOutcome === "needs_verification";
 
-    rows.push({
+    return {
       id: rowId(v.canonicalUrl),
       discoveryUrl: v.discoveryUrl,
       finalUrl: v.finalUrl,
@@ -481,14 +542,46 @@ export async function runDiscoveryInspectPreview(
       validationReason: v.reason,
       matchStatus: match.status,
       previewOutcome,
-      reasons: match.reasons.map((r) => r.label),
+      reasons: [...match.reasons.map((r) => r.label), ...rowReasons],
       truck,
       contact,
       evidence,
       alreadyInSkl: false,
       importEligible,
       provenance,
-    });
+    };
+  }
+
+  const inspectQueue = [...toInspect];
+  while (inspectQueue.length > 0 && Date.now() < deadlineAt) {
+    const batch = inspectQueue.splice(0, validateConcurrency);
+    const inspected = await Promise.all(batch.map((v) => inspectOne(v)));
+    rows.push(...inspected);
+  }
+  if (inspectQueue.length > 0) {
+    stoppedReason = stoppedReason || "preview deadline reached during inspection";
+    for (const v of inspectQueue) {
+      rows.push({
+        id: rowId(v.canonicalUrl),
+        discoveryUrl: v.discoveryUrl,
+        finalUrl: v.finalUrl,
+        canonicalUrl: v.canonicalUrl,
+        bucket: "individual_listing",
+        title: v.title,
+        validationOutcome: v.outcome,
+        validationReason: "skipped — preview deadline",
+        matchStatus: "unverified",
+        previewOutcome: "unverified",
+        reasons: ["skipped — preview deadline"],
+        truck: null,
+        contact: null,
+        evidence: {},
+        alreadyInSkl: false,
+        importEligible: false,
+        provenance:
+          discovery.retained.find((r) => r.canonicalUrl === v.canonicalUrl)?.provenance ?? [],
+      });
+    }
   }
 
   const tavilyEstimatedCostUsd = estimateTavilyCostUsd(discovery.credits);
@@ -500,6 +593,7 @@ export async function runDiscoveryInspectPreview(
     outputTokens: openAiInspectCalls * 1_500,
     estimatedCostUsd:
       Math.round((tavilyEstimatedCostUsd + openAiCost) * 10000) / 10000,
+    // Accurate provenance: live Preview stays live; Import never copies this blob.
     live: input.mode === "live",
     creditsConsumed: discovery.credits,
     searchesRun: discovery.plans.length,
@@ -531,6 +625,8 @@ export async function runDiscoveryInspectPreview(
     notes: [
       ...notes,
       `Worst-case ceiling ~$${costCeiling.combinedMaxUsd.toFixed(2)} (Tavily $${costCeiling.tavilyMaxUsd.toFixed(2)} + OpenAI $${costCeiling.openAiMaxUsd.toFixed(2)}).`,
+      ...(stoppedReason ? [`Partial Preview: ${stoppedReason}.`] : []),
+      "Import revalidates selected URLs server-side (deterministic only; zero Tavily/OpenAI).",
     ],
     previewId: randomUUID(),
   };

@@ -1,6 +1,6 @@
 # Tavily Discovery → Inspection Preview
 
-Staff-only manual workflow on `/admin/sourcing/search`. **No cron, no email.** Preview never writes leads; Import is an explicit second action.
+Staff-only manual workflow on `/admin/sourcing/search`. **No cron, no email.** Preview never writes leads; Import is an explicit second action that **revalidates selected URLs server-side**.
 
 Related: [`sourcing-search-discovery-benchmark.md`](./sourcing-search-discovery-benchmark.md) (PR #33 benchmark evidence).
 
@@ -24,30 +24,40 @@ Related: [`sourcing-search-discovery-benchmark.md`](./sourcing-search-discovery-
 | Results per query | 10 |
 | Retained discovery URLs | 20 |
 | Validated candidates inspected | 10 |
+| Import selected URLs | ≤10 |
 | OpenAI exact-URL inspect calls | 10 max (0 if OpenAI unset) |
+| Validation concurrency | 3 |
+| Preview overall deadline | 90s (partial Preview OK) |
+| Per-URL fetch overall deadline | 20s (redirect chain) |
+| Response body max | 1.5 MB (Content-Length + stream abort) |
 | Tavily extract | **never** in this workflow |
 | OpenAI discovery | **never** |
-| Est. worst-case Tavily | ~$0.096 |
-| Est. worst-case OpenAI inspect | ~$0.10–0.15 depending on tokens |
-| Combined worst-case | shown in UI before confirm |
+| OpenAI / Tavily during Import | **never** |
+
+## SSRF (connection-pinned)
+
+Production fetch uses `node:https` with a custom `lookup` that returns only pre-validated public addresses (TLS SNI + Host preserved). DNS that yields any private/loopback/link-local/CGNAT/mapped-IPv6 address is rejected. Every redirect re-resolves and re-validates. No cookies or Authorization headers.
+
+## Import trust model
+
+Client sends **selected listing URLs only**. Server re-classifies, SSRF-fetches, deterministically extracts, maps, classifies, and dedupes. Client truck/evidence/`importEligible` fields are ignored (not accepted). Preferred over signed Preview tokens — no migration or new secret.
 
 ## Flow
 
-1. **Discovery** — Tavily basic search with unit-oriented matrix; classify individual / likely / hub / unsafe; retain ≤20.
-2. **Validate** — HTTPS, SSRF-safe fetch, bounded redirects, reject category redirects / PDF / bot / 403-as-unverified.
-3. **Inspect** — deterministic HTML/JSON-LD extract first; OpenAI exact-URL inspect only when required evidence missing (URL binding enforced).
-4. **Classify** — existing `classifyLead` rules (U.S., Cummins, auto, box, GVWR ≤26000 / ≥26001 reject, mileage, age, distance, liftgate preferred).
-5. **Preview** — read-only report; `dbWrites: false`.
-6. **Import selected** — staff selects rows; server re-checks eligibility; reuses VIN / listing-id / canonical dedupe; never imports hubs/rejected/unverified.
+1. **Discovery** — Tavily basic search; classify; retain ≤20.
+2. **Validate** — HTTPS, connection-pinned SSRF fetch, streaming size cap, bounded concurrency + overall deadline.
+3. **Inspect** — deterministic HTML/JSON-LD; OpenAI inspect only for missing evidence; **URL mismatch discards the entire OpenAI result**.
+4. **Classify** — existing `classifyLead` rules.
+5. **Preview** — read-only; `dbWrites: false`; `usage.live` reflects Preview mode.
+6. **Import** — selected URLs only; full revalidation; Import usage reports zero provider calls (does not rewrite Preview live provenance).
 
 ## Production enablement sequence
 
 1. Merge shared discovery + this Preview PR (draft).
-2. Confirm `TAVILY_API_KEY` (and optional `OPENAI_API_KEY` for inspect only) already present — **no new env vars required**.
-3. Staff opens `/admin/sourcing/search`, runs **mock Preview**, then one confirmed live Preview.
-4. Import only after reviewing Confirmed / Needs verification rows.
-5. Do not enable cron/email.
+2. Confirm `TAVILY_API_KEY` (and optional `OPENAI_API_KEY` for inspect only) — **no new env vars**.
+3. Staff: mock Preview → confirmed live Preview → Import selected.
+4. Do not enable cron/email.
 
 ## Migration
 
-**None.** Existing `sourcing_search_runs` / lead tables suffice; Preview is ephemeral client/server payload until Import calls the existing persist path.
+**None.**

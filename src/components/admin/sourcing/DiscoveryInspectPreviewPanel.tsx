@@ -71,25 +71,24 @@ export default function DiscoveryInspectPreviewPanel({
 
   async function onImport() {
     if (!preview) return;
-    const ids = Object.entries(selected)
-      .filter(([, v]) => v)
-      .map(([id]) => id);
-    if (ids.length === 0) {
-      setError("Select at least one import-eligible row.");
+    const selectedUrls = preview.rows
+      .filter((r) => selected[r.id])
+      .map((r) => r.canonicalUrl || r.finalUrl)
+      .filter(Boolean);
+    if (selectedUrls.length === 0) {
+      setError("Select at least one listing URL.");
       return;
     }
     setBusy(true);
     setError(null);
     setImportReport(null);
     try {
-      const result = await importDiscoveryInspectSelectedAction({
-        preview,
-        selectedRowIds: ids,
-      });
+      // Server revalidates URLs — never send truck/evidence/classification payload.
+      const result = await importDiscoveryInspectSelectedAction({ selectedUrls });
       if (result.error) setError(result.error);
       if (result.report) {
         setImportReport(
-          `Imported ${result.importedCount ?? result.report.newLeadsSaved} lead(s). Confirmed ${result.report.confirmedMatches}, needs verification ${result.report.needsVerification}, duplicate/rejected ${result.report.duplicatesOrRejected}.`
+          `Imported ${result.importedCount ?? result.report.newLeadsSaved} lead(s). Confirmed ${result.report.confirmedMatches}, needs verification ${result.report.needsVerification}, duplicate/rejected ${result.report.duplicatesOrRejected}. Import made zero Tavily/OpenAI calls.`
         );
       }
     } catch (e) {

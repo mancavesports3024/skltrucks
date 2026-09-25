@@ -67,6 +67,7 @@ export async function validateDiscoveryCandidate(
     fetchImpl?: typeof fetch;
     /** When provided, skip network (tests). */
     fetchResult?: SafeFetchResult;
+    deadlineAt?: number;
   }
 ): Promise<ValidatedListingCandidate> {
   const classified = classifyDiscoveryUrl(discoveryUrl);
@@ -108,7 +109,10 @@ export async function validateDiscoveryCandidate(
 
   const fetched =
     options?.fetchResult ??
-    (await safeFetchPublicHtml(discoveryUrl, { fetchImpl: options?.fetchImpl }));
+    (await safeFetchPublicHtml(discoveryUrl, {
+      fetchImpl: options?.fetchImpl,
+      deadlineAt: options?.deadlineAt,
+    }));
 
   if (!fetched.ok) {
     const status = fetched.status;

@@ -456,11 +456,10 @@ export async function runDiscoveryInspectPreviewAction(formData: FormData) {
 }
 
 /**
- * Explicit Import of selected Preview rows (server re-checks eligibility).
+ * Explicit Import of selected listing URLs (server revalidates; never trusts Preview payload).
  */
 export async function importDiscoveryInspectSelectedAction(payload: {
-  preview: unknown;
-  selectedRowIds: string[];
+  selectedUrls: string[];
 }) {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error, report: null, importedCount: 0 };
@@ -469,8 +468,7 @@ export async function importDiscoveryInspectSelectedAction(payload: {
     "@/lib/sourcing/search/discovery-inspect/import-selected"
   );
   const result = await importSelectedDiscoveryInspectRows({
-    preview: payload.preview as import("@/lib/sourcing/search/discovery-inspect/types").DiscoveryInspectPreviewReport,
-    selectedRowIds: payload.selectedRowIds,
+    selectedUrls: payload.selectedUrls ?? [],
   });
   if (result.report && (result.importedCount ?? 0) > 0) revalidateSourcing();
   return result;

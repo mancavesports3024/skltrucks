@@ -13,6 +13,12 @@ export const DISCOVERY_MAX_TAVILY_COST_USD = estimateTavilyCostUsd(DISCOVERY_MAX
 
 export const DISCOVERY_INSPECT_MAX_CANDIDATES = 10;
 export const DISCOVERY_INSPECT_MAX_OPENAI_CALLS = 10;
+/** Max selected URLs accepted on Import (server-authoritative). */
+export const DISCOVERY_IMPORT_MAX_SELECTED = DISCOVERY_INSPECT_MAX_CANDIDATES;
+/** Bounded concurrency for Preview URL validation/inspection. */
+export const DISCOVERY_VALIDATE_CONCURRENCY = 3;
+/** Overall Preview wall-clock deadline (partial results OK). */
+export const DISCOVERY_PREVIEW_DEADLINE_MS = 90_000;
 
 export type DiscoveryInspectCeilings = {
   maxQueries: number;
