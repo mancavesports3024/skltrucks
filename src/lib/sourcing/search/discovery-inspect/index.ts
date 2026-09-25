@@ -23,13 +23,18 @@ export {
   buildDiscoveryInspectPreflight,
   createTavilyDiscoveryOnlyClient,
 } from "@/lib/sourcing/search/discovery-inspect/preview";
-export { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
+export {
+  validateDiscoveryCandidate,
+  staffValidationFailureReason,
+} from "@/lib/sourcing/search/discovery-inspect/validate-url";
 export {
   assertPublicHttpUrl,
   safeFetchPublicHtml,
   isBlockedIpAddress,
   resolvePublicHostAddresses,
   extractMappedIpv4,
+  createPinnedLookup,
+  classifySafeFetchFailureReason,
   FETCH_MAX_BYTES,
   FETCH_OVERALL_DEADLINE_MS,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";

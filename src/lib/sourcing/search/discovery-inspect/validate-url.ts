@@ -9,6 +9,7 @@ import {
 } from "@/lib/sourcing/search/discovery/url-classify";
 import {
   assertPublicHttpUrl,
+  classifySafeFetchFailureReason,
   safeFetchPublicHtml,
   type SafeFetchResult,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
@@ -33,6 +34,43 @@ export type ValidatedListingCandidate = {
 
 const BOT_CHALLENGE_RE =
   /captcha|cloudflare|browser-gate|checking your browser|security check|access denied|bot detection|cf-challenge/i;
+
+/**
+ * Staff-facing reason for a failed fetch during validation.
+ * Keeps network/config failures distinct from 403/bot, hub, deadline, and DNS/SSRF.
+ */
+export function staffValidationFailureReason(
+  fetched: Extract<SafeFetchResult, { ok: false }>
+): { outcome: ValidationOutcome; reason: string } {
+  const status = fetched.status;
+  if (status === 403 || status === 401 || status === 429) {
+    return {
+      outcome: "unverified",
+      reason: `HTTP ${status} — cannot confirm as a unit (bot/access challenge possible)`,
+    };
+  }
+  if (/non-HTML|pdf/i.test(fetched.reason)) {
+    return { outcome: "rejected", reason: fetched.reason };
+  }
+
+  const classified = classifySafeFetchFailureReason(fetched.reason);
+  if (/^timeout$/i.test(classified) || /deadline/i.test(classified)) {
+    return { outcome: "unverified", reason: "validation deadline exceeded" };
+  }
+  if (
+    /private|localhost|HTTPS required|userinfo|mixed public|DNS lookup|hostname resolves|DNS resolution/i.test(
+      classified
+    )
+  ) {
+    return { outcome: "rejected", reason: classified };
+  }
+  if (/HTTPS connection configuration failure|network\/configuration failure|network connection failure|TLS\/certificate/i.test(
+    classified
+  )) {
+    return { outcome: "unverified", reason: classified };
+  }
+  return { outcome: "unverified", reason: classified };
+}
 
 function pathLooksLikeCategory(path: string): boolean {
   const p = path.replace(/\/+$/, "") || "/";
@@ -115,40 +153,16 @@ export async function validateDiscoveryCandidate(
     }));
 
   if (!fetched.ok) {
-    const status = fetched.status;
-    if (status === 403 || status === 401 || status === 429) {
-      return {
-        discoveryUrl,
-        finalUrl: fetched.finalUrl || discoveryUrl,
-        canonicalUrl: canonicalizeListingUrl(fetched.finalUrl || discoveryUrl),
-        hostname: hostOf(fetched.finalUrl || discoveryUrl),
-        title: "",
-        outcome: "unverified",
-        reason: `HTTP ${status} — cannot confirm as a unit`,
-        httpStatus: status,
-      };
-    }
-    if (/non-HTML|pdf/i.test(fetched.reason)) {
-      return {
-        discoveryUrl,
-        finalUrl: fetched.finalUrl || discoveryUrl,
-        canonicalUrl: canonicalizeListingUrl(fetched.finalUrl || discoveryUrl),
-        hostname: hostOf(fetched.finalUrl || discoveryUrl),
-        title: "",
-        outcome: "rejected",
-        reason: fetched.reason,
-        httpStatus: status,
-      };
-    }
+    const classified = staffValidationFailureReason(fetched);
     return {
       discoveryUrl,
       finalUrl: fetched.finalUrl || discoveryUrl,
       canonicalUrl: canonicalizeListingUrl(fetched.finalUrl || discoveryUrl),
       hostname: hostOf(fetched.finalUrl || discoveryUrl),
       title: "",
-      outcome: "unverified",
-      reason: fetched.reason,
-      httpStatus: status,
+      outcome: classified.outcome,
+      reason: classified.reason,
+      httpStatus: fetched.status,
     };
   }
 
