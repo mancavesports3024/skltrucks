@@ -156,6 +156,14 @@ export function detectDiscoveryHub(host: string, path: string, search: string): 
     return "category/search/hub page";
   }
 
+  // Marketplace /for-sale/{generic-slug} landings (not year-make-id unit slugs).
+  if (
+    /\/for-sale\/[a-z][a-z0-9-]+\/?$/i.test(path) &&
+    !/\/for-sale\/\d{4}-[a-z0-9-]+-\d{5,}\/?$/i.test(path)
+  ) {
+    return "marketplace for-sale category landing";
+  }
+
   if (path === "/" || /\/search\b/i.test(path)) {
     return "category/search/hub page";
   }

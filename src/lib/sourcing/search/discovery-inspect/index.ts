@@ -28,6 +28,13 @@ export {
   staffValidationFailureReason,
 } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 export {
+  assertRedirectPreservesListingIdentity,
+  extractListingIdentityKeys,
+  hasImportableUnitEvidence,
+  pathLooksLikeCategoryOrMarketplaceHub,
+  REDIRECT_LOST_LISTING_IDENTITY,
+} from "@/lib/sourcing/search/discovery-inspect/listing-identity";
+export {
   assertPublicHttpUrl,
   safeFetchPublicHtml,
   isBlockedIpAddress,

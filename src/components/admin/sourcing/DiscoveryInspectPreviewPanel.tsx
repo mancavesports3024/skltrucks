@@ -241,8 +241,24 @@ export default function DiscoveryInspectPreviewPanel({
                       >
                         {row.finalUrl}
                       </a>
-                      {row.reasons[0] && (
-                        <p className="text-xs text-neutral-500">{row.reasons[0]}</p>
+                      {row.validationReason && (
+                        <p className="text-xs text-neutral-500">
+                          Validation: {row.validationReason}
+                        </p>
+                      )}
+                      {row.reasons.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          <p className="text-xs font-semibold text-neutral-600">
+                            {row.previewOutcome === "needs_verification"
+                              ? "Why Needs verification (all match reasons)"
+                              : "Match / outcome reasons"}
+                          </p>
+                          <ul className="list-disc space-y-0.5 pl-4 text-xs text-neutral-600">
+                            {row.reasons.map((reason, idx) => (
+                              <li key={`${row.id}-reason-${idx}`}>{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                       {row.truck && (
                         <p className="text-xs text-neutral-600">
