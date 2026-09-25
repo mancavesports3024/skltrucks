@@ -57,8 +57,18 @@ function findMakeModel(title: string, text: string): string {
 }
 
 function findStock(text: string): string {
-  const m = text.match(/\b(?:stock|stk|#)\s*[#:.]?\s*([A-Z0-9-]{3,20})\b/i);
-  return m ? m[1] : "";
+  // Prefer "Stock Number VDXK3543" / "Stock # 18534" over capturing the word "Number".
+  const labeled = text.match(
+    /\b(?:stock|stk)\s*(?:number|no\.?|num|#)?\s*[#:.]?\s*([A-Z0-9-]{3,20})\b/i
+  );
+  if (labeled && !/^(number|num|no|id|stock|stk)$/i.test(labeled[1])) {
+    return labeled[1];
+  }
+  const hash = text.match(/#\s*([A-Z0-9-]{3,20})\b/i);
+  if (hash && !/^(number|num|no|id|stock|stk)$/i.test(hash[1])) {
+    return hash[1];
+  }
+  return "";
 }
 
 function findEngine(text: string): {

@@ -31,6 +31,7 @@ export {
   assertRedirectPreservesListingIdentity,
   extractListingIdentityKeys,
   hasImportableUnitEvidence,
+  pickPageBackedIdentityFields,
   pathLooksLikeCategoryOrMarketplaceHub,
   REDIRECT_LOST_LISTING_IDENTITY,
 } from "@/lib/sourcing/search/discovery-inspect/listing-identity";

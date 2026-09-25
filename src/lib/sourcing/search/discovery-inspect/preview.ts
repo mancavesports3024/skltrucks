@@ -33,7 +33,10 @@ import type {
   DiscoveryInspectPreviewReport,
   DiscoveryInspectPreviewRow,
 } from "@/lib/sourcing/search/discovery-inspect/types";
-import { hasImportableUnitEvidence } from "@/lib/sourcing/search/discovery-inspect/listing-identity";
+import {
+  hasImportableUnitEvidence,
+  pickPageBackedIdentityFields,
+} from "@/lib/sourcing/search/discovery-inspect/listing-identity";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 import {
   collectBodyEvidenceText,
@@ -539,11 +542,20 @@ export async function runDiscoveryInspectPreview(
               rowReasons.push("inspection URL mismatch");
               errors.push(`inspect:${v.finalUrl}: inspection URL mismatch`);
             } else {
+              const pageIdentity = pickPageBackedIdentityFields({
+                deterministic: det.truck,
+                model: oa.truck,
+                finalUrl: v.finalUrl,
+                html: v.html || "",
+              });
               truck = {
                 ...det.truck,
                 ...oa.truck,
                 listingUrl: v.finalUrl,
                 evidenceUrl: v.finalUrl,
+                // Model-only VIN/stock never qualify; keep page-backed tokens.
+                vin: pageIdentity.vin,
+                stockNumber: pageIdentity.stockNumber,
               };
             }
           } else if (oa.rejectReason) {

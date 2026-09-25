@@ -54,6 +54,9 @@ export function extractListingIdentityKeys(url: string): string[] {
         const m = s.match(/(\d{4,})$/);
         if (m) keys.add(m[1]);
       }
+      // Dealer VDP slugs: /for-sale/2027-freightliner-m2-box-truck-14437263
+      const trailingListingId = s.match(/(?:^|-)(\d{5,})$/);
+      if (trailingListingId) keys.add(trailingListingId[1]);
     }
   } catch {
     /* ignore */
@@ -131,6 +134,43 @@ export function assertRedirectPreservesListingIdentity(
 function isPlaceholder(value: string | null | undefined): boolean {
   const v = String(value ?? "").trim();
   return !v || PLACEHOLDER_RE.test(v);
+}
+
+/**
+ * Keep VIN / stock only when the token is present on the validated final page
+ * (URL or HTML). Model-only identifiers never win over page-backed ones and
+ * never survive alone.
+ */
+export function pickPageBackedIdentityFields(args: {
+  deterministic: Pick<ExtractedTruckCandidate, "vin" | "stockNumber">;
+  model?: Pick<ExtractedTruckCandidate, "vin" | "stockNumber"> | null;
+  finalUrl: string;
+  html?: string;
+}): { vin: string; stockNumber: string } {
+  const haystack = `${args.finalUrl}\n${args.html || ""}`;
+  const hayUpper = haystack.toUpperCase();
+  const hayLower = haystack.toLowerCase();
+
+  const detVin = String(args.deterministic.vin || "").trim().toUpperCase();
+  const modelVin = String(args.model?.vin || "").trim().toUpperCase();
+  const detVinOk = VIN_RE.test(detVin) && hayUpper.includes(detVin);
+  const modelVinOk = VIN_RE.test(modelVin) && hayUpper.includes(modelVin);
+  // Prefer page-backed model VIN only when it truly appears; else keep page det.
+  const vin = modelVinOk ? modelVin : detVinOk ? detVin : "";
+
+  const detStock = String(args.deterministic.stockNumber || "").trim();
+  const modelStock = String(args.model?.stockNumber || "").trim();
+  const detStockOk =
+    !isPlaceholder(detStock) &&
+    detStock.length >= 2 &&
+    hayLower.includes(detStock.toLowerCase());
+  const modelStockOk =
+    !isPlaceholder(modelStock) &&
+    modelStock.length >= 2 &&
+    hayLower.includes(modelStock.toLowerCase());
+  const stockNumber = modelStockOk ? modelStock : detStockOk ? detStock : "";
+
+  return { vin, stockNumber };
 }
 
 /**
