@@ -546,7 +546,7 @@ describe("page-backed identity evidence (Rhode Island contradiction)", () => {
     const reeferText = "2027 Freightliner M2 26ft refrigerated reefer box truck";
     expect(hasPositiveRefrigeratedBodyEvidence(reeferText)).toBe(true);
     const reeferLead = classifyLead(
-      riMatchLead({ makeModel: reeferText, title: reeferText }),
+      riMatchLead({ makeModel: reeferText, notes: reeferText }),
       DEFAULT_BUYING_PROFILE
     );
     expect(reeferLead.status).toBe("does_not_match");
