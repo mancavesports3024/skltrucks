@@ -23,7 +23,10 @@ export {
   buildDiscoveryInspectPreflight,
   createTavilyDiscoveryOnlyClient,
 } from "@/lib/sourcing/search/discovery-inspect/preview";
-export { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
+export {
+  validateDiscoveryCandidate,
+  staffValidationFailureReason,
+} from "@/lib/sourcing/search/discovery-inspect/validate-url";
 export {
   assertPublicHttpUrl,
   safeFetchPublicHtml,
@@ -35,7 +38,6 @@ export {
   FETCH_MAX_BYTES,
   FETCH_OVERALL_DEADLINE_MS,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
-export { staffValidationFailureReason } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 export {
   withDeadline,
   isPastDeadline,
