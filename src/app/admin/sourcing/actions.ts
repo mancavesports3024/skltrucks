@@ -436,6 +436,45 @@ export async function runInternetSearchAction(forceMock = false) {
 }
 
 /**
+ * Staff-only Tavily Discovery → Inspection Preview (read-only until Import).
+ * No cron. No Tavily extract. OpenAI is inspect-only when configured.
+ */
+export async function runDiscoveryInspectPreviewAction(formData: FormData) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, preview: null };
+
+  const { executeDiscoveryInspectPreview, isDiscoveryInspectPaidConfirmed } = await import(
+    "@/lib/sourcing/search/discovery-inspect/execute"
+  );
+  const forceMock = String(formData.get("forceMock") ?? "") === "1";
+  const result = await executeDiscoveryInspectPreview({
+    forceMock,
+    confirmPaidProviders: forceMock || isDiscoveryInspectPaidConfirmed(formData),
+  });
+  // Preview never writes — do not revalidate as a save signal.
+  return result;
+}
+
+/**
+ * Explicit Import of selected listing URLs (server revalidates; never trusts Preview payload).
+ */
+export async function importDiscoveryInspectSelectedAction(payload: {
+  selectedUrls: string[];
+}) {
+  const access = await requireSourcingStaff();
+  if (!access.ok) return { error: access.error, report: null, importedCount: 0 };
+
+  const { importSelectedDiscoveryInspectRows } = await import(
+    "@/lib/sourcing/search/discovery-inspect/import-selected"
+  );
+  const result = await importSelectedDiscoveryInspectRows({
+    selectedUrls: payload.selectedUrls ?? [],
+  });
+  if (result.report && (result.importedCount ?? 0) > 0) revalidateSourcing();
+  return result;
+}
+
+/**
  * Staff-only Penske unit URL inspection (feature-flagged, inspect-only, no discovery).
  * Disabled by default (SOURCING_PENSKE_URL_INSPECTION_ENABLED).
  */
