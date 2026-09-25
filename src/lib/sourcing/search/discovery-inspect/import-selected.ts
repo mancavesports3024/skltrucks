@@ -18,7 +18,12 @@ import { canonicalizeListingUrl } from "@/lib/sourcing/duplicates";
 import { findExistingLead } from "@/lib/sourcing/intake/import";
 import { classifyLead } from "@/lib/sourcing/match";
 import { getBuyingProfile, getSupplierContacts, getTruckLeads } from "@/lib/sourcing/db";
-import { DISCOVERY_IMPORT_MAX_SELECTED } from "@/lib/sourcing/search/discovery/ceilings";
+import { DISCOVERY_IMPORT_DEADLINE_MS, DISCOVERY_IMPORT_MAX_SELECTED } from "@/lib/sourcing/search/discovery/ceilings";
+import {
+  isDeadlineExceeded,
+  isPastDeadline,
+  withDeadline,
+} from "@/lib/sourcing/search/discovery-inspect/deadline";
 import { inspectListingHtmlDeterministic } from "@/lib/sourcing/search/discovery-inspect/deterministic-inspect";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 import { candidateToTruckLeadInput } from "@/lib/sourcing/search/map-candidates";
@@ -38,7 +43,7 @@ import {
 import type { BuyingProfile, TruckLead } from "@/types/sourcing";
 
 /** Re-export for callers — same as ceilings. */
-export { DISCOVERY_IMPORT_MAX_SELECTED };
+export { DISCOVERY_IMPORT_MAX_SELECTED, DISCOVERY_IMPORT_DEADLINE_MS };
 
 export type ImportSelectionInput = {
   /** Canonical or final listing URLs only — no truck/evidence payload. */
@@ -58,6 +63,8 @@ export type ImportRevalidateResult = {
   /** Always zero — Import never calls paid providers. */
   tavilyCalls: 0;
   openAiCalls: 0;
+  stoppedReason: string | null;
+  deadlineAt: number;
 };
 
 function normalizeSelectedUrls(raw: string[]): string[] {
@@ -84,25 +91,65 @@ function normalizeSelectedUrls(raw: string[]): string[] {
 /**
  * Pure revalidation core (no auth / no DB writes). Used by Import and tests.
  * Never accepts client truck/classification fields.
+ * One overall Import deadline covers all selected URLs (not a fresh deadline per URL).
  */
 export async function revalidateSelectedUrlsForImport(options: {
   selectedUrls: string[];
   profile: BuyingProfile;
   existingLeads: TruckLead[];
   fetchImpl?: typeof fetch;
+  /** Overall Import wall-clock budget (ms). */
+  importDeadlineMs?: number;
+  /** Absolute deadline; when set, overrides importDeadlineMs. */
+  deadlineAt?: number;
 }): Promise<ImportRevalidateResult> {
   const urls = normalizeSelectedUrls(options.selectedUrls);
+  const deadlineAt =
+    options.deadlineAt ??
+    Date.now() + (options.importDeadlineMs ?? DISCOVERY_IMPORT_DEADLINE_MS);
   const rejected: ImportRevalidateRejection[] = [];
   const errors: string[] = [];
   const trucks: ExtractedTruckCandidate[] = [];
   const contacts: ExtractedContactCandidate[] = [];
   const seenVins = new Set<string>();
   const seenCanonicals = new Set<string>();
+  let stoppedReason: string | null = null;
 
-  for (const url of urls) {
-    const validated = await validateDiscoveryCandidate(url, {
-      fetchImpl: options.fetchImpl,
-    });
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    if (isPastDeadline(deadlineAt)) {
+      stoppedReason = stoppedReason || "import deadline reached";
+      for (const remaining of urls.slice(i)) {
+        rejected.push({ url: remaining, reason: "skipped — import deadline" });
+      }
+      break;
+    }
+
+    let validated;
+    try {
+      validated = await withDeadline(
+        validateDiscoveryCandidate(url, {
+          fetchImpl: options.fetchImpl,
+          deadlineAt,
+        }),
+        deadlineAt,
+        `import validate ${url}`
+      );
+    } catch (e) {
+      if (isDeadlineExceeded(e)) {
+        stoppedReason = "import deadline reached";
+        rejected.push({ url, reason: "skipped — import deadline" });
+        for (const remaining of urls.slice(i + 1)) {
+          rejected.push({ url: remaining, reason: "skipped — import deadline" });
+        }
+        break;
+      }
+      rejected.push({
+        url,
+        reason: e instanceof Error ? e.message.slice(0, 120) : "validate failed",
+      });
+      continue;
+    }
 
     if (validated.outcome !== "validated" || !validated.html) {
       rejected.push({
@@ -125,6 +172,15 @@ export async function revalidateSelectedUrlsForImport(options: {
         });
         continue;
       }
+    }
+
+    if (isPastDeadline(deadlineAt)) {
+      stoppedReason = stoppedReason || "import deadline reached";
+      rejected.push({ url, reason: "skipped — import deadline" });
+      for (const remaining of urls.slice(i + 1)) {
+        rejected.push({ url: remaining, reason: "skipped — import deadline" });
+      }
+      break;
     }
 
     let truck: ExtractedTruckCandidate;
@@ -195,6 +251,8 @@ export async function revalidateSelectedUrlsForImport(options: {
     errors,
     tavilyCalls: 0,
     openAiCalls: 0,
+    stoppedReason,
+    deadlineAt,
   };
 }
 
@@ -207,7 +265,9 @@ export type ImportSelectedResult = {
 
 /**
  * Staff Import: revalidate selected URLs server-side, then persist.
- * Zero Tavily / OpenAI. Search lock always released.
+ * Zero Tavily / OpenAI. Search lock released in `finally` when the runtime
+ * allows; if the platform hard-terminates the isolate, stale-lock takeover
+ * (search-lock.ts) remains the operational backstop.
  */
 export async function importSelectedDiscoveryInspectRows(options: {
   selectedUrls: string[];
@@ -216,6 +276,7 @@ export async function importSelectedDiscoveryInspectRows(options: {
   selectedRowIds?: string[];
   lockStore?: SearchLockStore;
   fetchImpl?: typeof fetch;
+  importDeadlineMs?: number;
 }): Promise<ImportSelectedResult> {
   const access = await requireSourcingStaff();
   if (!access.ok) return { error: access.error };
@@ -251,6 +312,7 @@ export async function importSelectedDiscoveryInspectRows(options: {
       profile,
       existingLeads,
       fetchImpl: options.fetchImpl,
+      importDeadlineMs: options.importDeadlineMs,
     });
 
     if (revalidated.trucks.length === 0) {

@@ -23,6 +23,11 @@ import type {
 import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery/types";
 import { classifyDiscoveryUrl } from "@/lib/sourcing/search/discovery/url-classify";
 import { inspectListingHtmlDeterministic } from "@/lib/sourcing/search/discovery-inspect/deterministic-inspect";
+import {
+  isDeadlineExceeded,
+  isPastDeadline,
+  withDeadline,
+} from "@/lib/sourcing/search/discovery-inspect/deadline";
 import type {
   DiscoveryInspectPreviewReport,
   DiscoveryInspectPreviewRow,
@@ -119,11 +124,14 @@ async function runDiscoveryRetain(args: {
   client: DiscoverySearchClient;
   profile: BuyingProfile;
   ceilings: DiscoveryInspectCeilings;
+  deadlineAt: number;
 }): Promise<{
   plans: ReturnType<typeof buildDiscoveryQueryMatrix>;
   retained: RetainedDiscoveryUrl[];
   metrics: DiscoveryUrlMetrics;
   credits: number;
+  stoppedReason: string | null;
+  skippedQueryIds: string[];
 }> {
   const plans = buildDiscoveryQueryMatrix(args.profile, {
     maxQueries: args.ceilings.maxQueries,
@@ -141,15 +149,38 @@ async function runDiscoveryRetain(args: {
   let retentionCapDrops = 0;
   let credits = 0;
   let queriesRun = 0;
+  let stoppedReason: string | null = null;
+  const skippedQueryIds: string[] = [];
 
   for (const plan of plans) {
+    if (isPastDeadline(args.deadlineAt)) {
+      stoppedReason = "preview deadline reached during discovery";
+      skippedQueryIds.push(...plans.slice(queriesRun).map((p) => p.id));
+      break;
+    }
     if (credits >= args.ceilings.maxTavilyCredits) break;
     if (queriesRun >= args.ceilings.maxQueries) break;
-    const res = await args.client.search(plan.query, {
-      maxResults: args.ceilings.maxResultsPerQuery,
-      includeDomains: plan.includeDomains,
-      searchDepth: "basic",
-    });
+
+    let res: { results: { url: string; title?: string; content?: string }[]; creditsCharged: number };
+    try {
+      res = await withDeadline(
+        args.client.search(plan.query, {
+          maxResults: args.ceilings.maxResultsPerQuery,
+          includeDomains: plan.includeDomains,
+          searchDepth: "basic",
+        }),
+        args.deadlineAt,
+        `tavily search ${plan.id}`
+      );
+    } catch (e) {
+      if (isDeadlineExceeded(e)) {
+        stoppedReason = "preview deadline reached during discovery";
+        skippedQueryIds.push(plan.id, ...plans.slice(queriesRun + 1).map((p) => p.id));
+        break;
+      }
+      throw e;
+    }
+
     const charged = res.creditsCharged || 1;
     if (credits + charged > args.ceilings.maxTavilyCredits) break;
     credits += charged;
@@ -212,6 +243,8 @@ async function runDiscoveryRetain(args: {
     plans,
     retained,
     credits,
+    stoppedReason,
+    skippedQueryIds: [...new Set(skippedQueryIds)],
     metrics: {
       rawResultUrls,
       uniqueCanonicalUrlsAllBuckets: all.size,
@@ -287,8 +320,7 @@ export async function runDiscoveryInspectPreview(
     throw new Error("REFUSE: discovery client required (mock or Tavily).");
   }
 
-  const discovery = await runDiscoveryRetain({ client, profile, ceilings });
-
+  // Establish end-to-end deadline BEFORE the first Tavily request.
   const previewDeadlineMs = input.previewDeadlineMs ?? DISCOVERY_PREVIEW_DEADLINE_MS;
   const validateConcurrency = Math.max(
     1,
@@ -296,6 +328,16 @@ export async function runDiscoveryInspectPreview(
   );
   const deadlineAt = Date.now() + previewDeadlineMs;
   let stoppedReason: string | null = null;
+
+  const discovery = await runDiscoveryRetain({
+    client,
+    profile,
+    ceilings,
+    deadlineAt,
+  });
+  if (discovery.stoppedReason) {
+    stoppedReason = discovery.stoppedReason;
+  }
 
   const rejectedBeforeInspect: DiscoveryInspectPreviewReport["rejectedBeforeInspect"] = [];
   const validated: Awaited<ReturnType<typeof validateDiscoveryCandidate>>[] = [];
@@ -305,18 +347,45 @@ export async function runDiscoveryInspectPreview(
   while (
     retainedQueue.length > 0 &&
     validated.length < ceilings.maxInspectCandidates &&
-    Date.now() < deadlineAt
+    !isPastDeadline(deadlineAt)
   ) {
     const batch = retainedQueue.splice(0, validateConcurrency);
     const batchResults = await Promise.all(
-      batch.map((r) =>
-        validateDiscoveryCandidate(r.canonicalUrl || r.rawUrl, {
-          fetchImpl: input.validateFetchImpl,
-          deadlineAt,
-        }).then((v) => ({ retained: r, v }))
-      )
+      batch.map(async (r) => {
+        const url = r.canonicalUrl || r.rawUrl;
+        try {
+          const v = await withDeadline(
+            validateDiscoveryCandidate(url, {
+              fetchImpl: input.validateFetchImpl,
+              deadlineAt,
+            }),
+            deadlineAt,
+            `validate ${url}`
+          );
+          return { retained: r, v, deadlineSkipped: false as const };
+        } catch (e) {
+          if (isDeadlineExceeded(e)) {
+            return {
+              retained: r,
+              v: null,
+              deadlineSkipped: true as const,
+            };
+          }
+          throw e;
+        }
+      })
     );
-    for (const { retained: r, v } of batchResults) {
+    for (const item of batchResults) {
+      if (item.deadlineSkipped || !item.v) {
+        rejectedBeforeInspect.push({
+          url: item.retained.canonicalUrl || item.retained.rawUrl,
+          reason: "skipped — preview deadline",
+          outcome: "unverified",
+        });
+        stoppedReason = stoppedReason || "preview deadline reached during validation";
+        continue;
+      }
+      const { retained: r, v } = item;
       if (v.outcome !== "validated") {
         rejectedBeforeInspect.push({
           url: r.canonicalUrl || r.rawUrl,
@@ -330,8 +399,8 @@ export async function runDiscoveryInspectPreview(
       }
     }
   }
-  if (Date.now() >= deadlineAt && retainedQueue.length > 0) {
-    stoppedReason = "preview deadline reached during validation";
+  if (isPastDeadline(deadlineAt) && retainedQueue.length > 0) {
+    stoppedReason = stoppedReason || "preview deadline reached during validation";
     for (const r of retainedQueue) {
       rejectedBeforeInspect.push({
         url: r.canonicalUrl || r.rawUrl,
@@ -344,7 +413,7 @@ export async function runDiscoveryInspectPreview(
     validated.length >= ceilings.maxInspectCandidates &&
     retainedQueue.length > 0
   ) {
-    stoppedReason = "inspect candidate ceiling reached";
+    stoppedReason = stoppedReason || "inspect candidate ceiling reached";
     for (const r of retainedQueue) {
       rejectedBeforeInspect.push({
         url: r.canonicalUrl || r.rawUrl,
@@ -413,7 +482,7 @@ export async function runDiscoveryInspectPreview(
         det.requiredEvidenceMissing &&
         input.openAiInspectUrl &&
         openAiInspectCalls < ceilings.maxOpenAiInspectCalls &&
-        Date.now() < deadlineAt
+        !isPastDeadline(deadlineAt)
       ) {
         openAiInspectCalls += 1;
         openAiCost += estimateOpenAiSearchCostUsd({
@@ -421,23 +490,37 @@ export async function runDiscoveryInspectPreview(
           inputTokens: 4_000,
           outputTokens: 1_500,
         });
-        const oa = await input.openAiInspectUrl(v.finalUrl);
-        if (oa.truck) {
-          const oaCanon = canonicalizeListingUrl(oa.truck.listingUrl || "");
-          const finalCanon = canonicalizeListingUrl(v.finalUrl);
-          if (!oaCanon || oaCanon !== finalCanon) {
-            rowReasons.push("inspection URL mismatch");
-            errors.push(`inspect:${v.finalUrl}: inspection URL mismatch`);
-          } else {
-            truck = {
-              ...det.truck,
-              ...oa.truck,
-              listingUrl: v.finalUrl,
-              evidenceUrl: v.finalUrl,
-            };
+        try {
+          const oa = await withDeadline(
+            input.openAiInspectUrl(v.finalUrl),
+            deadlineAt,
+            `openai inspect ${v.finalUrl}`
+          );
+          if (oa.truck) {
+            const oaCanon = canonicalizeListingUrl(oa.truck.listingUrl || "");
+            const finalCanon = canonicalizeListingUrl(v.finalUrl);
+            if (!oaCanon || oaCanon !== finalCanon) {
+              rowReasons.push("inspection URL mismatch");
+              errors.push(`inspect:${v.finalUrl}: inspection URL mismatch`);
+            } else {
+              truck = {
+                ...det.truck,
+                ...oa.truck,
+                listingUrl: v.finalUrl,
+                evidenceUrl: v.finalUrl,
+              };
+            }
+          } else if (oa.rejectReason) {
+            errors.push(`inspect:${v.finalUrl}: ${oa.rejectReason}`);
           }
-        } else if (oa.rejectReason) {
-          errors.push(`inspect:${v.finalUrl}: ${oa.rejectReason}`);
+        } catch (e) {
+          if (isDeadlineExceeded(e)) {
+            rowReasons.push("skipped — preview deadline");
+            stoppedReason =
+              stoppedReason || "preview deadline reached during OpenAI inspection";
+          } else {
+            throw e;
+          }
         }
       }
     } catch (e) {
@@ -553,9 +636,42 @@ export async function runDiscoveryInspectPreview(
   }
 
   const inspectQueue = [...toInspect];
-  while (inspectQueue.length > 0 && Date.now() < deadlineAt) {
+  while (inspectQueue.length > 0 && !isPastDeadline(deadlineAt)) {
     const batch = inspectQueue.splice(0, validateConcurrency);
-    const inspected = await Promise.all(batch.map((v) => inspectOne(v)));
+    const inspected = await Promise.all(
+      batch.map(async (v) => {
+        try {
+          return await withDeadline(inspectOne(v), deadlineAt, `inspect ${v.finalUrl}`);
+        } catch (e) {
+          if (isDeadlineExceeded(e)) {
+            stoppedReason =
+              stoppedReason || "preview deadline reached during inspection";
+            return {
+              id: rowId(v.canonicalUrl),
+              discoveryUrl: v.discoveryUrl,
+              finalUrl: v.finalUrl,
+              canonicalUrl: v.canonicalUrl,
+              bucket: "individual_listing",
+              title: v.title,
+              validationOutcome: v.outcome,
+              validationReason: "skipped — preview deadline",
+              matchStatus: "unverified" as const,
+              previewOutcome: "unverified" as const,
+              reasons: ["skipped — preview deadline"],
+              truck: null,
+              contact: null,
+              evidence: {},
+              alreadyInSkl: false,
+              importEligible: false,
+              provenance:
+                discovery.retained.find((r) => r.canonicalUrl === v.canonicalUrl)
+                  ?.provenance ?? [],
+            };
+          }
+          throw e;
+        }
+      })
+    );
     rows.push(...inspected);
   }
   if (inspectQueue.length > 0) {
@@ -626,7 +742,11 @@ export async function runDiscoveryInspectPreview(
       ...notes,
       `Worst-case ceiling ~$${costCeiling.combinedMaxUsd.toFixed(2)} (Tavily $${costCeiling.tavilyMaxUsd.toFixed(2)} + OpenAI $${costCeiling.openAiMaxUsd.toFixed(2)}).`,
       ...(stoppedReason ? [`Partial Preview: ${stoppedReason}.`] : []),
+      ...(discovery.skippedQueryIds.length
+        ? [`Discovery queries skipped due to deadline: ${discovery.skippedQueryIds.join(", ")}.`]
+        : []),
       "Import revalidates selected URLs server-side (deterministic only; zero Tavily/OpenAI).",
+      "Lock is released in finally when the runtime allows; stale-lock takeover remains the backstop if the platform terminates the isolate.",
     ],
     previewId: randomUUID(),
   };

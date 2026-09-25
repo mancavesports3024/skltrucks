@@ -1,5 +1,6 @@
 /**
- * Staff entry: acquire search lock, run Preview (no DB writes), always release.
+ * Staff entry: acquire search lock, run Preview (no DB writes), release in finally.
+ * Platform hard-termination can skip finally; stale-lock takeover is the backstop.
  */
 import { requireSourcingStaff } from "@/lib/sourcing/access";
 import { getBuyingProfile, getTruckLeads } from "@/lib/sourcing/db";

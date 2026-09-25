@@ -19,6 +19,8 @@ export const DISCOVERY_IMPORT_MAX_SELECTED = DISCOVERY_INSPECT_MAX_CANDIDATES;
 export const DISCOVERY_VALIDATE_CONCURRENCY = 3;
 /** Overall Preview wall-clock deadline (partial results OK). */
 export const DISCOVERY_PREVIEW_DEADLINE_MS = 90_000;
+/** Overall Import revalidation wall-clock deadline (covers all selected URLs). */
+export const DISCOVERY_IMPORT_DEADLINE_MS = 60_000;
 
 export type DiscoveryInspectCeilings = {
   maxQueries: number;
