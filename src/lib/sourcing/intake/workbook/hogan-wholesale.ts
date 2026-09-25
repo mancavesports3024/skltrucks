@@ -10,6 +10,7 @@ import {
   parsePrice,
   parseWeightLbs,
   parseYear,
+  workbookBodyRejectReason,
   type BodyKind,
 } from "@/lib/sourcing/intake/workbook/normalize";
 import type { SpecEvidence } from "@/types/sourcing";
@@ -144,7 +145,7 @@ export function mapHoganWholesaleRow(row: Record<string, string>): HoganWholesal
   let boxLengthRaw = lengthRaw || (boxLengthFt != null ? `${boxLengthFt}'` : "");
 
   if (bodyKind === "reefer" || bodyKind === "flatbed" || bodyKind === "other") {
-    bodyRejectReason = `${bodyKind.replace("_", " ")} body is not a qualifying dry van`;
+    bodyRejectReason = workbookBodyRejectReason(bodyKind);
     boxLengthFt = 0;
     boxLengthRaw = bodyBlob.trim() || bodyKind;
   }

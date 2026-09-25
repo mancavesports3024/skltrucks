@@ -1,3 +1,4 @@
+import { hasPositiveRefrigeratedBodyEvidence } from "@/lib/sourcing/body-policy";
 import { isIndividualListingUrl } from "@/lib/sourcing/search/map-candidates";
 import {
   emptyFieldEvidence,
@@ -55,7 +56,7 @@ export function detectComparableExclusion(
   if (/\b(salvage|wrecked|flood|damaged|parts\s*only|totaled)\b/.test(text)) {
     return "salvage_or_damaged";
   }
-  if (/\breefer\b|\brefrig/.test(text)) return "reefer";
+  if (hasPositiveRefrigeratedBodyEvidence(text)) return "reefer";
   if (
     listing.transmissionIsAutomatic === false ||
     (listing.transmissionIsAutomatic == null && /\bmanual\b|\bstd\b|\bstandard\b/.test(text))

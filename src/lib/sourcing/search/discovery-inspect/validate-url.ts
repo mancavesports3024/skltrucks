@@ -58,6 +58,9 @@ export function staffValidationFailureReason(
   if (/non-HTML|pdf/i.test(fetched.reason)) {
     return { outcome: "rejected", reason: fetched.reason };
   }
+  if (/response too large/i.test(fetched.reason)) {
+    return { outcome: "rejected", reason: "response too large" };
+  }
 
   const classified = classifySafeFetchFailureReason(fetched.reason);
   if (/^timeout$/i.test(classified) || /deadline/i.test(classified)) {
