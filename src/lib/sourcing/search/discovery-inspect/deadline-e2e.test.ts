@@ -21,7 +21,11 @@ import {
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 import type { DiscoverySearchClient } from "@/lib/sourcing/search/discovery/types";
 import { createMemorySearchLockStore } from "@/lib/sourcing/search/search-lock";
+import type { LookupImpl } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
 import { DEFAULT_BUYING_PROFILE } from "@/types/sourcing";
+
+/** Public address so deadline tests measure provider cutoff, not live DNS. */
+const fastPublicLookup: LookupImpl = async () => [{ address: "1.1.1.1", family: 4 }];
 
 const hangForever = <T,>() => new Promise<T>(() => {});
 
@@ -81,6 +85,7 @@ describe("Preview end-to-end deadline", () => {
       confirmPaidProviders: true,
       tavilyClient: createMockDiscoveryInspectSearchClient(),
       validateFetchImpl: hangingFetch,
+      lookupImpl: fastPublicLookup,
       previewDeadlineMs: 100,
       validateConcurrency: 1,
     });
@@ -116,6 +121,7 @@ describe("Preview end-to-end deadline", () => {
       confirmPaidProviders: true,
       tavilyClient: createMockDiscoveryInspectSearchClient(),
       validateFetchImpl: fetchImpl,
+      lookupImpl: fastPublicLookup,
       openAiInspectUrl: openAi,
       ceilings: { maxOpenAiInspectCalls: 10 },
       previewDeadlineMs: 120,
@@ -150,6 +156,7 @@ describe("Import end-to-end deadline", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl,
+      lookupImpl: fastPublicLookup,
       deadlineAt: Date.now() + 80,
     });
     expect(Date.now() - started).toBeLessThan(800);
@@ -169,6 +176,7 @@ describe("Import end-to-end deadline", () => {
       profile: DEFAULT_BUYING_PROFILE,
       existingLeads: [],
       fetchImpl: createMockValidateFetchImpl(),
+      lookupImpl: fastPublicLookup,
       deadlineAt: Date.now() - 1,
     });
     expect(result.trucks.length).toBe(0);

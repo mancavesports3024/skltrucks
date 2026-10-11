@@ -5,6 +5,7 @@ import {
   ProviderSearchError,
 } from "@/lib/sourcing/search/provider-error";
 import { createMemorySearchLockStore } from "@/lib/sourcing/search/search-lock";
+import { runProviderSearchWithLock } from "@/lib/sourcing/search/run";
 
 describe("buildFailedSearchReport", () => {
   it("failed OpenAI run is labeled openai/live with partial usage — never mock", () => {
@@ -66,7 +67,6 @@ describe("buildFailedSearchReport", () => {
 
 describe("runProviderSearchWithLock + ProviderSearchError", () => {
   it("does not swallow ProviderSearchError metadata", async () => {
-    const { runProviderSearchWithLock } = await import("@/lib/sourcing/search/run");
     const lock = createMemorySearchLockStore();
     const boom = new ProviderSearchError({
       provider: "openai",

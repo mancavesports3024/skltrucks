@@ -33,6 +33,7 @@ import {
 } from "@/lib/sourcing/search/discovery-inspect/deadline";
 import { inspectListingHtmlDeterministic } from "@/lib/sourcing/search/discovery-inspect/deterministic-inspect";
 import { hasImportableUnitEvidence } from "@/lib/sourcing/search/discovery-inspect/listing-identity";
+import type { LookupImpl } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
 import { validateDiscoveryCandidate } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 import { candidateToTruckLeadInput } from "@/lib/sourcing/search/map-candidates";
 import { applySearchProviderResult } from "@/lib/sourcing/search/run";
@@ -108,6 +109,8 @@ export async function revalidateSelectedUrlsForImport(options: {
   profile: BuyingProfile;
   existingLeads: TruckLead[];
   fetchImpl?: typeof fetch;
+  /** Injectable DNS so deadline tests measure fetch cutoff, not live lookup. */
+  lookupImpl?: LookupImpl;
   /** Absolute deadline shared with Import entry — required for production Import path. */
   deadlineAt: number;
 }): Promise<ImportRevalidateResult> {
@@ -136,6 +139,7 @@ export async function revalidateSelectedUrlsForImport(options: {
       validated = await withDeadline(
         validateDiscoveryCandidate(url, {
           fetchImpl: options.fetchImpl,
+          lookupImpl: options.lookupImpl,
           deadlineAt,
         }),
         deadlineAt,

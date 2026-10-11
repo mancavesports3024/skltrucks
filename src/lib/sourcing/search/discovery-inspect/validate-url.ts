@@ -12,6 +12,7 @@ import {
   assertPublicHttpUrl,
   classifySafeFetchFailureReason,
   safeFetchPublicHtml,
+  type LookupImpl,
   type SafeFetchResult,
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
 import {
@@ -104,6 +105,8 @@ export async function validateDiscoveryCandidate(
     fetchImpl?: typeof fetch;
     /** When provided, skip network (tests). */
     fetchResult?: SafeFetchResult;
+    /** Injectable DNS so tests do not spend the preview deadline on live lookup. */
+    lookupImpl?: LookupImpl;
     deadlineAt?: number;
   }
 ): Promise<ValidatedListingCandidate> {
@@ -131,7 +134,9 @@ export async function validateDiscoveryCandidate(
     };
   }
 
-  const gate = await assertPublicHttpUrl(discoveryUrl);
+  const gate = await assertPublicHttpUrl(discoveryUrl, {
+    lookupImpl: options?.lookupImpl,
+  });
   if (!gate.ok) {
     return {
       discoveryUrl,
@@ -148,6 +153,7 @@ export async function validateDiscoveryCandidate(
     options?.fetchResult ??
     (await safeFetchPublicHtml(discoveryUrl, {
       fetchImpl: options?.fetchImpl,
+      lookupImpl: options?.lookupImpl,
       deadlineAt: options?.deadlineAt,
     }));
 

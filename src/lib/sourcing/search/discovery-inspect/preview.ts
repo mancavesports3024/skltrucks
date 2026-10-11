@@ -23,6 +23,7 @@ import type {
 import { DEFAULT_DISCOVERY_BENCHMARK_CEILINGS } from "@/lib/sourcing/search/discovery/types";
 import { classifyDiscoveryUrl } from "@/lib/sourcing/search/discovery/url-classify";
 import { inspectListingHtmlDeterministic } from "@/lib/sourcing/search/discovery-inspect/deterministic-inspect";
+import type { LookupImpl } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
 import {
   isDeadlineExceeded,
   isPastDeadline,
@@ -314,6 +315,8 @@ export type RunDiscoveryInspectPreviewInput = {
     url: string
   ) => Promise<{ truck: ExtractedTruckCandidate | null; rejectReason?: string }>;
   validateFetchImpl?: typeof fetch;
+  /** Injectable DNS. Production uses live lookup; tests can return a public address. */
+  lookupImpl?: LookupImpl;
   allowLiveNetwork?: boolean;
   /** Overall Preview wall-clock deadline (ms from now). */
   previewDeadlineMs?: number;
@@ -385,6 +388,7 @@ export async function runDiscoveryInspectPreview(
           const v = await withDeadline(
             validateDiscoveryCandidate(url, {
               fetchImpl: input.validateFetchImpl,
+              lookupImpl: input.lookupImpl,
               deadlineAt,
             }),
             deadlineAt,
