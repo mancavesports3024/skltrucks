@@ -55,7 +55,6 @@ export async function sendFormEmail(
   const emailPassword = process.env.EMAIL_PASSWORD;
 
   if (!emailUser || !emailPassword) {
-    console.log(`[email] Gmail not configured — would send to ${recipientEmail()}:`, subject, data);
     return { sent: false, error: "Email service not configured" };
   }
 
@@ -87,9 +86,8 @@ export async function sendFormEmail(
     });
 
     return { sent: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to send email";
-    console.error("[email] Gmail error:", message);
-    return { sent: false, error: message };
+  } catch {
+    console.error("[email] Gmail send failed");
+    return { sent: false, error: "Failed to send email" };
   }
 }
