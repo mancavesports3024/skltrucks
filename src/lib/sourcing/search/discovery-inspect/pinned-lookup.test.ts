@@ -17,6 +17,25 @@ import {
 } from "@/lib/sourcing/search/discovery-inspect/fetch-page";
 import { staffValidationFailureReason } from "@/lib/sourcing/search/discovery-inspect/validate-url";
 
+/** Prefer PATH openssl, then Git for Windows. Returns a quoted command path. */
+function opensslExecutable(): string {
+  try {
+    execSync("openssl version", { stdio: "ignore" });
+    return "openssl";
+  } catch {
+    const candidates = [
+      "C:\\Program Files\\Git\\usr\\bin\\openssl.exe",
+      "C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe",
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return `"${candidate}"`;
+    }
+    throw new Error(
+      "OpenSSL is required for the local TLS pinned-lookup tests and was not found on PATH or in Git for Windows."
+    );
+  }
+}
+
 function invokeLookup(
   lookup: ReturnType<typeof createPinnedLookup>,
   options: { all?: boolean } | undefined
@@ -165,7 +184,7 @@ describe("Node 22 https.request pinned lookup (local TLS)", () => {
     const keyPath = path.join(tmpDir, "key.pem");
     const certPath = path.join(tmpDir, "cert.pem");
     execSync(
-      `openssl req -x509 -newkey rsa:2048 -keyout ${keyPath} -out ${certPath} -days 1 -nodes -subj /CN=localhost`,
+      `${opensslExecutable()} req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 1 -nodes -subj "/CN=localhost"`,
       { stdio: "ignore" }
     );
     server = createHttpsServer(

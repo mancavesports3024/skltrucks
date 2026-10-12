@@ -61,11 +61,18 @@ export interface LeadMatchInput {
   specEvidence?: Partial<SpecEvidence> | null;
 }
 
+/**
+ * Earliest model year still inside the buying window.
+ * Business rule: UTC calendar year of `asOf` minus `maxAgeYears` (default 9).
+ * UTC keeps a date-only instant on the same calendar year on every machine;
+ * local `getFullYear()` would treat UTC midnight on Jan 1 as the previous year
+ * in timezones behind UTC.
+ */
 export function earliestAcceptedModelYear(
   profile: Pick<BuyingProfile, "maxAgeYears">,
   asOf: Date = new Date()
 ): number {
-  return asOf.getFullYear() - profile.maxAgeYears;
+  return asOf.getUTCFullYear() - profile.maxAgeYears;
 }
 
 /**

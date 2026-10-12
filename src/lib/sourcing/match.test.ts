@@ -31,6 +31,7 @@ function baseLead(overrides: Partial<LeadMatchInput> = {}): LeadMatchInput {
 describe("earliestAcceptedModelYear", () => {
   it("uses a rolling 9-year window from the current calendar year", () => {
     expect(earliestAcceptedModelYear(DEFAULT_BUYING_PROFILE, asOf)).toBe(2017);
+    expect(earliestAcceptedModelYear(DEFAULT_BUYING_PROFILE, new Date("2029-12-31T23:00:00Z"))).toBe(2020);
     expect(earliestAcceptedModelYear(DEFAULT_BUYING_PROFILE, new Date("2030-01-01"))).toBe(2021);
   });
 
