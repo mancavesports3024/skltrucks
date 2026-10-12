@@ -31,7 +31,7 @@ const services = [
   },
   {
     title: "Credit Application",
-    desc: "Apply for truck financing online with our secure credit application form.",
+    desc: "Apply for truck financing online with our credit application form.",
     href: "/financing",
   },
 ];
