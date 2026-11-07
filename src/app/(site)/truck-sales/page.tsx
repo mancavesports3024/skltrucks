@@ -16,7 +16,7 @@ export default async function TruckSalesPage() {
           Explore our wide selection of quality trucks and find the perfect vehicle to meet your needs.
           We specialize in class 7 &amp; 8 trucks including sleeper trucks, day cabs, box trucks, and more.
         </p>
-        <ProductGrid products={products} />
+        <ProductGrid products={products} priorityCount={1} eagerFirstRow />
         <div className="mt-12 text-center">
           <Link href="/contact-us" className="text-sm font-semibold uppercase text-[#fc0527] hover:underline">
             Contact our sales team

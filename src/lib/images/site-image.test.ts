@@ -3,6 +3,7 @@ import sharp from "sharp";
 import {
   FALLBACK_SUPABASE_HOSTNAME,
   HERO_IMAGE_SIZES,
+  PRODUCT_IMAGE_PUBLIC_PREFIX,
   SITE_IMAGE_PUBLIC_PREFIX,
   buildSiteImageDeliveryUrl,
   buildSiteImageSrcSet,
@@ -43,6 +44,18 @@ describe("parseApprovedSiteImageUrl / canDeliverViaSiteImageApi", () => {
     expect(getApprovedSupabaseHostname()).toBe(HOST);
   });
 
+  it("accepts public product-images on the approved host", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${HOST}`;
+    const product = `https://${HOST}${PRODUCT_IMAGE_PUBLIC_PREFIX}6e521fb2/photo.jpg`;
+    const parsed = parseApprovedSiteImageUrl(product);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.normalized).toBe(product);
+    expect(canDeliverViaSiteImageApi(product)).toBe(true);
+    expect(buildSiteImageDeliveryUrl(product, 640)).toBe(
+      `/api/site-image?url=${encodeURIComponent(product)}&w=640&q=75`
+    );
+  });
+
   it("rejects wrong hosts including other supabase projects and private/localhost names", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${HOST}`;
     const rejected = [
@@ -78,9 +91,9 @@ describe("parseApprovedSiteImageUrl / canDeliverViaSiteImageApi", () => {
     }
   });
 
-  it("rejects paths outside the public site-images bucket and traversal", () => {
+  it("rejects paths outside the approved public buckets and traversal", () => {
     const rejected = [
-      `https://${HOST}/storage/v1/object/public/product-images/a.jpg`,
+      `https://${HOST}/storage/v1/object/public/private-files/a.jpg`,
       `https://${HOST}/storage/v1/object/sign/site-images/site/a.jpg`,
       `https://${HOST}/storage/v1/render/image/public/site-images/site/a.jpg`,
       `https://${HOST}${SITE_IMAGE_PUBLIC_PREFIX}`,
@@ -127,6 +140,7 @@ describe("buildSiteImageDeliveryUrl cache keys", () => {
 
 describe("site-image request params", () => {
   it("allows only the width allowlist and bounded integer quality", () => {
+    expect(parseSiteImageWidthParam("480")).toBe(480);
     expect(parseSiteImageWidthParam("828")).toBe(828);
     expect(parseSiteImageWidthParam("1200")).toBe(1200);
     expect(parseSiteImageWidthParam("999")).toBeNull();

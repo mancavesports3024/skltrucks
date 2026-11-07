@@ -139,12 +139,34 @@ export async function uploadImages(formData: FormData): Promise<string[]> {
     if (!file || typeof file === "string" || file.size === 0) continue;
     if (typeof File !== "undefined" && !(file instanceof File)) continue;
 
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const originalExt = (file.name.split(".").pop() || "jpg").toLowerCase();
+    let uploadBody: Blob | Buffer = file;
+    let contentType = file.type || "application/octet-stream";
+    let extension = originalExt;
 
-    const { error } = await supabase.storage.from("product-images").upload(path, file, {
-      cacheControl: "3600",
+    // Store a bounded WebP so new inventory photos are not full camera originals.
+    // GIF stays untouched. A failed optimize falls back to the original file.
+    if (file.type !== "image/gif" && originalExt !== "gif") {
+      try {
+        const { optimizeSiteImage } = await import("@/lib/images/optimize-site-image");
+        const optimized = await optimizeSiteImage(Buffer.from(await file.arrayBuffer()), {
+          maxWidth: 1920,
+          quality: 75,
+        });
+        uploadBody = Buffer.from(optimized.buffer);
+        contentType = optimized.contentType;
+        extension = optimized.extension;
+      } catch {
+        console.error("[product-image] optimize failed, storing original");
+      }
+    }
+
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+    const { error } = await supabase.storage.from("product-images").upload(path, uploadBody, {
+      cacheControl: "31536000",
       upsert: false,
+      contentType,
     });
 
     if (error) {

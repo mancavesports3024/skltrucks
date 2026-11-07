@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import DeliveredImage from "@/components/DeliveredImage";
 import Hero from "@/components/Hero";
 import Marquee from "@/components/Marquee";
 import SectionTitle from "@/components/SectionTitle";
@@ -26,7 +26,7 @@ export default async function HomePage() {
       <section id="about-sec" className="py-16 md:py-24">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 md:grid-cols-2">
           <div className="relative aspect-square overflow-hidden rounded-sm">
-            <Image
+            <DeliveredImage
               src={site.about.image}
               alt="SKL Trucks LLC team"
               fill
@@ -60,7 +60,7 @@ export default async function HomePage() {
       </section>
 
       <section className="relative flex min-h-[400px] items-center justify-center py-20">
-        <Image src={site.cta.image} alt="" fill className="object-cover" sizes="100vw" />
+        <DeliveredImage src={site.cta.image} alt="" fill className="object-cover" sizes="100vw" />
         <div className="absolute inset-0 bg-black/55" />
         <div className="relative z-10 mx-auto max-w-3xl px-4 text-center text-white">
           <h2 className="font-oswald text-3xl font-bold uppercase leading-tight md:text-5xl">
@@ -112,7 +112,7 @@ export default async function HomePage() {
             <p className="mt-6 text-neutral-600 leading-relaxed">{site.whyChoose.body}</p>
           </div>
           <div className="relative aspect-square">
-            <Image
+            <DeliveredImage
               src={site.whyChoose.image}
               alt="SKL Trucks"
               fill

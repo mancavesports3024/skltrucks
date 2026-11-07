@@ -37,7 +37,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                 manufacturer={params.manufacturer}
               />
             </div>
-            <ProductGrid products={products} />
+            <ProductGrid products={products} priorityCount={1} eagerFirstRow />
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
+import DeliveredImage from "@/components/DeliveredImage";
 import { sanitizeImageUrls } from "@/lib/image-urls";
 
 interface ProductGalleryProps {
@@ -21,14 +21,14 @@ export default function ProductGallery({ name, images }: ProductGalleryProps) {
   return (
     <div>
       <div className="relative mb-4 aspect-[4/3] bg-neutral-100">
-        <Image
+        <DeliveredImage
           key={main}
           src={main}
           alt={name}
           fill
+          priority
           className="object-cover"
           sizes="(max-width: 1024px) 100vw, 50vw"
-          priority
         />
       </div>
       {photos.length > 1 && (
@@ -43,7 +43,7 @@ export default function ProductGallery({ name, images }: ProductGalleryProps) {
               }`}
               aria-label={`View photo ${i + 1}`}
             >
-              <Image src={img} alt="" fill className="object-cover" sizes="120px" />
+              <DeliveredImage src={img} alt="" fill className="object-cover" sizes="120px" />
             </button>
           ))}
         </div>
