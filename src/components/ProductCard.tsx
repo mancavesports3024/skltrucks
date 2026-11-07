@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import DeliveredImage from "@/components/DeliveredImage";
 import type { Product } from "@/types/product";
 import { formatPrice } from "@/lib/inventory";
 import { sanitizeImageUrl } from "@/lib/image-urls";
@@ -7,19 +7,32 @@ import { getCabTypeLabel, getManufacturerLabel } from "@/lib/product-labels";
 
 interface ProductCardProps {
   product: Product;
+  /** LCP candidate: eager and high priority. */
+  priority?: boolean;
+  /** Visible row-mate: eager, default priority. */
+  eager?: boolean;
+  gridIndex?: number;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({
+  product,
+  priority = false,
+  eager = false,
+  gridIndex,
+}: ProductCardProps) {
   const image = sanitizeImageUrl(product.image);
 
   return (
     <article className="group overflow-hidden bg-white shadow-sm transition-shadow hover:shadow-md">
       <Link href={`/product/${product.slug}`} className="block overflow-hidden">
         <div className="relative aspect-[4/3] bg-neutral-100">
-          <Image
+          <DeliveredImage
             src={image}
             alt={product.name}
             fill
+            priority={priority}
+            eager={eager}
+            gridIndex={gridIndex}
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
           />

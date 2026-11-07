@@ -1,10 +1,23 @@
 /** Widths used for responsive homepage/site imagery (mobile-first). */
-export const SITE_IMAGE_SRC_WIDTHS = [640, 828, 1080, 1200, 1600, 1920] as const;
+export const SITE_IMAGE_SRC_WIDTHS = [480, 640, 828, 1080, 1200, 1600, 1920] as const;
 
 export type SiteImageSrcWidth = (typeof SITE_IMAGE_SRC_WIDTHS)[number];
 
 export const SITE_IMAGE_BUCKET = "site-images";
+export const PRODUCT_IMAGE_BUCKET = "product-images";
+
+/**
+ * Public object buckets this app is allowed to resize.
+ * Anything else (signed URLs, other buckets, render endpoints) stays rejected.
+ */
+export const APPROVED_PUBLIC_BUCKETS = [SITE_IMAGE_BUCKET, PRODUCT_IMAGE_BUCKET] as const;
+
 export const SITE_IMAGE_PUBLIC_PREFIX = `/storage/v1/object/public/${SITE_IMAGE_BUCKET}/`;
+export const PRODUCT_IMAGE_PUBLIC_PREFIX = `/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/`;
+
+function publicPrefix(bucket: string): string {
+  return `/storage/v1/object/public/${bucket}/`;
+}
 
 /** Fallback when NEXT_PUBLIC_SUPABASE_URL is unset (matches this project's host). */
 export const FALLBACK_SUPABASE_HOSTNAME = "kgnhisdckorctefbggwo.supabase.co";
@@ -91,13 +104,12 @@ export function parseApprovedSiteImageUrl(raw: string): SiteImageUrlParseResult 
     return { ok: false, reason: "hostname" };
   }
 
-  // Normalize pathname (URL keeps percent-encoding). Require exact public prefix.
+  // Normalize pathname (URL keeps percent-encoding). Require an approved public bucket.
   const pathname = parsed.pathname;
-  if (!pathname.startsWith(SITE_IMAGE_PUBLIC_PREFIX)) {
-    return { ok: false, reason: "prefix" };
-  }
+  const bucket = APPROVED_PUBLIC_BUCKETS.find((name) => pathname.startsWith(publicPrefix(name)));
+  if (!bucket) return { ok: false, reason: "prefix" };
 
-  const objectPath = pathname.slice(SITE_IMAGE_PUBLIC_PREFIX.length);
+  const objectPath = pathname.slice(publicPrefix(bucket).length);
   if (!objectPath) return { ok: false, reason: "empty_object" };
   if (containsTraversal(pathname) || containsTraversal(objectPath)) {
     return { ok: false, reason: "traversal" };

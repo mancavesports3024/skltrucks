@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { preload } from "react-dom";
 import type { HeroContent, SocialContent } from "@/types/site-content";
 import {
   HERO_IMAGE_SIZES,
@@ -20,18 +21,19 @@ export default function Hero({ content, social }: HeroProps) {
     : content.image;
   const heroSrcSet = buildSiteImageSrcSet(content.image);
 
+  if (usesOptimizedDelivery && heroSrcSet) {
+    preload(heroSrc, {
+      as: "image",
+      imageSrcSet: heroSrcSet,
+      imageSizes: HERO_IMAGE_SIZES,
+      fetchPriority: "high",
+    });
+  } else if (content.image) {
+    preload(content.image, { as: "image", fetchPriority: "high" });
+  }
+
   return (
     <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden md:min-h-[85vh]">
-      {usesOptimizedDelivery && heroSrcSet ? (
-        <link
-          rel="preload"
-          as="image"
-          href={heroSrc}
-          imageSrcSet={heroSrcSet}
-          imageSizes={HERO_IMAGE_SIZES}
-          fetchPriority="high"
-        />
-      ) : null}
       {/*
         Responsive WebP delivery through /api/site-image (sharp):
         Vercel /_next/image is disabled (images.unoptimized) after 402s,
@@ -44,6 +46,8 @@ export default function Hero({ content, social }: HeroProps) {
         sizes={HERO_IMAGE_SIZES}
         alt="SKL Trucks inventory"
         className="absolute inset-0 h-full w-full object-cover"
+        width={1440}
+        height={1080}
         fetchPriority="high"
         decoding="async"
       />
